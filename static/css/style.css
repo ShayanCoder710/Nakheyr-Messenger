@@ -1,3 +1,11 @@
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 400 800;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-Medium.ttf') format('truetype');
+}
+
 :root {
   --bg: #0a0a0f;
   --bg-2: #111118;
