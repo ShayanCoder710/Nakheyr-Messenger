@@ -156,7 +156,7 @@ function setHead() {
   if (CD.chat.chat_type !== 'dm' && CD.members && CD.members.length > 1) {
     strip.style.display = 'flex';
     strip.innerHTML = CD.members.map(m =>
-      `<span class="chip"><span class="avatar sm">${avatarHtml(m.display_name, m.avatar)}</span>${esc(m.display_name)}${m.role === 'owner' ? ' <span class="crown">👑</span>' : ''}${m.role === 'admin' ? ' <span class="crown">⭐</span>' : ''}</span>`
+      `<span class="chip"><span class="avatar sm">${avatarHtml(m.display_name, m.avatar)}</span>${esc(m.display_name)}${m.role === 'owner' ? ' <span class="crown">👑</span>' : ''}${m.role === 'admin' ? ' <span class="crown">⭐</span>' : ''}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}</span>`
     ).join('');
   }
   if (isPeer()) {
@@ -554,7 +554,6 @@ document.getElementById('hangmanClose').onclick = () => {
 };
 
 document.getElementById('btnProfile').onclick = () => {
-  document.getElementById('chatLayoutRoot') && 0;
   document.querySelector('.chat-layout').style.display = 'none';
   document.getElementById('myProfilePage').style.display = 'grid';
   const av = document.getElementById('pmAvatar');
@@ -661,6 +660,7 @@ document.getElementById('btnSendReport').onclick = async () => {
 if (CD.chat) {
   setHead();
   renderAllMessages();
+  loadPinned();
   refreshConvList();
 } else {
   refreshConvList();

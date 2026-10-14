@@ -259,6 +259,8 @@ def api_members(chat_id):
         if action == 'promote':
             if role != 'owner':
                 return jsonify(ok=False, error='فقط صاحب گروه')
+            if target == chat.owner_id:
+                return jsonify(ok=False, error='صاحب گروه قابل تغییر نقش نیست. اول مالکیت رو منتقل کن')
             m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
             if not m:
                 return jsonify(ok=False, error='عضو نیست')
