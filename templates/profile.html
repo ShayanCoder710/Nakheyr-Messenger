@@ -1,0 +1,61 @@
+{% extends "base.html" %}
+{% block title %}{{ target.display_name }} — نخیر{% endblock %}
+{% block content %}
+<div class="profile-page">
+  <div class="profile-card">
+    {{ avatar_html(target, 'lg') | safe }}
+    <h1>
+      {{ target.display_name }}
+      {% if target.is_verified %}<span class="badge gold" title="اعتمادسنجی شد">✔ اعتمادسنجی</span>{% endif %}
+      {% if target.is_admin %}<span class="badge red">ادمین</span>{% endif %}
+    </h1>
+    <div class="uname">@{{ target.username }}</div>
+    <p class="bio">{{ target.bio or 'بیویی نداره' }}</p>
+    <div style="display:flex; gap:14px; justify-content:center; margin-bottom:18px; color:var(--muted); font-size:12.5px">
+      <span>وضعیت: <b style="color:var(--text)">{{ 'آنلاین' if target.status == 'online' else 'آفلاین' }}</b></span>
+    </div>
+    <div class="p-actions">
+      <button class="btn primary" id="btnMsg">📨 پیام بده</button>
+      <button class="btn" id="btnBlock">{{ 'لغو بلاک' if target.id | string in my_blocks else '🚫 بلاک' }}</button>
+      <button class="btn danger" id="btnReport">🚨 گزارش</button>
+    </div>
+    <p class="blocked-note" id="blockNote">{% if target.id | string in my_blocks %}این کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونه بهت پیام بده.{% endif %}</p>
+  </div>
+</div>
+<div class="report-modal" id="reportModal">
+  <div class="box">
+    <h3>🚨 گزارش @{{ target.username }}</h3>
+    <p class="sub">دلیل گزارش رو بنویس تا ادمین‌ها بررسی کنن</p>
+    <textarea class="input" id="reportReason" rows="3" placeholder="مثلاً رفتار غیرمجاز…"></textarea>
+    <div class="row">
+      <button class="btn ghost" onclick="document.getElementById('reportModal').classList.remove('show')">انصراف</button>
+      <button class="btn danger" id="btnSendReport">ارسال گزارش</button>
+    </div>
+  </div>
+</div>
+<script>
+window.TARGET = {{ target | tojson }};
+window.AM_BLOCKED = {{ 'true' if target.id | string in my_blocks else 'false' }};
+document.getElementById('btnMsg').onclick = async () => {
+  const r = await fetch('/api/dm', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: TARGET.id})});
+  const j = await r.json();
+  if (j.ok) location.href = '/chat/' + j.chat_id;
+  else toast(j.error, 'error');
+};
+document.getElementById('btnBlock').onclick = async () => {
+  const r = await fetch('/api/block', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: TARGET.id})});
+  const j = await r.json();
+  if (j.ok) location.reload();
+  else toast(j.error, 'error');
+};
+document.getElementById('btnReport').onclick = () => {
+  document.getElementById('reportModal').classList.add('show');
+};
+document.getElementById('btnSendReport').onclick = async () => {
+  const r = await fetch('/api/report', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: TARGET.id, reason: document.getElementById('reportReason').value})});
+  const j = await r.json();
+  document.getElementById('reportModal').classList.remove('show');
+  toast(j.ok ? 'گزارشت ثبت شد' : j.error, j.ok ? 'success' : 'error');
+};
+</script>
+{% endblock %}

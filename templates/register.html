@@ -1,0 +1,24 @@
+{% extends "base.html" %}
+{% block title %}ثبت‌نام در نخیر{% endblock %}
+{% block content %}
+<div class="auth-page">
+  <div class="auth-card">
+    <img src="{{ url_for('static', filename='images/icon.png') }}" class="auth-logo" alt="نخیر">
+    <h1>ساخت اکانت</h1>
+    <p class="auth-sub">یکدقیقه‌ای زمان می‌بره، بعدش وارد نخیر شدی</p>
+    <form method="post">
+      <label class="label" for="username">نام کاربری (انگلیسی)</label>
+      <input class="input" id="username" name="username" required placeholder="sara_k" pattern="[a-zA-Z0-9_]{3,30}">
+      <label class="label" for="display_name">نام کاربر</label>
+      <input class="input" id="display_name" name="display_name" required placeholder="سارا کاظمی" minlength="2">
+      <label class="label" for="password">پسورد</label>
+      <input class="input" id="password" name="password" type="password" required minlength="6" placeholder="حداقل ۶ کاراکتر">
+      <button class="btn primary" type="submit" style="width:100%; justify-content:center; margin-top:20px">ساخت اکانت</button>
+    </form>
+    <p class="auth-switch">پیش‌تر ثبت‌نام کردی؟ <a href="{{ url_for('login') }}">ورود</a></p>
+  </div>
+</div>
+{% for msg, kind in get_flashed_messages(with_categories=true) %}
+<script>window.addEventListener('load', () => toast('{{ msg }}', '{{ kind }}'));</script>
+{% endfor %}
+{% endblock %}
