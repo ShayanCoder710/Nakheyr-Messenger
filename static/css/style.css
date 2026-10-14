@@ -256,15 +256,16 @@ input, select, textarea { font-family: inherit; }
 .m-meta .ticks { color: var(--red-3); font-weight: 900; }
 .m-meta .edited { font-style: italic; }
 .m-actions {
-  position: absolute; top: -12px; left: 8px; display: none; gap: 5px; z-index: 5;
+  display: none; gap: 4px; margin-top: 6px; padding-top: 4px;
+  border-top: 1px dashed var(--line); align-items: center;
 }
 .mrow:hover .m-actions { display: flex; }
 .m-actions button {
-  width: 26px; height: 26px; border-radius: 8px; font-size: 12px;
-  background: var(--panel); border: 1px solid var(--line); color: var(--muted);
-  display: grid; place-items: center;
+  width: 25px; height: 25px; border-radius: 8px; font-size: 11.5px;
+  background: var(--bg-2); border: 1px solid var(--line); color: var(--muted);
+  display: grid; place-items: center; transition: .12s;
 }
-.m-actions button:hover { color: var(--text); border-color: var(--red); }
+.m-actions button:hover { color: var(--text); border-color: var(--red); transform: translateY(-1px); }
 .reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 6px; }
 .reactions span {
   font-size: 11.5px; padding: 2px 7px; border-radius: 999px; cursor: pointer;
@@ -318,9 +319,9 @@ input, select, textarea { font-family: inherit; }
 .sender-line { font-size: 11px; font-weight: 800; color: var(--red-3); margin-bottom: 2px; }
 
 .emoji-pick {
-  display: none; position: absolute; top: -42px; right: 6px; z-index: 20;
+  display: none; align-items: center; margin-top: 5px;
   background: var(--panel-2); border: 1px solid var(--line-2); border-radius: 999px;
-  padding: 4px 8px; gap: 4px; box-shadow: var(--shadow);
+  padding: 4px 8px; gap: 4px;
 }
 .emoji-pick button {
   width: 28px; height: 28px; border: none; background: none; font-size: 16px; border-radius: 50%;
