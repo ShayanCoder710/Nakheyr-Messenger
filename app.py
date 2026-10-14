@@ -55,6 +55,10 @@ def chat_member_ids(chat_id):
     return [m.user_id for m in ChatMember.query.filter_by(chat_id=chat_id)]
 
 
+def chat_users(chat):
+    return [m.user for m in chat.members if m.user]
+
+
 def my_role_in(user, chat):
     m = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
     return m.role if m else None
@@ -261,6 +265,19 @@ def api_members(chat_id):
             m.role = 'admin' if m.role != 'admin' else 'member'
             db.session.commit()
             return jsonify(ok=True, role=m.role)
+        if action == 'title':
+            allowed = role in ('owner', 'admin') or target == user.id
+            if not allowed:
+                return jsonify(ok=False, error='فقط می‌تونی خودت یا (به‌عنوان ادمین) بقیه رو لقب بدی')
+            new_title = (data.get('title') or '').strip()[:30]
+            if len(new_title) > 30:
+                return jsonify(ok=False, error='لقب حداکثر ۳۰ حرفه')
+            m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
+            if not m:
+                return jsonify(ok=False, error='عضو نیست')
+            m.title = new_title
+            db.session.commit()
+            return jsonify(ok=True, title=m.title)
         if action == 'add':
             if role not in ('owner', 'admin'):
                 return jsonify(ok=False, error='دسترسی نداری')
@@ -282,7 +299,8 @@ def api_members(chat_id):
             return jsonify(ok=True)
         return jsonify(ok=False, error='عملیات نامعتبر')
     return jsonify(members=[
-        {**m.user.to_public(), 'role': m.role} for m in chat.members if m.user
+        {**m.user.to_public(), 'role': m.role, 'title': m.title or ''}
+        for m in chat.members if m.user
     ])
 
 
@@ -309,7 +327,8 @@ def api_send_message():
     if msg_type == 'ephemeral' and not content:
         return jsonify(ok=False, error='پیام سوخته‌ای بنویس')
     m = Message(chat_id=chat.id, sender_id=user.id, msg_type=msg_type,
-                content=content, file_name=file_name, file_path=file_path)
+                content=content, file_name=file_name, file_path=file_path,
+                reply_to=data.get('reply_to') or None)
     db.session.add(m)
     db.session.commit()
     payload = m.to_dict(user.id)
@@ -570,6 +589,63 @@ def api_hangman_guess():
             payload['word'] = g.word
         socketio.emit('hangman_state', payload, room=f'user:{mid}')
     return jsonify(ok=True, game=g.game_state(True))
+
+
+@app.route('/api/message/pin', methods=['POST'])
+@require_auth
+def api_pin_message():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    m = Message.query.get(int(data.get('message_id') or 0))
+    if not m:
+        abort(404)
+    if m.deleted:
+        return jsonify(ok=False, error='پیام حذف شده پین نمی‌شه')
+    role = my_role_in(user, Chat.query.get(m.chat_id))
+    allowed = user.is_admin or role in ('owner', 'admin') or m.sender_id == user.id
+    if not allowed:
+        return jsonify(ok=False, error='دسترسی نداری')
+    m.pinned = not m.pinned
+    db.session.commit()
+    for mid in chat_member_ids(m.chat_id):
+        socketio.emit('message_pinned', {'message_id': m.id, 'pinned': m.pinned}, room=f'user:{mid}')
+    return jsonify(ok=True, pinned=m.pinned)
+
+
+@app.route('/api/message/bulk-delete', methods=['POST'])
+@require_auth
+def api_bulk_delete():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    ids = [int(x) for x in data.get('ids', [])]
+    if not ids:
+        return jsonify(ok=False, error='پیامی انتخاب نشده')
+    if len(ids) > 50:
+        return jsonify(ok=False, error='حداکثر ۵۰ پیام در یک بار')
+    q = Message.query.filter(Message.id.in_(ids), Message.sender_id == user.id)
+    changed = 0
+    for m in q.all():
+        m.deleted = True
+        m.content = ''
+        changed += 1
+        for mid in chat_member_ids(m.chat_id):
+            socketio.emit('message_deleted', {'message_id': m.id}, room=f'user:{mid}')
+    db.session.commit()
+    return jsonify(ok=True, deleted=changed)
+
+
+@app.route('/api/chat/<int:chat_id>/pinned')
+@require_auth
+def api_pinned(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    m = Message.query.filter_by(chat_id=chat.id, pinned=True, deleted=False).order_by(Message.id.desc()).first()
+    if not m:
+        return jsonify(pinned=None)
+    sender = next((x for x in chat_users(chat) if x.id == m.sender_id), None)
+    return jsonify(pinned=m.to_dict(user.id), sender=(sender.to_public() if sender else None))
 
 
 @app.route('/api/chat/<int:chat_id>/join', methods=['POST'])

@@ -99,6 +99,7 @@ class ChatMember(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     role = db.Column(db.String(10), default='member')
+    title = db.Column(db.String(30), default='')
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='memberships')
 
@@ -117,6 +118,8 @@ class Message(db.Model):
     read_by = db.Column(db.Text, default='[]')
     is_edited = db.Column(db.Boolean, default=False)
     deleted = db.Column(db.Boolean, default=False)
+    pinned = db.Column(db.Boolean, default=False)
+    reply_to = db.Column(db.Integer, nullable=True)
     ephemeral_viewed = db.Column(db.Text, default='[]')
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
@@ -167,9 +170,21 @@ class Message(db.Model):
             'my_reaction': reactions.get(str(viewer_id)),
             'is_edited': self.is_edited,
             'deleted': self.deleted,
+            'pinned': self.pinned,
+            'reply_to': self.reply_to,
             'read_by': self.read_ids(),
             'created_at': self.created_at.isoformat(),
         }
+        if self.reply_to:
+            parent = Message.query.get(self.reply_to)
+            if parent:
+                data['reply'] = {
+                    'id': parent.id,
+                    'content': (parent.content or '')[:80],
+                    'sender_id': parent.sender_id,
+                    'msg_type': parent.msg_type,
+                    'deleted': parent.deleted,
+                }
         if self.msg_type == 'ephemeral':
             data['viewed_by'] = self.viewed_by()
             if str(viewer_id) not in data['viewed_by']:

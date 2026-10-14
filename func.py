@@ -24,6 +24,7 @@ MAX_FILE_MB = 25
 
 def init_db():
     db.create_all()
+    _ensure_columns()
     admin = User.query.filter_by(username='admin').first()
     if not admin:
         admin = User(
@@ -37,6 +38,27 @@ def init_db():
         admin.set_password('Nakheyr#2026')
         db.session.add(admin)
         db.session.commit()
+
+
+def _ensure_columns():
+    from sqlalchemy import text
+    spec = [
+        ('chat_members', 'title', "VARCHAR(30) NOT NULL DEFAULT ''"),
+        ('messages', 'pinned', "BOOLEAN NOT NULL DEFAULT 0"),
+        ('messages', 'reply_to', "INTEGER NULL"),
+    ]
+    with db.engine.connect() as conn:
+        for table, col, coldef in spec:
+            exists = conn.execute(
+                text(
+                    "SELECT COUNT(*) FROM information_schema.columns "
+                    "WHERE table_schema = DATABASE() AND table_name = :t AND column_name = :c"
+                ),
+                {"t": table, "c": col},
+            ).scalar()
+            if not exists:
+                conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coldef}"))
+        conn.commit()
 
 
 def current_user():

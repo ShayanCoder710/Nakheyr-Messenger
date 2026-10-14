@@ -59,6 +59,7 @@
         <button class="icon-btn" id="btnReportUser" title="گزارش" style="display:none">🚨</button>
         <div class="member-list" id="memberList"></div>
       </div>
+      <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
       <div class="members-strip" id="membersStrip" style="display:none"></div>
       <div class="msgs" id="msgs">
         <div id="msgsBody" style="display:contents"></div>
@@ -71,7 +72,13 @@
         <div class="hm-keys" id="hmKeys"></div>
         <div class="hm-result" id="hmResult"></div>
       </div>
+      <div class="bulk-bar" id="bulkBar" style="display:none">
+        <span id="bulkCount"></span>
+        <button class="btn sm danger" id="bulkDelete">🗑 حذف همه</button>
+        <button class="btn sm" id="bulkCancel">انصراف</button>
+      </div>
       <div class="composer">
+        <div class="reply-preview" id="replyPreview" style="display:none"></div>
         <div class="attach-preview" id="attachPreview"></div>
         <div class="composer-row">
           <div class="composer-tools">

@@ -5,6 +5,9 @@ const SWATCHES = ['#e11d48', '#f43f5e', '#8b5cf6', '#0ea5e9', '#10b981', '#f59e0
 
 let currentChat = window.CURRENT_CHAT;
 let pendingFile = null;
+let pendingReply = null;
+let selectedIds = new Set();
+let selectMode = false;
 let ephemeralMode = false;
 let hangman = CD.game ? JSON.parse(JSON.stringify(CD.game)) : null;
 let typingTimers = {};
@@ -66,13 +69,18 @@ function renderMsg(m) {
 
   const sender = m.sender_id ? getMember(m.sender_id) : { display_name: 'سیستم', avatar: '' };
   const mine = m.sender_id === window.ME.id;
+  const reply = m.reply && !m.reply.deleted
+    ? `<div class="reply-ref" data-goto="${m.reply.id}"><b>${esc((getMember(m.reply.sender_id) || {}).display_name || 'کاربر')}</b> ${esc(m.reply.content || '(تصویر/فایل)')}</div>`
+    : '';
+  const pinTag = m.pinned ? '<span class="pin-tag">📌 پین شده</span>' : '';
   const html = `
     <div class="mrow ${mine ? 'mine-row' : ''}" data-mid="${m.id}">
       ${mine ? '' : `<div class="avatar sm">${avatarHtml(sender.display_name, sender.avatar, sender.status === 'online')}</div>`}
-      <div class="bubble ${mine ? 'me' : ''}">
-        ${mine ? '' : `<div style="font-size:11px; font-weight:800; color:var(--red-3); margin-bottom:2px">${esc(sender.display_name)}${sender.is_verified ? ' ✔' : ''}</div>`}
-        ${body}
+      <div class="bubble ${mine ? 'me' : ''} ${m.pinned ? 'pinned' : ''}">
+        ${mine ? '' : `<div style="font-size:11px; font-weight:800; color:var(--red-3); margin-bottom:2px">${esc(sender.display_name)}${sender.is_verified ? ' ✔' : ''}${sender.title ? ` <span class="member-title" title="لقب در این گروه">${esc(sender.title)}</span>` : ''}</div>`}
+        ${reply}${body}
         <div class="m-meta">
+          ${pinTag}
           <span>${fmtTime(m.created_at)}</span>
           ${m.is_edited ? '<span class="edited">ویرایش شده</span>' : ''}
           ${mine && m.msg_type === 'text' ? `<span class="ticks" data-mid="${m.id}">✓</span>` : ''}
@@ -80,6 +88,9 @@ function renderMsg(m) {
         <div class="reactions" data-mid="${m.id}">${reactionChips(m)}</div>
         <div class="m-actions">
           ${EMOJIS.slice(0, 3).map(e => `<button data-react="${e}" data-mid="${m.id}">${e}</button>`).join('')}
+          <button data-reply="${m.id}" title="پاسخ">↩</button>
+          ${((mine || window.ME.is_admin) || ['owner','admin'].includes(myRole())) ? `<button data-pin="${m.id}" title="پین">${m.pinned ? '📌' : '📍'}</button>` : ''}
+          <button data-sel="${m.id}" title="انتخاب">☑</button>
           ${mine ? `<button data-edit="${m.id}">✎</button>` : ''}
           ${(mine || window.ME.is_admin) ? `<button data-del="${m.id}">🗑</button>` : ''}
         </div>
@@ -189,6 +200,7 @@ async function openChat(id) {
   S.emit('stop_typing', { chat_id: id });
   typingSent = false;
   updateHangmanView();
+  loadPinned();
 }
 
 function refreshConvList() {
@@ -249,6 +261,12 @@ document.addEventListener('click', e => {
     api('/api/message/ephemeral/view', { message_id: +eph.dataset.openEphemeral });
     return;
   }
+  const goto = e.target.closest('[data-goto]');
+  if (goto) {
+    const target = document.querySelector(`.mrow[data-mid="${goto.dataset.goto}"]`);
+    if (target) { target.scrollIntoView({ behavior: 'smooth', block: 'center' }); target.classList.add('flash'); setTimeout(() => target.classList.remove('flash'), 1200); }
+    return;
+  }
   const reactBtn = e.target.closest('[data-react]');
   if (reactBtn) {
     api('/api/message/react', { message_id: +reactBtn.dataset.mid, emoji: reactBtn.dataset.react });
@@ -257,6 +275,21 @@ document.addEventListener('click', e => {
   const chip = e.target.closest('.reactions [data-emoji]');
   if (chip) {
     api('/api/message/react', { message_id: +chip.closest('.reactions').dataset.mid, emoji: chip.dataset.emoji });
+    return;
+  }
+  const replyBtn = e.target.closest('[data-reply]');
+  if (replyBtn) {
+    openReply(+replyBtn.dataset.reply);
+    return;
+  }
+  const pinBtn = e.target.closest('[data-pin]');
+  if (pinBtn) {
+    api('/api/message/pin', { message_id: +pinBtn.dataset.pin });
+    return;
+  }
+  const selBtn = e.target.closest('[data-sel]');
+  if (selBtn) {
+    toggleSelect(+selBtn.dataset.sel);
     return;
   }
   const del = e.target.closest('[data-del]');
@@ -309,17 +342,85 @@ async function sendText() {
   } else {
     body.msg_type = ephemeralMode ? 'ephemeral' : 'text';
   }
+  if (pendingReply) body.reply_to = pendingReply.id;
   const r = await api('/api/message/send', body);
   if (r.ok) {
     appendMsg(r.message);
     input.value = '';
     ephemeralMode = false;
     pendingFile = null;
+    pendingReply = null;
     document.getElementById('attachPreview').classList.remove('show');
     document.getElementById('attachPreview').innerHTML = '';
+    document.getElementById('replyPreview').style.display = 'none';
     document.getElementById('btnEphemeral').classList.remove('active');
     refreshConvList();
   } else toast(r.error, 'error');
+}
+
+function openReply(mid) {
+  const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
+  if (!row) return;
+  const m = (CD.initialMessages || []).find(x => x.id === mid) || {};
+  const sender = getMember(m.sender_id);
+  const raw = m.msg_type === 'image' ? 'تصویر' : m.msg_type === 'file' ? 'فایل' : m.msg_type === 'ephemeral' ? 'پیام سوخته' : (m.content || '');
+  const label = String(raw).replace(/\n/g, ' ').slice(0, 60);
+  pendingReply = { id: mid, name: sender.display_name || 'کاربر', preview: label || 'پیام' };
+  const pv = document.getElementById('replyPreview');
+  pv.innerHTML = `<span>↩ پاسخ به <b>${esc(pendingReply.name)}</b>: ${esc(pendingReply.preview)}</span><button onclick="this.parentElement.style.display='none'; pendingReply=null">✕</button>`;
+  pv.style.display = 'flex';
+  document.getElementById('msgInput').focus();
+}
+
+function toggleSelect(mid) {
+  selectMode = true;
+  if (selectedIds.has(mid)) selectedIds.delete(mid);
+  else selectedIds.add(mid);
+  document.querySelectorAll('.mrow').forEach(r => r.classList.toggle('sel-selected', selectedIds.has(+r.dataset.mid)));
+  document.getElementById('bulkBar').style.display = selectedIds.size ? 'flex' : 'none';
+  document.getElementById('bulkCount').textContent = selectedIds.size + ' پیام انتخاب شده';
+}
+
+async function bulkDelete() {
+  const ids = [...selectedIds];
+  const r = await api('/api/message/bulk-delete', { ids });
+  if (r.ok) {
+    toast(r.deleted + ' پیام حذف شد');
+    selectedIds.clear();
+    selectMode = false;
+    document.querySelectorAll('.mrow').forEach(x => x.classList.remove('sel-selected'));
+    document.getElementById('bulkBar').style.display = 'none';
+    const rr = await fetch('/api/messages/' + currentChat);
+    CD.initialMessages = (await rr.json()).messages;
+    document.getElementById('msgsBody').innerHTML = '';
+    renderAllMessages();
+  } else toast(r.error, 'error');
+}
+
+document.getElementById('bulkDelete').onclick = bulkDelete;
+document.getElementById('bulkCancel').onclick = () => {
+  selectedIds.clear();
+  selectMode = false;
+  document.querySelectorAll('.mrow').forEach(x => x.classList.remove('sel-selected'));
+  document.getElementById('bulkBar').style.display = 'none';
+};
+
+async function loadPinned() {
+  if (!currentChat) return;
+  const r = await fetch('/api/chat/' + currentChat + '/pinned');
+  const j = await r.json();
+  const bar = document.getElementById('pinnedBar');
+  if (!j.pinned) { bar.style.display = 'none'; return; }
+  const preview = j.pinned.content || (j.pinned.msg_type === 'image' ? '(تصویر)' : j.pinned.msg_type === 'file' ? '(فایل)' : '(پیام)');
+  bar.innerHTML = `<span class="pin-bar-icon">📌</span><span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b> ${esc(preview).slice(0, 80)}</span><button class="pin-unpin" data-unpin="${j.pinned.id}" title="لغو پین">✕</button>`;
+  bar.style.display = 'flex';
+  bar.querySelector('.pin-bar-text').onclick = () => {
+    const t = document.querySelector(`.mrow[data-mid="${j.pinned.id}"]`);
+    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  };
+  bar.querySelector('[data-unpin]').onclick = () => {
+    api('/api/message/pin', { message_id: +document.querySelector('#pinnedBar [data-unpin]').dataset.unpin }).then(loadPinned);
+  };
 }
 
 document.getElementById('btnSend').onclick = sendText;
@@ -359,18 +460,31 @@ function renderMembers(members) {
   CD.members = members;
   CD.chat = { ...(CD.chat || {}), name: CD.chat ? CD.chat.name : '' };
   const ml = document.getElementById('memberList');
-  ml.innerHTML = members.map(m => `
+  ml.innerHTML = members.map(m => {
+    const canTitle = (myRole() === 'owner' || myRole() === 'admin' || m.id === window.ME.id) && CD.chat && CD.chat.chat_type !== 'dm';
+    return `
     <div class="item">
       <span class="avatar sm">${avatarHtml(m.display_name, m.avatar, m.status === 'online')}</span>
-      <div><b style="font-size:13px">${esc(m.display_name)}</b><small>@${esc(m.username)}${m.role === 'owner' ? ' · 👑' : m.role === 'admin' ? ' · ⭐' : ''}</small></div>
+      <div style="flex:1"><b style="font-size:13px">${esc(m.display_name)}</b>
+        ${m.title ? `<span class="member-title" title="لقب">${esc(m.title)}</span>` : ''}
+        <small style="display:block">@${esc(m.username)}${m.role === 'owner' ? ' · 👑 صاحب' : m.role === 'admin' ? ' · ⭐ ادمین' : ''}</small>
+      </div>
+      ${canTitle ? `<button class="btn sm ghost" data-title="${m.id}" data-cur="${esc(m.title)}">لقب</button>` : ''}
       ${myRole() === 'owner' && m.id !== window.ME.id ? `<button class="btn sm" data-kick="${m.id}">اخراج</button>` : ''}
-      ${myRole() === 'owner' && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">⭐</button>` : ''}
-    </div>`).join('');
+      ${myRole() === 'owner' && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">${m.role === 'admin' ? 'عضو' : '⭐'}</button>` : ''}
+    </div>`;
+  }).join('');
   ml.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
     api(`/api/chat/${currentChat}/members`, { action: 'kick', user_id: +b.dataset.kick }).then(j => j.ok ? loadMembers(currentChat) : toast(j.error, 'error'));
   });
   ml.querySelectorAll('[data-promote]').forEach(b => b.onclick = () => {
     api(`/api/chat/${currentChat}/members`, { action: 'promote', user_id: +b.dataset.promote }).then(j => j.ok ? loadMembers(currentChat) : toast(j.error, 'error'));
+  });
+  ml.querySelectorAll('[data-title]').forEach(b => b.onclick = () => {
+    const v = prompt('لقب جدید (حداکثر ۳۰ حرف):', b.dataset.cur || '');
+    if (v === null) return;
+    api(`/api/chat/${currentChat}/members`, { action: 'title', user_id: +b.dataset.title, title: v.trim() })
+      .then(j => j.ok ? (toast('لقب ثبت شد'), loadMembers(currentChat), renderAllMessages()) : toast(j.error, 'error'));
   });
 }
 
@@ -634,6 +748,12 @@ S.on('presence_update', d => {
     CD.chat.peer.status = d.status;
     setHead();
   }
+});
+
+S.on('message_pinned', d => {
+  loadPinned();
+  const row = document.querySelector(`.mrow[data-mid="${d.message_id}"]`);
+  if (row) row.querySelector('.bubble').classList.toggle('pinned', d.pinned);
 });
 
 S.on('hangman_started', g => {
