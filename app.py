@@ -9,11 +9,11 @@ from flask import (
 from flask_socketio import SocketIO, emit, join_room
 
 from config import MYSQL_CONFIG, SECRET_KEY
-from models.models import db, User, Chat, ChatMember, Message, Report, Block, HangmanGame
+from models.models import db, User, Chat, ChatMember, Message, Report, Block
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
-    user_chats, unread_counts, pick_word, admin_stats, bump_online, avatar_html
+    user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -46,9 +46,14 @@ def touch_online():
 
 
 def can_view_chat(user, chat):
-    if user.is_admin or chat.chat_type == 'channel':
+    if user.is_admin:
         return True
-    return chat.id in [c.id for c in user_chats(user.id)]
+    member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first() is not None
+    if member:
+        return True
+    if chat.chat_type in ('group', 'channel'):
+        return bool(chat.is_public)
+    return False
 
 
 def chat_member_ids(chat_id):
@@ -154,10 +159,8 @@ def chat_page(chat_id):
     for m in Message.query.filter_by(chat_id=chat.id, deleted=False).order_by(Message.id.desc()).limit(50).all()[::-1]:
         msgs.append(m.to_dict(user.id))
     members = [m.user.to_public() for m in chat.members if m.user]
-    game = HangmanGame.query.filter_by(chat_id=chat.id, active=True).first()
     return render_template('chat.html', chat=chat, user=user, messages=msgs,
                            members=members, role=my_role_in(user, chat),
-                           game=game,
                            items=unread_counts(user),
                            contacts=[m.user.to_public() for c in user_chats(user.id)
                                      for m in c.members
@@ -167,6 +170,7 @@ def chat_page(chat_id):
 @app.route('/api/search')
 @require_auth
 def api_search():
+    user = current_user()
     q = (request.args.get('q') or '').strip().lower()
     users = []
     chats = []
@@ -177,15 +181,36 @@ def api_search():
                 db.func.lower(User.display_name).like(f'%{q}%'),
             ),
         ).limit(8).all()
-        chats = Chat.query.filter(
+        public_q = Chat.query.filter(
+            Chat.chat_type.in_(['group', 'channel']),
+            Chat.is_public.is_(True),
+            db.or_(
+                db.func.lower(Chat.name).like(f'%{q}%'),
+                db.func.lower(Chat.description).like(f'%{q}%'),
+            ),
+        ).limit(8).all()
+        known = Chat.query.filter(
             Chat.chat_type.in_(['group', 'channel']),
             db.func.lower(Chat.name).like(f'%{q}%'),
+            Chat.members.any(ChatMember.user_id == user.id),
         ).limit(8).all()
-        user = current_user()
-        chats = [c for c in chats if can_view_chat(user, c)]
+        seen = set()
+        for c in list(public_q) + list(known):
+            if c.id in seen:
+                continue
+            if not can_view_chat(user, c):
+                continue
+            seen.add(c.id)
+            chats.append(c)
     return jsonify({
         'users': [u.to_public() for u in users if not u.is_banned],
-        'chats': [{'id': c.id, 'chat_type': c.chat_type, 'name': c.name} for c in chats],
+        'chats': [{
+            'id': c.id,
+            'chat_type': c.chat_type,
+            'name': c.name,
+            'is_public': bool(c.is_public),
+            'is_member': (ChatMember.query.filter_by(chat_id=c.id, user_id=user.id).first() is not None) or user.is_admin,
+        } for c in chats],
     })
 
 
@@ -214,8 +239,9 @@ def api_group_create():
     if len(name) < 2:
         return jsonify(ok=False, error='نام گروه حداقل ۲ حرف')
     member_ids = [int(x) for x in data.get('members', []) if int(x) != user.id]
-    g = create_group(user, name, data.get('description', ''), member_ids)
-    return jsonify(ok=True, chat_id=g.id)
+    is_public = data.get('is_public', True)
+    g = create_group(user, name, data.get('description', ''), member_ids, is_public)
+    return jsonify(ok=True, chat_id=g.id, is_public=is_public)
 
 
 @app.route('/api/channel/create', methods=['POST'])
@@ -226,8 +252,36 @@ def api_channel_create():
     name = (data.get('name') or '').strip()
     if len(name) < 2:
         return jsonify(ok=False, error='نام کانال حداقل ۲ حرف')
-    c = create_channel(user, name, data.get('description', ''))
-    return jsonify(ok=True, chat_id=c.id)
+    is_public = data.get('is_public', True)
+    c = create_channel(user, name, data.get('description', ''), is_public)
+    return jsonify(ok=True, chat_id=c.id, is_public=is_public)
+
+
+@app.route('/api/chat/<int:chat_id>/settings', methods=['POST'])
+@require_auth
+def api_chat_settings(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or chat.chat_type == 'dm':
+        return jsonify(ok=False, error='این گپ قابل تغییر نیست')
+    role = my_role_in(user, chat)
+    data = request.get_json(silent=True) or {}
+    changed = False
+    if 'name' in data:
+        new_name = (data.get('name') or '').strip()
+        if len(new_name) < 2:
+            return jsonify(ok=False, error='نام حداقل ۲ حرف')
+        chat.name = new_name[:60]
+        changed = True
+    if 'description' in data:
+        chat.description = (data.get('description') or '').strip()[:200]
+        changed = True
+    if 'is_public' in data and role in ('owner', 'admin'):
+        chat.is_public = bool(data.get('is_public'))
+        changed = True
+    if changed:
+        db.session.commit()
+    return jsonify(ok=True, chat=chat.to_public(user), role=role)
 
 
 @app.route('/api/chat/<int:chat_id>/members', methods=['GET', 'POST'])
@@ -306,6 +360,31 @@ def api_members(chat_id):
     ])
 
 
+@app.route('/api/chat/<int:chat_id>/avatar', methods=['POST'])
+@require_auth
+def api_chat_avatar(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or chat.chat_type == 'dm':
+        return jsonify(ok=False, error='این گپ قابل تغییر نیست')
+    role = my_role_in(user, chat)
+    if role not in ('owner', 'admin') and not user.is_admin:
+        return jsonify(ok=False, error='دسترسی نداری')
+    f = request.files.get('avatar')
+    if not f or not f.filename:
+        return jsonify(ok=False, error='فایلی دریافت نشد')
+    fname = save_chat_avatar(user, f.filename)
+    if not fname:
+        return jsonify(ok=False, error='فرمت عکس مجاز نیست')
+    if chat.avatar:
+        old = os.path.join(app.config['AVATAR_DIR'], chat.avatar)
+        if os.path.exists(old):
+            os.remove(old)
+    chat.avatar = fname
+    db.session.commit()
+    return jsonify(ok=True, avatar=chat.avatar_url)
+
+
 @app.route('/api/message/send', methods=['POST'])
 @require_auth
 def api_send_message():
@@ -326,8 +405,6 @@ def api_send_message():
         return jsonify(ok=False, error='پیام خالی')
     if msg_type in ('image', 'file') and not file_path:
         return jsonify(ok=False, error='فایلی آتچ نشده')
-    if msg_type == 'ephemeral' and not content:
-        return jsonify(ok=False, error='پیام سوخته‌ای بنویس')
     m = Message(chat_id=chat.id, sender_id=user.id, msg_type=msg_type,
                 content=content, file_name=file_name, file_path=file_path,
                 reply_to=data.get('reply_to') or None)
@@ -402,24 +479,6 @@ def api_delete_message():
     for mid in chat_member_ids(m.chat_id):
         socketio.emit('message_deleted', {'message_id': m.id}, room=f'user:{mid}')
     return jsonify(ok=True)
-
-
-@app.route('/api/message/ephemeral/view', methods=['POST'])
-@require_auth
-def api_ephemeral_view():
-    user = current_user()
-    data = request.get_json(silent=True) or {}
-    m = Message.query.get(int(data.get('message_id') or 0))
-    if not m:
-        abort(404)
-    if m.sender_id != user.id and not user.is_admin and \
-            ChatMember.query.filter_by(chat_id=m.chat_id, user_id=user.id).first() is None:
-        return jsonify(ok=False, error='دسترسی نداری')
-    m.mark_viewed(user.id)
-    db.session.commit()
-    socketio.emit('ephemeral_viewed', {'message_id': m.id, 'viewer': user.id},
-                  room=f'user:{m.sender_id}')
-    return jsonify(ok=True, content=m.content, viewed_by=m.viewed_by())
 
 
 @app.route('/api/mark-read', methods=['POST'])
@@ -515,6 +574,15 @@ def api_profile():
 @require_auth
 def api_avatar():
     user = current_user()
+    if request.form.get('delete') == '1':
+        if user.avatar:
+            old = os.path.join(app.config['AVATAR_DIR'], user.avatar)
+            if os.path.exists(old):
+                os.remove(old)
+        user.avatar = ''
+        db.session.commit()
+        socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
+        return jsonify(ok=True, avatar='')
     f = request.files.get('avatar')
     if not f or not f.filename:
         return jsonify(ok=False, error='فایلی دریافت نشد')
@@ -551,46 +619,6 @@ def static_files(fname):
     if not (uid_part.isdigit() and int(uid_part) == user.id) and not user.is_admin:
         abort(403)
     return send_from_directory(app.config['UPLOAD_DIR'], fname)
-
-
-@app.route('/api/hangman/start', methods=['POST'])
-@require_auth
-def api_hangman_start():
-    user = current_user()
-    data = request.get_json(silent=True) or {}
-    chat = Chat.query.get(int(data.get('chat_id') or 0))
-    if not chat or not can_view_chat(user, chat):
-        return jsonify(ok=False, error='دسترسی نداری')
-    HangmanGame.query.filter_by(chat_id=chat.id, active=True).update({'active': False})
-    g = HangmanGame(chat_id=chat.id, host_id=user.id, word=pick_word())
-    db.session.add(g)
-    db.session.commit()
-    for mid in chat_member_ids(chat.id):
-        known = mid == user.id
-        payload = g.game_state(known=known)
-        socketio.emit('hangman_started', payload, room=f'user:{mid}')
-    return jsonify(ok=True, game=g.game_state(True))
-
-
-@app.route('/api/hangman/guess', methods=['POST'])
-@require_auth
-def api_hangman_guess():
-    user = current_user()
-    data = request.get_json(silent=True) or {}
-    g = HangmanGame.query.get(int(data.get('game_id') or 0))
-    if not g or not g.active:
-        return jsonify(ok=False, error='بازی فعال نیست')
-    letter = (data.get('letter') or '').strip()
-    if len(letter) != 1 or not letter.isalpha():
-        return jsonify(ok=False, error='یک حرف وارد کن')
-    g.evaluate(letter)
-    db.session.commit()
-    for mid in chat_member_ids(g.chat_id):
-        payload = g.game_state(known=(mid == g.host_id) or not g.active)
-        if not g.active:
-            payload['word'] = g.word
-        socketio.emit('hangman_state', payload, room=f'user:{mid}')
-    return jsonify(ok=True, game=g.game_state(True))
 
 
 @app.route('/api/message/pin', methods=['POST'])
@@ -657,6 +685,10 @@ def api_join_chat(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat or chat.chat_type == 'dm':
         return jsonify(ok=False, error='دسترسی نداری')
+    if not chat.is_public and user.id != chat.owner_id and not user.is_admin:
+        existing = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+        if existing is None:
+            return jsonify(ok=False, error='این گپ خصوصی است. منتظر دعوت صاحب بمان.')
     if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
         db.session.add(ChatMember(chat_id=chat.id, user_id=user.id, role='member'))
         db.session.commit()

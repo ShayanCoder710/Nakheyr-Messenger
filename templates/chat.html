@@ -4,33 +4,39 @@
 <div class="chat-layout">
   <aside class="sidebar">
     <div class="side-head">
-      <a href="{{ url_for('home') }}" style="text-decoration:none">{% if me %}{{ avatar_html(me) | safe }}{% endif %}</a>
+      <a href="{{ url_for('home') }}" style="text-decoration:none" id="sideProfileLink">{% if me %}{{ avatar_html(me) | safe }}{% endif %}</a>
       <div class="who">
         <b>{{ me.display_name }} {% if me.is_verified %}<span title="اعتمادسنجی شد">✔</span>{% endif %}</b>
         <span>@{{ me.username }}{% if me.streak_days and me.streak_days > 1 %} · <span class="streak">🔥 {{ me.streak_days }} روزه</span>{% endif %}</span>
       </div>
       <div class="side-actions">
-        <button class="icon-btn" id="btnProfile" title="پروفایل من">⚙</button>
         <button class="icon-btn" id="btnNewGroup" title="گروه جدید">+</button>
         <button class="icon-btn" id="btnNewChannel" title="کانال جدید">≡</button>
-        <a class="icon-btn" href="{{ url_for('logout') }}" title="خروج">⏻</a>
       </div>
     </div>
     <div class="search-box">
-      <input class="input" id="searchInput" placeholder="جستجوی افراد، گروه‌ها و کانال‌ها…">
+      <input class="input" id="searchInput" placeholder="جستجوی افراد، گروه‌های عمومی و کانال‌ها…">
       <div class="search-results" id="searchResults"></div>
     </div>
-    <div class="conv-list" id="convList">
-    {% for it in items %}
-    <div class="conv {% if chat and chat.id == it.chat_id %}active{% endif %}" data-chat-id="{{ it.chat_id }}" data-type="{{ it.chat_type }}">
-      <div class="avatar" style="border-radius:14px">{{ (it.name | default('؟'))[:1] }}</div>
-      <div class="body">
-        <div class="row1"><b>{{ it.name }}</b><time>{{ it.last_at | default('') | fmt_time }}</time></div>
-        <div class="row2"><span>{{ it.last }}</span>{% if it.unread %}<span class="unread-pill">{{ it.unread }}</span>{% endif %}</div>
+    <div class="conv-sections" id="convSections">
+      <div class="conv-section">
+        <div class="conv-section-head" data-cat="dm">
+          <span>پیام‌های خصوصی</span>
+        </div>
+        <div class="conv-list" id="convListDm"></div>
       </div>
-    </div>
-    {% endfor %}
-    {% if not items %}<div style="text-align:center; color:var(--dim); padding:30px">هنوز گپی نداره. از دکمه‌ی + یک گروه بساز یا یکی از آشنایات رو از سرچ پیدا کن.</div>{% endif %}
+      <div class="conv-section">
+        <div class="conv-section-head" data-cat="group">
+          <span>گروه‌ها</span>
+        </div>
+        <div class="conv-list" id="convListGroup"></div>
+      </div>
+      <div class="conv-section">
+        <div class="conv-section-head" data-cat="channel">
+          <span>کانال‌ها</span>
+        </div>
+        <div class="conv-list" id="convListChannel"></div>
+      </div>
     </div>
   </aside>
 
@@ -39,23 +45,22 @@
       <div>
         <div class="big">💬</div>
         <h2>یک گپ رو انتخاب کن</h2>
-        <p style="color:var(--dim); font-size:13px; margin-top:6px">پیام، عکس، فایل، بازی و واکنش‌ها — همه اینجا</p>
+        <p style="color:var(--dim); font-size:13px; margin-top:6px">پیام، عکس، فایل و واکنش‌ها — همه اینجا</p>
       </div>
     </div>
 
     <section class="msgs-pane {% if chat %}open{% endif %}" id="msgsPane">
       <div class="chat-head">
-        <div class="avatar" id="chatHeadAvatar"></div>
-        <div class="t">
-          <b id="chatHeadName"></b>
-          <small id="chatHeadSub"></small>
+        <div class="head-id" id="chatHeadId" title="تنظیمات و اطلاعات گپ">
+          <div class="avatar" id="chatHeadAvatar"></div>
+          <div class="t">
+            <b id="chatHeadName"></b>
+            <small id="chatHeadSub"></small>
+          </div>
         </div>
         <button class="icon-btn" id="btnMembers" title="اعضا">☰</button>
         <button class="icon-btn" id="btnJoin" title="پیوستن" style="display:none">⤵</button>
-        <button class="icon-btn" id="btnHangman" title="بازی آویزان">🎮</button>
-        {% if chat and chat.chat_type == 'dm' %}
-        <a class="icon-btn" id="btnPeerProfile" href="#" title="پروفایل">👤</a>
-        {% endif %}
+        <a class="icon-btn" id="btnPeerProfile" href="#" title="پروفایل" style="display:none">👤</a>
         <button class="icon-btn" id="btnReportUser" title="گزارش" style="display:none">🚨</button>
         <div class="member-list" id="memberList"></div>
       </div>
@@ -65,13 +70,6 @@
         <div id="msgsBody" style="display:contents"></div>
       </div>
       <div class="typing-bar" id="typingBar"></div>
-      <div class="hangman-box" id="hangmanBox" style="display:none">
-        <h3><span>🎮 بازی آویزان</span><button class="btn sm ghost" id="hangmanClose">بستن</button></h3>
-        <div class="hm-word" id="hmWord"></div>
-        <div class="hm-lives" id="hmLives"></div>
-        <div class="hm-keys" id="hmKeys"></div>
-        <div class="hm-result" id="hmResult"></div>
-      </div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
         <span id="bulkCount"></span>
         <button class="btn sm danger" id="bulkDelete">🗑 حذف همه</button>
@@ -83,11 +81,10 @@
         <div class="composer-row">
           <div class="composer-tools">
             <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل">📎</button>
-            <button class="icon-btn" id="btnEphemeral" title="پیام سوخته">🕒</button>
           </div>
           <input type="file" id="fileInput" hidden>
-          <textarea class="input" id="msgInput" rows="1" placeholder="پیام بنویس… (مارک‌داون پشتیبانیه: **پر**، *کج*، `کد`)"></textarea>
-          <button class="btn primary" id="btnSend">ارسال</button>
+          <textarea class="input composer-input" id="msgInput" rows="1" placeholder="پیام بنویس… (مارک‌داون پشتیبانیه: **پر**، *کج*، `کد`)" style="flex:1; min-width:0; width:auto"></textarea>
+          <button class="btn primary send-btn" id="btnSend" style="min-width:88px; height:46px; flex:0 0 auto">ارسال</button>
         </div>
       </div>
     </section>
@@ -97,12 +94,18 @@
 <div class="modal" id="newGroupModal">
   <div class="box">
     <h3>گروه جدید</h3>
-    <p class="sub">نام گروه رو بذار و چند نفر رو دعوت کن</p>
+    <p class="sub">نام گروه رو بذار، نوعش رو انتخاب کن و چند نفر رو دعوت کن</p>
     <input class="input" id="groupName" placeholder="مثلاً هم‌کارها">
+    <input class="input" id="groupDesc" placeholder="توضیح (اختیاری)">
+    <label class="label">نوع گروه</label>
+    <div class="seg" id="groupVis">
+      <button type="button" data-val="public" class="on">🌐 عمومی</button>
+      <button type="button" data-val="private">🔒 خصوصی</button>
+    </div>
     <label class="label">اعضا</label>
     <div class="pick-grid" id="groupMemberPick"></div>
     <div class="row">
-      <button class="btn ghost" onclick="document.getElementById('newGroupModal').classList.remove('show')">انصراف</button>
+      <button class="btn ghost" id="groupCancel">انصراف</button>
       <button class="btn primary" id="btnCreateGroup">ایجاد گروه</button>
     </div>
   </div>
@@ -111,23 +114,68 @@
 <div class="modal" id="newChannelModal">
   <div class="box">
     <h3>کانال جدید</h3>
-    <p class="sub">در کانال فقط ادمین‌ها پیام می‌فرستن</p>
+    <p class="sub">در کانال فقط ادمین‌ها پیام می‌فرستن. همه می‌تونن وارد بشن</p>
     <input class="input" id="channelName" placeholder="مثلاً اخبار">
     <input class="input" id="channelDesc" placeholder="توضیح (اختیاری)">
+    <label class="label">نوع کانال</label>
+    <div class="seg" id="channelVis">
+      <button type="button" data-val="public" class="on">🌐 عمومی</button>
+      <button type="button" data-val="private">🔒 خصوصی</button>
+    </div>
     <div class="row">
-      <button class="btn ghost" onclick="document.getElementById('newChannelModal').classList.remove('show')">انصراف</button>
+      <button class="btn ghost" id="channelCancel">انصراف</button>
       <button class="btn primary" id="btnCreateChannel">ایجاد کانال</button>
     </div>
   </div>
 </div>
 
-<div class="report-modal" id="reportModal">
+<div class="modal" id="chatSettingsModal">
   <div class="box">
-    <h3>🚨 گزارش کاربر</h3>
+    <div class="cs-head">
+      <div class="avatar lg" id="csAvatar"></div>
+      <div class="cs-id">
+        <b id="csName"></b>
+        <small id="csMeta"></small>
+      </div>
+    </div>
+    <p class="sub" id="csDescView"></p>
+    <label class="label">نام گپ</label>
+    <input class="input" id="csNameInput" maxlength="60">
+    <label class="label">توضیح</label>
+    <textarea class="input" id="csDescInput" rows="2" maxlength="200"></textarea>
+    <label class="label">نوع گپ</label>
+    <div class="seg" id="csVis">
+      <button type="button" data-val="public">🌐 عمومی (هرکسی می‌تونه وارد بشه)</button>
+      <button type="button" data-val="private">🔒 خصوصی (فقط دعوت‌شده‌ها)</button>
+    </div>
+    <label class="label">آواتار گپ</label>
+    <div class="av-picker" id="csAvPick">
+      <label class="av-drop">
+        <input type="file" id="csAvInput" accept="image/*" hidden>
+        <span id="csAvLabel">📷 انتخاب عکس…</span>
+      </label>
+      <button class="btn sm" id="csAvUpload">آپلود</button>
+    </div>
+    <label class="label">ارسال دعوت (لینک عضویت)</label>
+    <div class="inv-row">
+      <code id="csInviteLink" class="inv-link"></code>
+      <button class="btn sm" id="csCopyInvite">کپی</button>
+    </div>
+    <div class="row">
+      <button class="btn ghost" id="csClose">بستن</button>
+      <button class="btn danger" id="csLeave" style="display:none">خروج از گپ</button>
+      <button class="btn primary" id="csSave">ذخیره تغییرات</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="reportModal">
+  <div class="box">
+    <h3 id="reportTitle">🚨 گزارش کاربر</h3>
     <p class="sub">دلیل گزارش رو بنویس تا ادمین‌ها بررسی کنن</p>
     <textarea class="input" id="reportReason" rows="3" placeholder="مثلاً رفتار غیرمجاز…"></textarea>
     <div class="row">
-      <button class="btn ghost" onclick="document.getElementById('reportModal').classList.remove('show')">انصراف</button>
+      <button class="btn ghost" id="reportCancel">انصراف</button>
       <button class="btn danger" id="btnSendReport">ارسال گزارش</button>
     </div>
   </div>
@@ -142,20 +190,28 @@
     <label class="label">نام نمایشی</label>
     <input class="input" id="pmDisplayName">
     <label class="label">بیو</label>
-    <textarea class="input" id="pmBioInput" rows="2" maxlength="200"></textarea>
+    <textarea class="input bio-resize" id="pmBioInput" rows="2" maxlength="200" style="resize:vertical; min-height:56px; max-height:240px"></textarea>
     <label class="label">رنگ شخصی (بابل پیام‌ها)</label>
     <div class="color-swatches" id="pmSwatches"></div>
     <label class="label">عکس پروفایل</label>
-    <div style="display:flex; gap:10px; align-items:center">
-      <input type="file" id="pmAvatarInput" accept="image/*">
+    <div class="av-picker" id="pmAvPick">
+      <label class="av-drop" id="pmAvDrop">
+        <input type="file" id="pmAvatarInput" accept="image/*" hidden>
+        <span>📷 عکس انتخاب کن یا بکش و رها کن</span>
+        <img id="pmAvPrev" alt="" style="display:none">
+      </label>
       <button class="btn sm" id="pmAvatarBtn">آپلود</button>
+      <button class="btn sm ghost" id="pmAvClear" style="display:none">حذف</button>
     </div>
     <div style="display:flex; gap:10px; margin-top:22px">
       <button class="btn primary" id="pmSave" style="flex:1; justify-content:center">ذخیره</button>
       <button class="btn danger" id="pmLogout">خروج</button>
+      <button class="btn ghost" id="pmBack" style="justify-content:center">برگشت</button>
     </div>
   </div>
 </div>
+
+<div class="ctx" id="ctxMenu"></div>
 
 <script>
 window.ME = {{ me.to_self() | tojson }};
@@ -163,7 +219,6 @@ window.CHAT_DATA = {
   chat: {{ chat.to_public(me) | tojson if chat else 'null' }},
   role: {{ role | tojson }},
   members: {{ members | tojson }},
-  game: {{ game.game_state(me.id == game.host_id) | tojson if game else 'null' }},
   contacts: {{ contacts | tojson }},
   initialMessages: {{ messages | tojson }}
 };

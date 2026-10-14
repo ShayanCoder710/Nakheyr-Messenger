@@ -7,13 +7,8 @@ from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
-from models.models import db, User, Chat, ChatMember, Message, Report, HangmanGame, Block
+from models.models import db, User, Chat, ChatMember, Message, Report, Block
 
-HANGMAN_WORDS = [
-    'فلکس', 'فلاش', 'کد', 'سرور', 'پایتون', 'جافا', 'گیت', 'نود', 'رایانه', 'پردازنده',
-    'الگوریتم', 'دیتابیس', 'اینترنت', 'برنامه', 'توسعه', 'شبکه', 'امنیت', 'کوانتوم',
-    'رباتیک', 'لایه', 'کانتینر', 'پروکسی', 'کش', 'فریمورک', 'میکروسرویس',
-]
 IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'}
 ALLOWED_EXT = IMAGE_EXT | {
     'pdf', 'mp3', 'wav', 'mp4', 'mov', 'webm', 'txt', 'zip', 'rar', '7z',
@@ -46,6 +41,7 @@ def _ensure_columns():
         ('chat_members', 'title', "VARCHAR(30) NOT NULL DEFAULT ''"),
         ('messages', 'pinned', "BOOLEAN NOT NULL DEFAULT 0"),
         ('messages', 'reply_to', "INTEGER NULL"),
+        ('chats', 'is_public', "BOOLEAN NOT NULL DEFAULT 1"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -158,8 +154,9 @@ def get_or_create_dm(user_a, user_b):
 _DM_LOCKS = {}
 
 
-def create_group(owner, name, description, member_ids):
-    chat = Chat(chat_type='group', name=name, description=description, owner_id=owner.id)
+def create_group(owner, name, description, member_ids, is_public=True):
+    chat = Chat(chat_type='group', name=name, description=description, owner_id=owner.id,
+                is_public=is_public)
     db.session.add(chat)
     db.session.flush()
     db.session.add(ChatMember(chat_id=chat.id, user_id=owner.id, role='owner'))
@@ -170,13 +167,25 @@ def create_group(owner, name, description, member_ids):
     return chat
 
 
-def create_channel(owner, name, description):
-    chat = Chat(chat_type='channel', name=name, description=description, owner_id=owner.id)
+def create_channel(owner, name, description, is_public=True):
+    chat = Chat(chat_type='channel', name=name, description=description, owner_id=owner.id,
+                is_public=is_public)
     db.session.add(chat)
     db.session.flush()
     db.session.add(ChatMember(chat_id=chat.id, user_id=owner.id, role='owner'))
     db.session.commit()
     return chat
+
+
+def save_chat_avatar(owner, filename):
+    ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
+    if ext not in IMAGE_EXT:
+        return ''
+    fname = f'chat_{owner.id}_{secrets.token_hex(4)}.{ext}'
+    target = current_app.config['AVATAR_DIR']
+    os.makedirs(target, exist_ok=True)
+    request.files['avatar'].save(os.path.join(target, fname))
+    return fname
 
 
 def chat_display_name(chat, viewer):
@@ -191,10 +200,6 @@ def snippet(content, msg_type='text'):
         return 'تصویر'
     if msg_type == 'file':
         return 'فایل'
-    if msg_type == 'ephemeral':
-        return 'پیام سوخته'
-    if msg_type == 'game':
-        return 'بازی آویزان'
     text = (content or '').replace('\n', ' ')
     return text[:40] + ('…' if len(text) > 40 else '')
 
@@ -231,11 +236,17 @@ def unread_counts(user):
         last_text = ''
         if last:
             last_text = (f'{last.sender_id} · ' if last.sender_id else '') + snippet(last.content, last.msg_type)
+        peer_username = ''
+        if chat.chat_type == 'dm':
+            other = next((m.user for m in chat.members if m.user_id != user.id), None)
+            peer_username = other.username if other else ''
         out.append({
             'chat_id': chat.id,
             'chat_type': chat.chat_type,
             'name': chat_display_name(chat, user),
+            'peer_username': peer_username,
             'avatar': chat.avatar_url,
+            'is_public': bool(chat.is_public),
             'owner_id': chat.owner_id,
             'last': last_text,
             'last_at': last.created_at.isoformat() if last else '',

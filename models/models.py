@@ -65,6 +65,7 @@ class Chat(db.Model):
     description = db.Column(db.String(200), default='')
     avatar = db.Column(db.String(120), default='')
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    is_public = db.Column(db.Boolean, default=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     members = db.relationship('ChatMember', backref='chat', lazy=True, cascade='all, delete-orphan')
     messages = db.relationship('Message', backref='chat', lazy=True, cascade='all, delete-orphan')
@@ -84,6 +85,7 @@ class Chat(db.Model):
             'description': self.description,
             'avatar': self.avatar_url,
             'owner_id': self.owner_id,
+            'is_public': bool(self.is_public),
         }
         if self.chat_type == 'dm' and current_user:
             other = next((m.user for m in self.members if m.user_id != current_user), None)
@@ -120,7 +122,6 @@ class Message(db.Model):
     deleted = db.Column(db.Boolean, default=False)
     pinned = db.Column(db.Boolean, default=False)
     reply_to = db.Column(db.Integer, nullable=True)
-    ephemeral_viewed = db.Column(db.Text, default='[]')
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     def react_dict(self):
@@ -143,18 +144,6 @@ class Message(db.Model):
         if user_id not in ids:
             ids.append(user_id)
         self.read_by = json.dumps(ids)
-
-    def viewed_by(self):
-        try:
-            return json.loads(self.ephemeral_viewed or '[]')
-        except Exception:
-            return []
-
-    def mark_viewed(self, user_id):
-        ids = self.viewed_by()
-        if user_id not in ids:
-            ids.append(user_id)
-            self.ephemeral_viewed = json.dumps(ids)
 
     def to_dict(self, viewer_id=None):
         reactions = self.react_dict()
@@ -185,10 +174,6 @@ class Message(db.Model):
                     'msg_type': parent.msg_type,
                     'deleted': parent.deleted,
                 }
-        if self.msg_type == 'ephemeral':
-            data['viewed_by'] = self.viewed_by()
-            if str(viewer_id) not in data['viewed_by']:
-                data['content'] = ''
         return data
 
 
@@ -214,59 +199,3 @@ class Report(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reporter = db.relationship('User', foreign_keys=[reporter_id])
     reported = db.relationship('User', foreign_keys=[reported_id])
-
-
-class HangmanGame(db.Model):
-    __tablename__ = 'hangman_games'
-
-    id = db.Column(db.Integer, primary_key=True)
-    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
-    host_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    word = db.Column(db.String(80), default='')
-    guessed = db.Column(db.Text, default='[]')
-    wrong = db.Column(db.Integer, default=0)
-    active = db.Column(db.Boolean, default=True)
-    result = db.Column(db.String(20), default='')
-    created_at = db.Column(db.DateTime, default=datetime.utcnow)
-
-    def guessed_list(self):
-        try:
-            return json.loads(self.guessed or '[]')
-        except Exception:
-            return []
-
-    def add_guess(self, letter):
-        letters = self.guessed_list()
-        if letter not in letters:
-            letters.append(letter)
-            self.guessed = json.dumps(letters)
-
-    def game_state(self, known=False):
-        data = {
-            'id': self.id,
-            'chat_id': self.chat_id,
-            'host_id': self.host_id,
-            'display': ''.join(c if c in self.guessed_list() or c in ' -' else '•' for c in self.word),
-            'guessed': self.guessed_list(),
-            'wrong': self.wrong,
-            'max_wrong': 7,
-            'active': self.active,
-            'result': self.result,
-        }
-        if known:
-            data['word'] = self.word
-        return data
-
-    def evaluate(self, letter):
-        if letter in self.guessed_list():
-            return self.game_state(True)
-        self.add_guess(letter)
-        if letter not in self.word:
-            self.wrong += 1
-            if self.wrong >= 7:
-                self.active = False
-                self.result = 'lost'
-        elif all(c in self.guessed_list() or c in ' -' for c in self.word):
-            self.active = False
-            self.result = 'won'
-        return self.game_state(True)
