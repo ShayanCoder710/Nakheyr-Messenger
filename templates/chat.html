@@ -51,6 +51,7 @@
 
     <section class="msgs-pane {% if chat %}open{% endif %}" id="msgsPane">
       <div class="chat-head">
+        <button class="icon-btn btn-back" id="btnBackChat" title="بازگشت">›</button>
         <div class="head-id" id="chatHeadId" title="تنظیمات و اطلاعات گپ">
           <div class="avatar" id="chatHeadAvatar"></div>
           <div class="t">
@@ -70,9 +71,11 @@
         <div id="msgsBody" style="display:contents"></div>
       </div>
       <div class="typing-bar" id="typingBar"></div>
+      <div class="channel-hint" id="channelHint" style="display:none"><span>🔒 در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
         <span id="bulkCount"></span>
-        <button class="btn sm danger" id="bulkDelete">🗑 حذف همه</button>
+        <button class="btn sm" id="bulkAllMine">همه‌ی من</button>
+        <button class="btn sm danger" id="bulkDelete">🗑 حذف</button>
         <button class="btn sm" id="bulkCancel">انصراف</button>
       </div>
       <div class="composer">
@@ -97,6 +100,14 @@
     <p class="sub">نام گروه رو بذار، نوعش رو انتخاب کن و چند نفر رو دعوت کن</p>
     <input class="input" id="groupName" placeholder="مثلاً هم‌کارها">
     <input class="input" id="groupDesc" placeholder="توضیح (اختیاری)">
+    <label class="label">عکس گروه (اختیاری)</label>
+    <div class="av-picker">
+      <label class="av-drop">
+        <input type="file" id="groupAvInput" accept="image/*" hidden>
+        <span id="groupAvLabel">📷 انتخاب عکس…</span>
+        <img id="groupAvPrev" alt="" style="display:none">
+      </label>
+    </div>
     <label class="label">نوع گروه</label>
     <div class="seg" id="groupVis">
       <button type="button" data-val="public" class="on">🌐 عمومی</button>
@@ -117,6 +128,14 @@
     <p class="sub">در کانال فقط ادمین‌ها پیام می‌فرستن. همه می‌تونن وارد بشن</p>
     <input class="input" id="channelName" placeholder="مثلاً اخبار">
     <input class="input" id="channelDesc" placeholder="توضیح (اختیاری)">
+    <label class="label">عکس کانال (اختیاری)</label>
+    <div class="av-picker">
+      <label class="av-drop">
+        <input type="file" id="channelAvInput" accept="image/*" hidden>
+        <span id="channelAvLabel">📷 انتخاب عکس…</span>
+        <img id="channelAvPrev" alt="" style="display:none">
+      </label>
+    </div>
     <label class="label">نوع کانال</label>
     <div class="seg" id="channelVis">
       <button type="button" data-val="public" class="on">🌐 عمومی</button>
@@ -235,7 +254,20 @@
   </div>
 </div>
 
+<div class="modal" id="deleteModal">
+  <div class="box narrow">
+    <h3 id="delTitle">حذف پیام</h3>
+    <p class="sub" id="delSub">پیام برای همه محو می‌شه. این کار قابل بازگشت نیست</p>
+    <div class="row">
+      <button class="btn ghost" id="delCancel">انصراف</button>
+      <button class="btn danger" id="delConfirm">تأیید</button>
+    </div>
+  </div>
+</div>
+
 <div class="ctx" id="ctxMenu"></div>
+
+<div class="emoji-pick" id="emojiPicker" style="display:none"></div>
 
 <script>
 window.ME = {{ me.to_self() | tojson }};
