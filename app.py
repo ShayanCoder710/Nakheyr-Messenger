@@ -218,6 +218,22 @@ def api_search():
     })
 
 
+@app.route('/api/user/by-username', methods=['POST'])
+@require_auth
+def api_user_by_username():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    uname = (data.get('username') or '').strip().lower()
+    target = User.query.filter_by(username=uname).first()
+    if not target or target.id == user.id:
+        return jsonify(ok=False, error='کاربر پیدا نشد')
+    if target.is_banned:
+        return jsonify(ok=False, error='کاربر مسدود شده')
+    if is_blocked(user.id, target.id):
+        return jsonify(ok=False, error='کاربر رو بلاک کرده، نمی‌تونی DM بزنی')
+    return jsonify(ok=True, user=target.to_public())
+
+
 @app.route('/api/dm', methods=['POST'])
 @require_auth
 def api_dm():
@@ -382,6 +398,16 @@ def api_chat_avatar(chat_id):
     role = my_role_in(user, chat)
     if role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='دسترسی نداری')
+    if request.form.get('delete') == '1':
+        if chat.avatar:
+            old = os.path.join(app.config['AVATAR_DIR'], chat.avatar)
+            if os.path.exists(old):
+                os.remove(old)
+        chat.avatar = ''
+        db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+        return jsonify(ok=True, avatar='')
     f = request.files.get('avatar')
     if not f or not f.filename:
         return jsonify(ok=False, error='فایلی دریافت نشد')
@@ -394,6 +420,8 @@ def api_chat_avatar(chat_id):
             os.remove(old)
     chat.avatar = fname
     db.session.commit()
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
     return jsonify(ok=True, avatar=chat.avatar_url)
 
 
@@ -577,6 +605,16 @@ def api_profile():
         user.bio = (data['bio'] or '').strip()[:200]
     if data.get('accent') and re.match(r'^#[0-9a-fA-F]{6}$', data['accent']):
         user.accent = data['accent']
+    if 'username' in data:
+        new_username = (data.get('username') or '').strip().lower()
+        if not re.match(r'^[a-z0-9_]{3,30}$', new_username):
+            return jsonify(ok=False, error='نام کاربری: ۳ تا ۳۰ حرف انگلیسی، عدد یا _')
+        if new_username != user.username:
+            if new_username in ('admin',) and not user.is_admin:
+                return jsonify(ok=False, error='این نام کاربری رزرو شده')
+            if User.query.filter_by(username=new_username).first():
+                return jsonify(ok=False, error='این نام کاربری قبلا گرفته شده')
+            user.username = new_username
     db.session.commit()
     socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
     return jsonify(ok=True, profile=user.to_public())
@@ -740,7 +778,7 @@ def api_messages(chat_id):
     if before:
         q = q.filter(Message.id < before)
     msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]
-    members = [{**m.user.to_public(), 'role': m.role} for m in chat.members if m.user]
+    members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
     joined = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first() is not None or user.is_admin
     return jsonify(
         messages=[m.to_dict(user.id) for m in msgs],

@@ -83,7 +83,7 @@
             <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل">📎</button>
           </div>
           <input type="file" id="fileInput" hidden>
-          <textarea class="input composer-input" id="msgInput" rows="1" placeholder="پیام بنویس… (مارک‌داون پشتیبانیه: **پر**، *کج*، `کد`)" style="flex:1; min-width:0; width:auto"></textarea>
+          <textarea class="input composer-input" id="msgInput" rows="1" placeholder="پیام خود را بنویسید…" style="flex:1; min-width:0; width:auto"></textarea>
           <button class="btn primary send-btn" id="btnSend" style="min-width:88px; height:46px; flex:0 0 auto">ارسال</button>
         </div>
       </div>
@@ -153,18 +153,40 @@
       <label class="av-drop">
         <input type="file" id="csAvInput" accept="image/*" hidden>
         <span id="csAvLabel">📷 انتخاب عکس…</span>
+        <img id="csAvPrev" alt="" style="display:none">
       </label>
       <button class="btn sm" id="csAvUpload">آپلود</button>
+      <button class="btn sm ghost" id="csAvClear" style="display:none">حذف</button>
     </div>
     <label class="label">ارسال دعوت (لینک عضویت)</label>
     <div class="inv-row">
       <code id="csInviteLink" class="inv-link"></code>
       <button class="btn sm" id="csCopyInvite">کپی</button>
     </div>
+    <div class="cs-members-box" id="csMembersBox">
+      <div class="mb-head" id="csMembersHead">اعضا</div>
+      <div id="csMembersList"></div>
+    </div>
     <div class="row">
       <button class="btn ghost" id="csClose">بستن</button>
       <button class="btn danger" id="csLeave" style="display:none">خروج از گپ</button>
       <button class="btn primary" id="csSave">ذخیره تغییرات</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal title-modal" id="titleModal">
+  <div class="box">
+    <div class="tm-head">
+      <div class="avatar" id="tmAvatar"></div>
+      <div><b id="tmName"></b><small style="color:var(--muted); font-size:11px">@<span id="tmUser"></span></small></div>
+    </div>
+    <label class="label">لقب (حداکثر ۳۰ حرف)</label>
+    <input class="input" id="tmInput" maxlength="30" placeholder="مثلاً: سرپرست تیم">
+    <div class="row">
+      <button class="btn ghost" id="tmCancel">انصراف</button>
+      <button class="btn danger" id="tmClear">حذف لقب</button>
+      <button class="btn primary" id="tmSave">ذخیره</button>
     </div>
   </div>
 </div>
@@ -189,6 +211,8 @@
     <p class="bio" id="pmBio" style="text-align:center; color:var(--muted)"></p>
     <label class="label">نام نمایشی</label>
     <input class="input" id="pmDisplayName">
+    <label class="label">نام کاربری</label>
+    <input class="input" id="pmUsernameInput" placeholder="انگلیسی، بدون فاصله" pattern="[a-zA-Z0-9_]{3,30}" style="direction:ltr; text-align:left">
     <label class="label">بیو</label>
     <textarea class="input bio-resize" id="pmBioInput" rows="2" maxlength="200" style="resize:horizontal; min-width:140px; max-width:100%; width:260px"></textarea>
     <label class="label">رنگ شخصی (بابل پیام‌ها)</label>
