@@ -433,6 +433,17 @@ def api_send_message():
     chat = Chat.query.get(int(data.get('chat_id') or 0))
     if not chat or not can_view_chat(user, chat):
         return jsonify(ok=False, error='دسترسی نداری')
+    if chat.chat_type != 'dm' and not user.is_admin:
+        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+            if chat.is_public:
+                db.session.add(ChatMember(chat_id=chat.id, user_id=user.id, role='member'))
+                db.session.flush()
+            else:
+                return jsonify(ok=False, error='دسترسی نداری')
+    if chat.chat_type == 'dm':
+        peer = next((m.user for m in chat.members if m.user_id != user.id), None)
+        if peer and is_blocked(user.id, peer.id):
+            return jsonify(ok=False, error='کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونی پیام بدی')
     if chat.chat_type == 'channel':
         role = my_role_in(user, chat)
         if chat.owner_id != user.id and role != 'admin':
@@ -820,7 +831,9 @@ def admin_action(uid, action):
         return jsonify(ok=False, error='غیرمجاز')
     db.session.commit()
     socketio.emit('profile_updated', target.to_public(), room=f'user:{uid}')
-    return jsonify(ok=True, user=target.to_public())
+    return jsonify(ok=True, user=target.to_public(),
+                   state={'is_admin': bool(target.is_admin), 'is_verified': bool(target.is_verified),
+                          'is_banned': bool(target.is_banned)})
 
 
 @app.route('/admin/report/<int:rid>/<action>')
@@ -861,7 +874,10 @@ def on_disconnect():
     if user:
         user.status = 'offline'
         user.last_seen = datetime.utcnow()
-        db.session.commit()
+        try:
+            db.session.commit()
+        except Exception:
+            db.session.rollback()
         seen = set()
         for c in user_chats(user.id):
             for mid in chat_member_ids(c.id):

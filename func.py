@@ -234,7 +234,9 @@ def unread_counts(user):
         ).order_by(Message.id.desc()).first()
         last_text = ''
         if last:
-            last_text = (f'{last.sender_id} · ' if last.sender_id else '') + snippet(last.content, last.msg_type)
+            sender = next((m.user for m in chat.members if m.user_id == last.sender_id), None)
+            prefix = (f'{sender.display_name} · ' if sender and chat.chat_type != 'dm' else '')
+            last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
         if chat.chat_type == 'dm':
             other = next((m.user for m in chat.members if m.user_id != user.id), None)
@@ -271,18 +273,21 @@ def bump_online(user):
     user.status = 'online'
     user.last_seen = datetime.utcnow()
     update_streak(user)
-    db.session.commit()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def avatar_html(user, size=''):
     cls = f'avatar {size}'.strip()
     if isinstance(user, dict):
-        img = f'<img src="{user.get("avatar", "")}" alt="">' if user.get('avatar') else ''
+        av = user.get('avatar', '')
         initial = (user.get('display_name') or '?').strip()[:1]
-        return f'<div class="{cls}">{img}{initial}</div>'
-    img = f'<img src="{user.avatar_url}" alt="">' if user.avatar else ''
-    initial = (user.display_name or '?').strip()[:1]
-    return f'<div class="{cls}">{img}{initial}</div>'
+        inner = f'<img src="{av}" alt="">' if av else initial
+        return f'<div class="{cls}">{inner}</div>'
+    inner = f'<img src="{user.avatar_url}" alt="">' if user.avatar else (user.display_name or '?').strip()[:1]
+    return f'<div class="{cls}">{inner}</div>'
 
 
 def admin_stats():
