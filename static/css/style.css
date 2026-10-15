@@ -507,8 +507,6 @@ input, select, textarea { font-family: inherit; }
 .mrow.flash { animation: flashRow 1.2s ease; }
 @keyframes flashRow { 0%, 60% { filter: brightness(1.5); } }
 
-.msg-deleted { color: var(--dim); font-style: italic; }
-
 .typing-bar { height: 20px; padding: 0 20px; font-size: 11.5px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
 .typing-dots { display: inline-flex; gap: 3px; }
 .typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--red-2); animation: td 1s infinite; }

@@ -50,10 +50,9 @@ function canPinMsg(m) {
 }
 
 function renderMsg(m) {
+  if (m.deleted) return '';
   let body = '';
-  if (m.deleted) {
-    body = '<span class="msg-deleted">پیام حذف شده</span>';
-  } else if (m.msg_type === 'image') {
+  if (m.msg_type === 'image') {
     body = `<img class="img" src="${m.file_url}" alt="${esc(m.file_name)}" loading="lazy">`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'file') {
@@ -125,9 +124,10 @@ function ensureDaySep(iso) {
 function renderAllMessages() {
   const body = document.getElementById('msgsBody');
   body.innerHTML = '';
-  if (CD.initialMessages && CD.initialMessages.length) {
+  const msgs = (CD.initialMessages || []).filter(m => !m.deleted);
+  if (msgs.length) {
     let lastRaw = null;
-    CD.initialMessages.forEach(m => {
+    msgs.forEach(m => {
       const raw = dayKey(m.created_at);
       if (raw !== lastRaw) {
         body.insertAdjacentHTML('beforeend',
@@ -618,12 +618,11 @@ function toggleSelect(mid) {
 
 function localDeleteMid(mid) {
   const m = (CD.initialMessages || []).find(x => x.id === mid);
-  if (m) { m.deleted = true; m.content = ''; }
+  if (m) m.deleted = true;
   const row = document.querySelector(`#m${mid}`) || document.querySelector(`.mrow[data-mid="${mid}"]`);
   if (row) {
-    const inner = row.classList.contains('mrow') ? row : row.querySelector('.mrow');
-    const wrap = inner.closest('#m' + mid) || inner;
-    wrap.outerHTML = `<div class="mrow" data-mid="${mid}"><div class="bubble"><span class="msg-deleted">پیام حذف شده</span></div></div>`;
+    const wrap = row.classList.contains('mrow') ? row.closest('#m' + mid) || row : row;
+    wrap.remove();
   }
 }
 
@@ -1394,11 +1393,13 @@ S.on('message_edited', d => {
 });
 
 S.on('message_deleted', d => {
+  const m = (CD.initialMessages || []).find(x => x.id === d.message_id);
+  if (m) m.deleted = true;
   const wrapper = document.querySelector(`#m${d.message_id}`) || document.querySelector(`.mrow[data-mid="${d.message_id}"]`);
   if (wrapper) {
     const row = wrapper.classList.contains('mrow') ? wrapper : wrapper.querySelector('.mrow');
-    if (row) row.outerHTML = `<div class="mrow" data-mid="${d.message_id}"><div class="bubble"><span class="msg-deleted">پیام حذف شده</span></div></div>`;
-    else wrapper.remove();
+    const target = row ? row.closest('#m' + d.message_id) || row : wrapper;
+    target.remove();
   }
 });
 
