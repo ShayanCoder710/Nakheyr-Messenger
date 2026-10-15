@@ -158,6 +158,8 @@ input, select, textarea { font-family: inherit; }
 }
 .icon-btn:hover { color: var(--text); border-color: var(--line-2); }
 .icon-btn.active { background: rgba(225,29,72,.15); border-color: rgba(225,29,72,.45); color: var(--red-3); }
+.ico-img { width: 20px; height: 20px; display: block; pointer-events: none; }
+.icon-btn:hover .ico-img, .icon-btn.active .ico-img { filter: brightness(1.7); }
 
 .search-box { padding: 12px 14px 6px; position: relative; }
 .search-results {
@@ -247,7 +249,8 @@ input, select, textarea { font-family: inherit; }
 .bubble.compact { margin-top: -1px; }
 .mrow .avatar { width: 30px; height: 30px; font-size: 12px; }
 .bubble {
-  max-width: min(62%, 560px); padding: 7px 12px; border-radius: 16px; position: relative;
+  max-width: min(62%, 560px); padding: 5px 10px; border-radius: 14px; position: relative;
+  line-height: 1.45;
   background: var(--panel-2); border: 1px solid var(--line);
   box-shadow: 0 1px 6px rgba(0,0,0,.22); transition: box-shadow .18s, border-color .18s, transform .18s;
 }
@@ -284,7 +287,7 @@ input, select, textarea { font-family: inherit; }
 .bubble .file-card .fi { font-size: 22px; }
 .bubble .file-card b { font-size: 12.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .bubble .file-card small { color: var(--muted); font-size: 11px; }
-.m-meta { display: flex; align-items: center; gap: 6px; margin-top: 3px; color: var(--dim); font-size: 10.5px; flex-wrap: wrap; }
+.m-meta { display: flex; align-items: center; gap: 6px; margin-top: 1px; color: var(--dim); font-size: 10.5px; line-height: 1.3; flex-wrap: wrap; }
 .m-meta .ticks { color: var(--red-3); font-weight: 900; }
 .m-meta .edited { font-style: italic; }
 .msgs.selecting .mrow .bubble { cursor: pointer; }
@@ -299,7 +302,8 @@ input, select, textarea { font-family: inherit; }
 .sel-check::after { content: '✓'; font-size: 12px; font-weight: 900; color: #fff; opacity: 0; line-height: 1; }
 .mrow.sel-selected .sel-check { background: var(--red); border-color: var(--red); }
 .mrow.sel-selected .sel-check::after { opacity: 1; }
-.reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
+.reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 5px; }
+.reactions:empty { display: none; margin: 0; }
 .reactions span {
   font-size: 11.5px; padding: 2px 8px; border-radius: 999px; cursor: pointer;
   background: var(--bg-3); border: 1px solid var(--line); transition: .12s;

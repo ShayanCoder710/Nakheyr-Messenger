@@ -84,8 +84,8 @@
         <div class="attach-preview" id="attachPreview"></div>
         <div class="composer-row">
           <div class="composer-tools">
-            <button class="icon-btn" id="btnEmoji" title="ایموجی">😊</button>
-            <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل">📎</button>
+            <button class="icon-btn" id="btnEmoji" title="ایموجی"><img class="ico-img" src="{{ url_for('static', filename='icons/emoji.svg') }}" alt="ایموجی"></button>
+            <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل"><img class="ico-img" src="{{ url_for('static', filename='icons/clip.svg') }}" alt="پیوست"></button>
           </div>
           <input type="file" id="fileInput" hidden>
           <textarea class="input composer-input" id="msgInput" rows="1" placeholder="پیام خود را بنویسید…" style="flex:1; min-width:0; width:auto"></textarea>

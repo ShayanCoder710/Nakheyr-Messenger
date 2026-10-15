@@ -638,6 +638,8 @@ function buildEmojiPanel() {
 function hideEmojiPanel() {
   const p = document.getElementById('emojiPanel');
   if (p) p.style.display = 'none';
+  const b = document.getElementById('btnEmoji');
+  if (b) b.classList.remove('active');
 }
 
 function openEmojiPanel() {
@@ -647,6 +649,8 @@ function openEmojiPanel() {
   const btn = document.getElementById('btnEmoji');
   const r = btn.getBoundingClientRect();
   panel.style.display = 'flex';
+  const b2 = document.getElementById('btnEmoji');
+  if (b2) b2.classList.add('active');
   const pw = panel.offsetWidth, ph = panel.offsetHeight;
   let left = r.left;
   if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
