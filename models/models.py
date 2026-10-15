@@ -88,7 +88,8 @@ class Chat(db.Model):
             'is_public': bool(self.is_public),
         }
         if self.chat_type == 'dm' and current_user:
-            other = next((m.user for m in self.members if m.user_id != current_user), None)
+            uid = getattr(current_user, 'id', current_user)
+            other = next((m.user for m in self.members if m.user_id != uid), None)
             data['peer'] = other.to_public() if other else None
         return data
 

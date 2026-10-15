@@ -234,8 +234,9 @@ input, select, textarea { font-family: inherit; }
   font-size: 11px; font-weight: 700; color: var(--muted); background: var(--bg-2);
   border: 1px solid var(--line); padding: 3px 14px; border-radius: 999px;
 }
-.mrow { display: flex; align-items: flex-end; gap: 8px; margin-top: 3px; position: relative; }
+.mrow { display: flex; align-items: flex-end; gap: 8px; margin-top: 3px; position: relative; justify-content: flex-start; }
 .mrow.who { margin-top: 12px; }
+.mrow:not(.mine-row) { flex-direction: row-reverse; }
 .mrow .avatar.ghost { background: transparent; }
 .mrow .avatar.sm.ghost { visibility: hidden; }
 .bubble.compact { margin-top: -1px; }
@@ -265,7 +266,16 @@ input, select, textarea { font-family: inherit; }
 .m-meta .edited { font-style: italic; }
 .msgs.selecting .mrow .bubble { cursor: pointer; }
 .mrow.sel-selected .bubble { outline: 2px solid var(--red); outline-offset: 2px; box-shadow: 0 4px 16px rgba(225,29,72,.35); }
-.mrow.sel-eligible .bubble { opacity: .55; }
+.mrow.sel-eligible .bubble { opacity: .6; }
+.sel-check {
+  display: none; width: 22px; height: 22px; border-radius: 50%; flex: 0 0 auto;
+  border: 2px solid var(--line-2); align-self: center; margin: 0 6px;
+  place-items: center; transition: .15s; background: transparent;
+}
+.msgs.selecting .sel-check { display: grid; }
+.sel-check::after { content: '✓'; font-size: 12px; font-weight: 900; color: #fff; opacity: 0; line-height: 1; }
+.mrow.sel-selected .sel-check { background: var(--red); border-color: var(--red); }
+.mrow.sel-selected .sel-check::after { opacity: 1; }
 .reactions { display: flex; gap: 4px; flex-wrap: wrap; margin-top: 7px; }
 .reactions span {
   font-size: 11.5px; padding: 2px 8px; border-radius: 999px; cursor: pointer;
@@ -330,6 +340,39 @@ input, select, textarea { font-family: inherit; }
   width: 30px; height: 30px; border: none; background: none; font-size: 18px; border-radius: 50%;
 }
 .emoji-pick button:hover { background: var(--bg-3); transform: scale(1.15); }
+
+.emoji-panel {
+  position: fixed;
+  width: min(360px, 92vw);
+  max-height: 340px;
+  z-index: 220;
+  display: flex; flex-direction: column;
+  background: var(--panel-2); border: 1px solid var(--line-2);
+  border-radius: 16px; box-shadow: var(--shadow); overflow: hidden;
+  animation: popIn .14s ease;
+}
+@keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+.ep-tabs {
+  display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line);
+  background: var(--panel); overflow-x: auto;
+}
+.ep-tabs button {
+  border: none; background: none; font-size: 18px; padding: 7px 9px; border-radius: 9px 9px 0 0;
+  opacity: .55; transition: .12s; flex: 0 0 auto;
+}
+.ep-tabs button:hover { background: var(--bg-3); opacity: 1; }
+.ep-tabs button.on { opacity: 1; background: var(--bg-3); box-shadow: inset 0 -2px 0 var(--red); }
+.ep-body {
+  display: grid; grid-template-columns: repeat(auto-fill, 34px);
+  justify-content: space-between; gap: 4px; padding: 10px;
+  overflow-y: auto; flex: 1;
+}
+.ep-body button {
+  border: none; background: none; font-size: 22px; width: 34px; height: 34px;
+  border-radius: 8px; line-height: 1; display: grid; place-items: center;
+}
+.ep-body button:hover { background: var(--bg-3); transform: scale(1.18); }
+.ep-body .ep-label { grid-column: 1 / -1; font-size: 11px; font-weight: 800; color: var(--dim); padding: 6px 2px 2px; }
 
 .empty-msgs { text-align: center; color: var(--dim); padding: 40px 0; font-size: 13px; }
 
@@ -590,17 +633,28 @@ table.data tr:hover td { background: rgba(255,255,255,.015); }
 .color-swatches button.sel { border-color: #fff; box-shadow: 0 0 0 3px var(--red-glow); }
 
 .modal {
-  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.6);
-  display: none; place-items: center; backdrop-filter: blur(3px);
+  position: fixed; inset: 0; z-index: 90; background: rgba(0,0,0,.68);
+  display: none; place-items: center; backdrop-filter: blur(4px);
+  padding: 16px;
 }
-.modal.show { display: grid; }
+.modal.show { display: grid; animation: fadeIn .16s ease; }
+@keyframes fadeIn { from { opacity: 0; } }
 .modal .box {
+  position: relative;
   width: min(460px, 92vw); max-height: 84vh; overflow-y: auto;
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: 16px;
-  padding: 22px; box-shadow: var(--shadow);
+  background: var(--panel); border: 1px solid var(--line-2); border-radius: 18px;
+  padding: 24px 22px 20px; box-shadow: var(--shadow);
+  animation: modalIn .2s cubic-bezier(.2, .8, .3, 1);
 }
-.modal h3 { font-size: 16px; margin-bottom: 4px; }
+@keyframes modalIn { from { opacity: 0; transform: translateY(14px) scale(.97); } }
+.modal h3 { font-size: 17px; font-weight: 900; margin-bottom: 4px; }
 .modal .sub { color: var(--muted); font-size: 12.5px; margin-bottom: 10px; }
+.modal-x {
+  position: absolute; top: 12px; left: 12px; width: 30px; height: 30px;
+  border-radius: 9px; border: 1px solid var(--line); background: var(--bg-2);
+  color: var(--muted); font-size: 13px; display: grid; place-items: center; transition: .15s;
+}
+.modal-x:hover { color: var(--text); border-color: var(--line-2); background: var(--bg-3); }
 .pick-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 6px; margin-top: 10px; }
 .pick-grid label {
   display: flex; align-items: center; gap: 8px; padding: 8px 10px; border-radius: 10px;
@@ -639,7 +693,14 @@ table.data tr:hover td { background: rgba(255,255,255,.015); }
   .bubble { max-width: 84%; }
   .bulk-bar { gap: 8px; padding: 8px 10px; font-size: 12px; }
   .bulk-bar .btn.sm { padding: 6px 10px; font-size: 11.5px; }
-  .modal .box { width: 94vw; max-height: 88vh; padding: 16px; }
+  .modal { place-items: end center; padding: 0; }
+  .modal .box {
+    width: 100%; max-width: 100%; max-height: 90vh; padding: 22px 16px 18px;
+    border-radius: 22px 22px 0 0; border-bottom: none;
+    animation: sheetIn .24s cubic-bezier(.2, .8, .3, 1);
+  }
+  @keyframes sheetIn { from { transform: translateY(100%); } }
+  .modal-x { top: 10px; left: 10px; }
   .member-list { left: 8px; right: 8px; width: auto; }
   .search-results { right: 10px; left: 10px; }
   .admin-layout { flex-direction: column; height: 100vh; height: 100dvh; overflow-y: auto; }

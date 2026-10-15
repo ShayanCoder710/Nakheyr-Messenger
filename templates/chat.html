@@ -73,16 +73,18 @@
       <div class="typing-bar" id="typingBar"></div>
       <div class="channel-hint" id="channelHint" style="display:none"><span>🔒 در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
+        <button class="btn sm ghost" id="bulkCancel" title="بستن">✕</button>
         <span id="bulkCount"></span>
         <button class="btn sm" id="bulkAllMine">همه‌ی من</button>
+        <button class="btn sm" id="bulkCopy">کپی</button>
         <button class="btn sm danger" id="bulkDelete">🗑 حذف</button>
-        <button class="btn sm" id="bulkCancel">انصراف</button>
       </div>
       <div class="composer">
         <div class="reply-preview" id="replyPreview" style="display:none"></div>
         <div class="attach-preview" id="attachPreview"></div>
         <div class="composer-row">
           <div class="composer-tools">
+            <button class="icon-btn" id="btnEmoji" title="ایموجی">😊</button>
             <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل">📎</button>
           </div>
           <input type="file" id="fileInput" hidden>
@@ -189,6 +191,7 @@
     <div class="row">
       <button class="btn ghost" id="csClose">بستن</button>
       <button class="btn danger" id="csLeave" style="display:none">خروج از گپ</button>
+      <button class="btn danger" id="csDelete" style="display:none">حذف گپ</button>
       <button class="btn primary" id="csSave">ذخیره تغییرات</button>
     </div>
   </div>
@@ -268,6 +271,11 @@
 <div class="ctx" id="ctxMenu"></div>
 
 <div class="emoji-pick" id="emojiPicker" style="display:none"></div>
+
+<div class="emoji-panel" id="emojiPanel" style="display:none">
+  <div class="ep-tabs" id="epTabs"></div>
+  <div class="ep-body" id="epBody"></div>
+</div>
 
 <script>
 window.ME = {{ me.to_self() | tojson }};

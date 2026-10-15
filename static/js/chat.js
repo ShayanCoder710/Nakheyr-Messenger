@@ -1,6 +1,13 @@
 const S = io({ transports: ['websocket', 'polling'] });
 const CD = window.CHAT_DATA || {};
-const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎯', '🙌'];
+const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🙏', '👏', '😍', '🤔', '👌'];
+const EMOJI_SETS = [
+  { icon: '😀', emojis: ['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','😏','😒','😞','😔','😟','😕','🙁','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕'] },
+  { icon: '👋', emojis: ['👍','👎','👌','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✋','🤚','🖐','🖖','👋','🤝','🙏','✊','👊','🤛','🤜','👏','🙌','👐','🤲','💪','🦾','🖕','✍️','💅','🫶','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','🔥','✨','⭐','🌟','💫','💥','💯','🎉','🎊','🎈','🎁'] },
+  { icon: '🍔', emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶','🫑','🌽','🥕','🧄','🧅','🥔','🍠','🥐','🍞','🥖','🥨','🧀','🥚','🍳','🥞','🧇','🥓','🍔','🍟','🍕','🌭','🥪','🌮','🌯','🍜','🍝','🍣','🍱','🍛','🍚','🍙','🍘','🍥','🥠','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','☕','🍵','🧋','🥤','🍺','🍻','🥂','🍷','🍸','🍹'] },
+  { icon: '⚽', emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥊','🥋','⛳','⛸','🎿','🛷','🥌','🎯','🪃','🏹','🎣','🤿','🥊','🎽','🛹','🛼','🚗','🚕','🚙','🚌','🚎','🏎','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🏍','✈️','🚀','🛸','🚁','⛵','🚤','🛥','🚢'] },
+  { icon: '💡', emojis: ['⌚','📱','💻','⌨️','🖥','🖨','🖱','💽','💾','💿','📀','📷','📸','📹','🎥','📞','☎️','📟','📠','📺','📻','🧭','⏱','⏰','🕰','⌛','⏳','🔋','🔌','💡','🔦','🕯','🧯','🛢','💸','💵','💴','💶','💷','💰','💳','💎','⚖️','🧰','🔧','🔨','⚒','🛠','⛏','🔩','⚙️','🧱','⛓','🧲','🔫','💣','🧨','🪓','🔪','🗡','⚔️','🛡','🚬','⚰️','🏺','🔮','📿','🧿','💊','💉','🩸','🔬','🔭','📡','💈','⚗️','🧪','🧫','🧬','🩹','🩺','📖','📚','📝','✏️','🖊','🖋','✒️','🖌','🖍','📌','📍','📎','🖇','📐','📏','🧮','📊','📈','📉','🗂','📁','📂','🗞','📰','📓','📔','📒','📕','📗','📘','📙','📃','📄','📑','🔖','🔗','📅','📆','🗓','📇','🗃','🗄','📋','📁'] },
+];
 const SWATCHES = ['#e11d48', '#f43f5e', '#8b5cf6', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#64748b'];
 
 let currentChat = window.CURRENT_CHAT;
@@ -130,6 +137,7 @@ function renderMsg(m) {
         </div>
         <div class="reactions" data-mid="${m.id}">${reactionChips(m)}</div>
       </div>
+      <span class="sel-check" data-sel="${m.id}" aria-hidden="true"></span>
     </div>`;
   return html;
 }
@@ -243,6 +251,7 @@ function appendMsg(m) {
   body.insertAdjacentHTML('beforeend', `<div id="m${m.id}">${renderMsg(m)}</div>`);
   scrollToBottom(own);
   refreshConvList();
+  if (selecting) syncSelection();
 }
 
 function setHead() {
@@ -328,6 +337,16 @@ document.querySelectorAll('.modal').forEach(mod => {
   mod.addEventListener('click', e => {
     if (e.target === mod) mod.classList.remove('show');
   });
+  const box = mod.querySelector('.box');
+  if (box && !box.querySelector('.modal-x')) {
+    const x = document.createElement('button');
+    x.type = 'button';
+    x.className = 'modal-x';
+    x.title = 'بستن';
+    x.textContent = '✕';
+    x.onclick = () => mod.classList.remove('show');
+    box.prepend(x);
+  }
 });
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
@@ -473,7 +492,7 @@ function renderConvItem(it) {
     ? `<div class="avatar conv-av" style="border-radius:14px"><img src="${it.avatar}" alt=""></div>`
     : `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
   return `
-    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}">
+    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}">
       ${av}
       <div class="body">
         <div class="row1"><b>${esc(it.name)}${lock}</b><time>${fmtTime(it.last_at)}</time></div>
@@ -596,6 +615,71 @@ document.addEventListener('mousedown', e => {
   if (!e.target.closest('#emojiPicker')) hidePicker();
 });
 
+function buildEmojiPanel() {
+  const tabs = document.getElementById('epTabs');
+  const body = document.getElementById('epBody');
+  tabs.innerHTML = EMOJI_SETS.map((s, i) =>
+    `<button type="button" data-tab="${i}" class="${i === 0 ? 'on' : ''}" title="دسته ${i + 1}">${s.icon}</button>`).join('');
+  const renderSet = i => {
+    const set = EMOJI_SETS[i];
+    body.innerHTML = set.emojis.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('');
+    body.scrollTop = 0;
+  };
+  tabs.querySelectorAll('button').forEach(b => b.onclick = () => {
+    tabs.querySelectorAll('button').forEach(x => x.classList.remove('on'));
+    b.classList.add('on');
+    renderSet(+b.dataset.tab);
+  });
+  renderSet(0);
+}
+
+function hideEmojiPanel() {
+  const p = document.getElementById('emojiPanel');
+  if (p) p.style.display = 'none';
+}
+
+function openEmojiPanel() {
+  const panel = document.getElementById('emojiPanel');
+  if (panel.style.display === 'flex') { hideEmojiPanel(); return; }
+  if (!panel.dataset.built) { buildEmojiPanel(); panel.dataset.built = '1'; }
+  const btn = document.getElementById('btnEmoji');
+  const r = btn.getBoundingClientRect();
+  panel.style.display = 'flex';
+  const pw = panel.offsetWidth, ph = panel.offsetHeight;
+  let left = r.left;
+  if (left + pw > window.innerWidth - 8) left = window.innerWidth - pw - 8;
+  if (left < 8) left = 8;
+  let top = r.top - ph - 10;
+  if (top < 8) top = r.bottom + 10;
+  panel.style.left = left + 'px';
+  panel.style.top = top + 'px';
+}
+
+function insertEmoji(e) {
+  const inp = document.getElementById('msgInput');
+  if (!inp || inp.disabled) return;
+  const start = inp.selectionStart == null ? inp.value.length : inp.selectionStart;
+  const end = inp.selectionEnd == null ? inp.value.length : inp.selectionEnd;
+  inp.value = inp.value.slice(0, start) + e + inp.value.slice(end);
+  const pos = start + e.length;
+  inp.focus();
+  inp.setSelectionRange(pos, pos);
+  inp.dispatchEvent(new Event('input'));
+}
+
+document.getElementById('btnEmoji').onclick = e => {
+  e.stopPropagation();
+  openEmojiPanel();
+};
+document.getElementById('emojiPanel').addEventListener('click', e => {
+  const b = e.target.closest('[data-em]');
+  if (b) { insertEmoji(b.dataset.em); return; }
+  e.stopPropagation();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('#emojiPanel') && !e.target.closest('#btnEmoji')) hideEmojiPanel();
+});
+
 function doReact(mid, emoji) {
   localReact(mid, emoji);
   api('/api/message/react', { message_id: mid, emoji }).then(j => {
@@ -636,6 +720,7 @@ document.addEventListener('click', e => {
   }
 
   if (selecting) {
+    if (_lpJustEntered) { _lpJustEntered = false; return; }
     const row = e.target.closest('.mrow');
     if (row && !e.target.closest('a, .reply-ref, .reactions')) {
       e.preventDefault();
@@ -707,27 +792,52 @@ function toggleSelect(mid) {
 }
 
 function syncSelection() {
-  document.querySelectorAll('.mrow').forEach(r => r.classList.toggle('sel-selected', selectedIds.has(+r.dataset.mid)));
-  document.querySelectorAll('.mrow').forEach(r => { if (!selectedIds.has(+r.dataset.mid) && selecting) r.classList.add('sel-eligible'); else r.classList.remove('sel-eligible'); });
+  document.querySelectorAll('.mrow').forEach(r => {
+    const on = selectedIds.has(+r.dataset.mid);
+    r.classList.toggle('sel-selected', on);
+    r.classList.toggle('sel-eligible', selecting && !on);
+  });
   const bar = document.getElementById('bulkBar');
-  bar.style.display = selectedIds.size ? 'flex' : 'none';
-  document.getElementById('bulkCount').textContent = selectedIds.size + ' پیام انتخاب شده';
+  bar.style.display = selecting ? 'flex' : 'none';
+  document.getElementById('bulkCount').textContent = selectedIds.size
+    ? selectedIds.size + ' پیام انتخاب شده'
+    : 'پیامی انتخاب نشده';
+  document.getElementById('bulkCopy').disabled = !selectedIds.size;
+  document.getElementById('bulkDelete').disabled = !selectedIds.size;
 }
 
 function enterSelect(mid) {
   selecting = true;
   selectedIds.clear();
-  toggleSelect(mid);
   document.getElementById('msgs').classList.add('selecting');
+  toggleSelect(mid);
 }
 
 function cancelSelect() {
   if (!selecting && !selectedIds.size) return;
   selecting = false;
   selectedIds.clear();
-  syncSelection();
   document.getElementById('msgs').classList.remove('selecting');
+  syncSelection();
 }
+
+let _lpTimer = null;
+let _lpJustEntered = false;
+document.getElementById('msgs').addEventListener('touchstart', e => {
+  const row = e.target.closest('.mrow');
+  if (!row || selecting) return;
+  const mid = +row.dataset.mid;
+  _lpTimer = setTimeout(() => {
+    _lpTimer = null;
+    _lpJustEntered = true;
+    if (navigator.vibrate) navigator.vibrate(15);
+    enterSelect(mid);
+  }, 420);
+}, { passive: true });
+['touchend', 'touchmove', 'touchcancel'].forEach(ev =>
+  document.getElementById('msgs').addEventListener(ev, () => {
+    if (_lpTimer) { clearTimeout(_lpTimer); _lpTimer = null; }
+  }, { passive: true }));
 
 function selectAllMine() {
   selectedIds.clear();
@@ -780,9 +890,19 @@ async function bulkDelete() {
   } else toast(r.error, 'error');
 }
 
+async function bulkCopy() {
+  const msgs = (CD.initialMessages || []).filter(m => selectedIds.has(m.id) && !m.deleted);
+  const text = msgs.map(m => m.msg_type === 'text' ? m.content
+    : m.msg_type === 'image' ? '[تصویر]' : '[فایل]').join('\n');
+  if (!text) return toast('چیزی برای کپی نیست', 'error');
+  try { await copyText(text); toast(msgs.length + ' پیام کپی شد'); }
+  catch (e) { toast('کپی نشد', 'error'); }
+}
+
 document.getElementById('bulkDelete').onclick = bulkDelete;
 document.getElementById('bulkCancel').onclick = cancelSelect;
 document.getElementById('bulkAllMine').onclick = selectAllMine;
+document.getElementById('bulkCopy').onclick = bulkCopy;
 
 async function loadPinned() {
   if (!currentChat) return;
@@ -1073,6 +1193,10 @@ function openSettings() {
   renderSettingsMembers(c);
   const leave = document.getElementById('csLeave');
   leave.style.display = (c.chat_type !== 'dm' && role && role !== 'owner') ? 'inline-flex' : 'none';
+  const del = document.getElementById('csDelete');
+  const canDel = (role === 'owner' || window.ME.is_admin) && c.chat_type !== 'dm';
+  del.style.display = canDel ? 'inline-flex' : 'none';
+  del.dataset.chatId = c.id;
   document.getElementById('chatSettingsModal').classList.add('show');
 }
 
@@ -1191,6 +1315,23 @@ document.getElementById('csLeave').onclick = () => {
       } else toast(r.error, 'error');
     });
   }, 'خروج');
+};
+
+document.getElementById('csDelete').onclick = () => {
+  const cid = +document.getElementById('csDelete').dataset.chatId || currentChat;
+  const c = CD.chat || {};
+  const label = c.chat_type === 'channel' ? 'کانال' : 'گروه';
+  openConfirm('حذف ' + label,
+    `«${c.name || label}» کامل حذف می‌شه؛ همه‌ی پیام‌ها و عکسا برای همه‌ی اعضا می‌ره. این کار قابل بازگشت نیست`, () => {
+      api('/api/chat/' + cid + '/delete').then(r => {
+        if (r.ok) {
+          toast('گپ حذف شد');
+          document.getElementById('chatSettingsModal').classList.remove('show');
+          if (currentChat === cid) closeChatPane();
+          refreshConvList();
+        } else toast(r.error || 'حذف نشد', 'error');
+      });
+    }, 'حذف');
 };
 
 document.getElementById('sideProfileLink').addEventListener('click', e => {
@@ -1518,6 +1659,33 @@ document.addEventListener('contextmenu', e => {
         if (!p) return;
         api('/api/block', { user_id: p.id }).then(j => toast(j.blocked ? 'بلاک شد' : 'بلاک لغو شد', 'success'));
       }) } : null,
+      !isDm ? { label: 'حذف گروه / کانال', icon: '🗑', danger: true, fn: () => {
+        if (conv.dataset.owner !== String(window.ME.id) && !window.ME.is_admin) {
+          toast('فقط صاحب گپ یا ادمین سایت می‌تونه حذف کنه', 'error');
+          return;
+        }
+        const nm = conv.dataset.name || 'گپ';
+        openConfirm('حذف گپ', `«${nm}» کامل حذف می‌شه؛ همه‌ی پیام‌ها و عکسا برای همه‌ی اعضا می‌ره. این کار قابل بازگشت نیست`, () => {
+          api('/api/chat/' + chatId + '/delete').then(j => {
+            if (j.ok) {
+              toast('گپ حذف شد');
+              if (currentChat === chatId) closeChatPane();
+              refreshConvList();
+            } else toast(j.error || 'حذف نشد', 'error');
+          });
+        }, 'حذف');
+      } } : null,
+      isDm ? { label: 'حذف گپ', icon: '🗑', danger: true, fn: () => {
+        openConfirm('حذف گپ', `«${peerName || 'گپ'}» کامل حذف می‌شه؛ برای تو و طرف مقابل پیام‌ها می‌ره. این کار قابل بازگشت نیست`, () => {
+          api('/api/chat/' + chatId + '/delete').then(j => {
+            if (j.ok) {
+              toast('گپ حذف شد');
+              if (currentChat === chatId) closeChatPane();
+              refreshConvList();
+            } else toast(j.error || 'حذف نشد', 'error');
+          });
+        }, 'حذف');
+      } } : null,
     ]);
   }
 });
@@ -1533,8 +1701,45 @@ if (CD.chat) {
 }
 initConvHeads();
 
-S.on('connect', () => {});
+let _everConnected = false;
+S.on('connect', () => {
+  if (_everConnected) {
+    refreshConvList();
+    resyncCurrentChat();
+  }
+  _everConnected = true;
+});
 S.on('auth_required', () => { toast('نشستت باطله، دوباره وارد شو', 'error'); setTimeout(() => location.href = '/login', 1500); });
+
+async function resyncCurrentChat() {
+  if (!currentChat) return;
+  try {
+    const r = await fetch('/api/messages/' + currentChat);
+    if (!r.ok) return;
+    const j = await r.json();
+    if (!j || !j.chat) return;
+    const wasBottom = nearBottom();
+    CD.initialMessages = j.messages || [];
+    CD.chat = j.chat;
+    CD.role = j.role;
+    CD.members = j.members || [];
+    setHead();
+    document.getElementById('msgsBody').innerHTML = '';
+    renderAllMessages();
+    if (wasBottom) scrollToBottom(true);
+    loadPinned();
+  } catch (e) {}
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState !== 'visible') return;
+  refreshConvList();
+  resyncCurrentChat();
+});
+window.addEventListener('focus', () => {
+  refreshConvList();
+  resyncCurrentChat();
+});
 
 S.on('new_message', m => {
   m.my_reaction = (m.reactions || {})[String(window.ME.id)] || null;
@@ -1636,6 +1841,14 @@ S.on('chat_meta', d => {
   if (d.id === currentChat && CD.chat) {
     CD.chat = { ...CD.chat, ...d };
     setHead();
+  }
+  refreshConvList();
+});
+
+S.on('chat_deleted', d => {
+  if (currentChat === d.chat_id) {
+    toast('این گپ توسط صاحب حذف شد');
+    closeChatPane();
   }
   refreshConvList();
 });

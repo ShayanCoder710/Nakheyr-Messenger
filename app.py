@@ -425,6 +425,43 @@ def api_chat_avatar(chat_id):
     return jsonify(ok=True, avatar=chat.avatar_url)
 
 
+@app.route('/api/chat/<int:chat_id>/delete', methods=['POST'])
+@require_auth
+def api_chat_delete(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat:
+        return jsonify(ok=False, error='گپ پیدا نشد')
+    if chat.chat_type == 'dm':
+        is_member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first() is not None
+        if not is_member and not user.is_admin:
+            return jsonify(ok=False, error='دسترسی نداری')
+    else:
+        role = my_role_in(user, chat)
+        if role != 'owner' and not user.is_admin:
+            return jsonify(ok=False, error='فقط صاحب گروه / کانال می‌تونه حذفش کنه')
+    for m in chat.messages:
+        Report.query.filter_by(message_id=m.id).update({'message_id': None})
+        if m.file_path:
+            p = os.path.join(app.config['UPLOAD_DIR'], m.file_path)
+            if os.path.exists(p):
+                os.remove(p)
+    if chat.avatar:
+        p = os.path.join(app.config['AVATAR_DIR'], chat.avatar)
+        if os.path.exists(p):
+            os.remove(p)
+    member_ids = chat_member_ids(chat.id)
+    db.session.delete(chat)
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+        return jsonify(ok=False, error='حذف کامل نشد')
+    for mid in member_ids:
+        socketio.emit('chat_deleted', {'chat_id': chat.id}, room=f'user:{mid}')
+    return jsonify(ok=True)
+
+
 @app.route('/api/message/send', methods=['POST'])
 @require_auth
 def api_send_message():
@@ -948,4 +985,5 @@ app.jinja_env.filters['fmt_day'] = _to_fa_day
 
 
 if __name__ == '__main__':
-    socketio.run(app, host='0.0.0.0', port=5000, debug=False)
+    socketio.run(app, host='0.0.0.0', port=5000, debug=False,
+                 allow_unsafe_werkzeug=True)
