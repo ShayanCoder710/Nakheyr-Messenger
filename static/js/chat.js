@@ -114,6 +114,8 @@ function renderMsg(m) {
   const sender = m.sender_id ? getMember(m.sender_id) : { display_name: 'سیستم', avatar: '' };
   const mine = m.sender_id === window.ME.id;
   const isText = m.msg_type === 'text';
+  const hasImg = m.msg_type === 'image';
+  const imgOnly = hasImg && !m.content;
   const newGroup = String(m.sender_id) !== String(lastSenderOf(m.id));
   const groupTail = String(nextSenderOf(m.id)) !== String(m.sender_id);
   const reply = m.reply && !m.reply.deleted
@@ -125,7 +127,7 @@ function renderMsg(m) {
   const html = `
     <div class="mrow ${mine ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
       ${mine ? '' : (groupTail ? avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm') : '<div class="avatar sm ghost"></div>')}
-      <div class="bubble ${mine ? 'me' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
+      <div class="bubble ${mine ? 'me' : ''} ${hasImg ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
         ${mine ? '' : (newGroup ? `<div class="sender-line">${esc(sender.display_name)}${sender.is_verified ? ' ✔' : ''}${title}</div>` : '')}
         ${reply}${body}
         <div class="m-meta">
@@ -133,7 +135,7 @@ function renderMsg(m) {
           ${unameLink}
           <span>${fmtTime(m.created_at)}</span>
           ${m.is_edited ? '<span class="edited">ویرایش شده</span>' : ''}
-          ${mine && isText ? `<span class="ticks" data-mid="${m.id}">✓</span>` : ''}
+          ${mine && (isText || hasImg) ? `<span class="ticks" data-mid="${m.id}">✓</span>` : ''}
         </div>
         <div class="reactions" data-mid="${m.id}">${reactionChips(m)}</div>
       </div>
