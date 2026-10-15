@@ -502,8 +502,8 @@ input, select, textarea { font-family: inherit; }
   display: inline-flex; align-items: center; justify-content: center;
 }
 .composer-row { display: flex; gap: 10px; align-items: stretch; }
-.composer-tools { display: flex; flex-direction: column; justify-content: flex-end; gap: 4px; }
-.composer-tools .icon-btn { width: 40px; height: 40px; margin-bottom: 2px; }
+.composer-tools { display: flex; flex-direction: row; align-items: flex-end; gap: 6px; }
+.composer-tools .icon-btn { width: 40px; height: 40px; margin-bottom: 3px; }
 
 .edit-input {
   width: 100%; min-width: 200px; max-width: 420px; padding: 6px 10px; font-size: 13.5px;
