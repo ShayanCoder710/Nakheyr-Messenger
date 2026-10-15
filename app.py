@@ -39,10 +39,14 @@ with app.app_context():
 @app.before_request
 def touch_online():
     user = current_user()
-    if user and not user.is_banned:
-        user.status = 'online'
-        user.last_seen = datetime.utcnow()
+    if not user or user.is_banned:
+        return
+    user.status = 'online'
+    user.last_seen = datetime.utcnow()
+    try:
         db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def can_view_chat(user, chat):
@@ -266,6 +270,12 @@ def api_chat_settings(chat_id):
         return jsonify(ok=False, error='این گپ قابل تغییر نیست')
     role = my_role_in(user, chat)
     data = request.get_json(silent=True) or {}
+    wants_visibility = 'is_public' in data
+    wants_edit = any(k in data for k in ('name', 'description'))
+    if wants_visibility and role not in ('owner', 'admin') and not user.is_admin:
+        return jsonify(ok=False, error='تغییر نوع گپ فقط برای صاحب و ادمین گپ')
+    if wants_edit and role not in ('owner', 'admin') and not user.is_admin:
+        return jsonify(ok=False, error='تغییر نام و توضیح فقط برای صاحب و ادمین گپ')
     changed = False
     if 'name' in data:
         new_name = (data.get('name') or '').strip()
@@ -276,11 +286,13 @@ def api_chat_settings(chat_id):
     if 'description' in data:
         chat.description = (data.get('description') or '').strip()[:200]
         changed = True
-    if 'is_public' in data and role in ('owner', 'admin'):
+    if wants_visibility:
         chat.is_public = bool(data.get('is_public'))
         changed = True
     if changed:
         db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
     return jsonify(ok=True, chat=chat.to_public(user), role=role)
 
 
@@ -487,7 +499,7 @@ def api_mark_read():
     user = current_user()
     data = request.get_json(silent=True) or {}
     chat = Chat.query.get(int(data.get('chat_id') or 0))
-    if not chat:
+    if not chat or not can_view_chat(user, chat):
         abort(404)
     msgs = Message.query.filter(
         Message.chat_id == chat.id, Message.deleted.is_(False), Message.sender_id != user.id

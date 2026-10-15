@@ -248,14 +248,36 @@ function setActiveConv(id) {
 }
 
 async function openChat(id) {
-  currentChat = id;
+  currentChat = +id;
   const r = await fetch('/api/messages/' + id);
-  const j = await r.json();
-  CD.initialMessages = j.messages;
+  let j;
+  try { j = await r.json(); } catch (e) { j = {}; }
+  if (!r.ok || !j.chat) {
+    CD.chat = null;
+    CD.role = null;
+    CD.members = [];
+    document.getElementById('msgsPane').classList.remove('open');
+    document.getElementById('mainEmpty').style.display = 'grid';
+    currentChat = null;
+    toast('دسترسی به این گپ نداری', 'error');
+    refreshConvList();
+    return;
+  }
+  CD.initialMessages = j.messages || [];
   if (j.chat) {
     CD.chat = j.chat;
     CD.role = j.role;
     CD.members = j.members;
+  } else {
+    CD.chat = null;
+    CD.role = null;
+    CD.members = [];
+    document.getElementById('msgsPane').classList.remove('open');
+    document.getElementById('mainEmpty').style.display = 'grid';
+    currentChat = null;
+    toast('دسترسی به این گپ نداری', 'error');
+    refreshConvList();
+    return;
   }
   setHead();
   document.getElementById('mainEmpty').style.display = 'none';
@@ -266,10 +288,10 @@ async function openChat(id) {
   pendingReply = null;
   document.getElementById('replyPreview').style.display = 'none';
   renderAllMessages();
-  api('/api/mark-read', { chat_id: id });
+  api('/api/mark-read', { chat_id: currentChat });
   clearUnread(id);
   setActiveConv(id);
-  S.emit('stop_typing', { chat_id: id });
+  S.emit('stop_typing', { chat_id: currentChat });
   typingSent = false;
   loadPinned();
 }
@@ -301,7 +323,10 @@ function refreshConvList() {
       list.innerHTML = byCat[cat].map(renderConvItem).join('')
         || '<div class="conv-empty">—</div>';
       const head = document.querySelector(`.conv-section-head[data-cat="${cat}"] span`);
-      if (head) head.textContent = head.dataset.base + ' (' + byCat[cat].length + ')';
+      if (head) {
+        if (!head.dataset.base) head.dataset.base = head.textContent;
+        head.textContent = head.dataset.base + ' (' + byCat[cat].length + ')';
+      }
     }
     setActiveConv(currentChat);
   });
@@ -359,9 +384,6 @@ function editMessage(mid, rowEl) {
 }
 
 document.addEventListener('click', e => {
-  const eph = e.target.closest('[data-open-ephemeral]');
-  if (eph) return;
-
   const pick = e.target.closest('[data-pick] button');
   if (pick) {
     const mi = +pick.closest('.mrow').dataset.mid;
@@ -750,13 +772,20 @@ function openSettings() {
   document.getElementById('csAvatar').innerHTML = c.avatar
     ? '<img src="' + c.avatar + '" alt="">'
     : c.name.charAt(0);
-  document.getElementById('csNameInput').value = c.name;
-  document.getElementById('csDescInput').value = c.description || '';
+  const nameInp = document.getElementById('csNameInput');
+  const descInp = document.getElementById('csDescInput');
+  nameInp.value = c.name;
+  descInp.value = c.description || '';
+  nameInp.disabled = !canEdit;
+  descInp.disabled = !canEdit;
   const vis = document.getElementById('csVis');
   vis.querySelectorAll('button').forEach(b => b.style.display = 'inline-flex');
   if (!canEdit) {
     vis.querySelectorAll('button').forEach(b => b.style.display = 'none');
-    vis.insertAdjacentHTML('beforeend', `<small style="color:var(--dim)">تغییر نوع فقط برای صاحب/ادمین گپ</small>`);
+    if (!vis.dataset.note) vis.insertAdjacentHTML('beforeend', `<small class="cs-note">تغییرات فقط برای صاحب و ادمین گپ</small>`);
+    else vis.querySelector('.cs-note').style.display = 'block';
+  } else {
+    if (vis.querySelector('.cs-note')) vis.querySelector('.cs-note').style.display = 'none';
   }
   segSelect(vis, c.is_public ? 'public' : 'private');
   document.getElementById('csAvLabel').textContent = c.avatar ? '🖼 آواتار فعلی — برای تغییر عکس جدید انتخاب کن' : '📷 انتخاب عکس…';
@@ -764,7 +793,7 @@ function openSettings() {
   document.getElementById('csAvUpload').style.display = canEdit ? 'inline-flex' : 'none';
   document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + c.id;
   const leave = document.getElementById('csLeave');
-  leave.style.display = (c.chat_type === 'group' && role && role !== 'owner') ? 'inline-flex' : 'none';
+  leave.style.display = (c.chat_type !== 'dm' && role && role !== 'owner') ? 'inline-flex' : 'none';
   document.getElementById('chatSettingsModal').classList.add('show');
 }
 
@@ -794,11 +823,21 @@ document.getElementById('csAvUpload').onclick = async () => {
 };
 
 document.getElementById('csSave').onclick = async () => {
-  const r = await api('/api/chat/' + currentChat + '/settings', {
-    name: document.getElementById('csNameInput').value.trim(),
-    description: document.getElementById('csDescInput').value.trim(),
-    is_public: document.getElementById('csVis').dataset.value === 'public'
-  });
+  const role = myRole();
+  const canEdit = role === 'owner' || role === 'admin' || window.ME.is_admin;
+  const visVal = document.getElementById('csVis').dataset.value;
+  const payload = canEdit
+    ? {
+        name: document.getElementById('csNameInput').value.trim(),
+        description: document.getElementById('csDescInput').value.trim(),
+        is_public: visVal === 'public'
+      }
+    : {};
+  if (!Object.keys(payload).length) {
+    document.getElementById('chatSettingsModal').classList.remove('show');
+    return;
+  }
+  const r = await api('/api/chat/' + currentChat + '/settings', payload);
   if (r.ok) {
     toast('تغییرات ذخیره شد');
     document.getElementById('chatSettingsModal').classList.remove('show');
@@ -1013,13 +1052,16 @@ document.addEventListener('click', e => {
   if (!e.target.closest('.search-box')) document.getElementById('searchResults').classList.remove('show');
 });
 
+let ctxItems = [];
+
 function showCtxMenu(x, y, items) {
   const menu = document.getElementById('ctxMenu');
-  menu.innerHTML = items.filter(i => i).map((i, idx) =>
-    i === 'sep' ? '<div class="ctx-sep"></div>' :
-    `<div class="ctx-item ${i.danger ? 'danger' : ''}" data-idx="${idx}"><span class="ctx-ico">${i.icon || ''}</span>${esc(i.label)}</div>`
-  ).join('');
-  menu.dataset.items = JSON.stringify(items.filter(i => i && i !== 'sep'));
+  ctxItems = [];
+  menu.innerHTML = items.filter(i => i).map(i => {
+    if (i === 'sep') return '<div class="ctx-sep"></div>';
+    ctxItems.push(i);
+    return `<div class="ctx-item ${i.danger ? 'danger' : ''}" data-idx="${ctxItems.length - 1}"><span class="ctx-ico">${i.icon || ''}</span>${esc(i.label)}</div>`;
+  }).join('');
   menu.classList.add('show');
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
   menu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
@@ -1029,8 +1071,7 @@ function showCtxMenu(x, y, items) {
 document.getElementById('ctxMenu').addEventListener('click', e => {
   const it = e.target.closest('.ctx-item');
   if (!it) return;
-  const items = JSON.parse(document.getElementById('ctxMenu').dataset.items);
-  const item = items[+it.dataset.idx];
+  const item = ctxItems[+it.dataset.idx];
   document.getElementById('ctxMenu').classList.remove('show');
   if (item && item.fn) item.fn();
 });
@@ -1107,10 +1148,6 @@ document.addEventListener('contextmenu', e => {
       }) } : null,
     ]);
   }
-});
-
-document.querySelectorAll('#convList .conv').forEach(c => {
-  c.onclick = () => openChat(c.dataset.chatId);
 });
 
 if (CD.chat) {
@@ -1212,7 +1249,7 @@ S.on('message_pinned', d => {
 });
 
 S.on('chat_meta', d => {
-  if (d.chat_id === currentChat && CD.chat) {
+  if (d.id === currentChat && CD.chat) {
     CD.chat = { ...CD.chat, ...d };
     setHead();
   }

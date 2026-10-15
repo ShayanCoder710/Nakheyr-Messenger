@@ -357,6 +357,7 @@ input, select, textarea { font-family: inherit; }
   font-family: monospace;
 }
 
+.cs-note { display: none; margin-top: 8px; font-size: 11.5px; color: var(--dim); }
 .cs-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .cs-head .avatar { width: 56px; height: 56px; }
 .cs-id b { font-size: 15px; display: block; }
@@ -430,7 +431,7 @@ input, select, textarea { font-family: inherit; }
   border-radius: 8px; background: var(--bg-2); border: 1px solid var(--red); color: var(--text);
 }
 
-.bio-resize { resize: vertical; min-height: 56px; max-height: 240px; }
+.bio-resize { resize: horizontal; min-width: 140px; max-width: 100%; }
 
 
 .pinned-bar {

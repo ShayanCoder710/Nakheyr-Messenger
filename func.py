@@ -1,6 +1,5 @@
 import os
 import re
-import random
 import secrets
 import threading
 from datetime import datetime, date, timedelta
@@ -273,10 +272,6 @@ def bump_online(user):
     user.last_seen = datetime.utcnow()
     update_streak(user)
     db.session.commit()
-
-
-def pick_word():
-    return random.choice(HANGMAN_WORDS)
 
 
 def avatar_html(user, size=''):
