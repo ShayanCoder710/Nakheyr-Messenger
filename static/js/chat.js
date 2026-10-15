@@ -447,7 +447,7 @@ async function openChat(id) {
   document.getElementById('msgsPane').classList.add('open');
   setChatted(true);
   document.getElementById('msgsBody').innerHTML = '';
-  document.getElementById('msgs').scrollTop = 0;
+  document.getElementById('msgs').scrollTop = document.getElementById('msgs').scrollHeight;
   cancelSelect();
   pendingReply = null;
   document.getElementById('replyPreview').style.display = 'none';

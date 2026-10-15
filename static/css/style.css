@@ -178,7 +178,9 @@ input, select, textarea { font-family: inherit; }
 .conv {
   display: flex; align-items: center; gap: 11px; padding: 10px;
   border-radius: 12px; cursor: pointer; position: relative; transition: .12s;
+  background: var(--panel-2); border: 1px solid var(--line);
 }
+.conv + .conv { margin-top: 6px; }
 .conv:hover { background: var(--bg-3); }
 .conv.active { background: linear-gradient(90deg, rgba(225,29,72,.16), rgba(225,29,72,.05)); }
 .conv.active::before {
@@ -207,7 +209,7 @@ input, select, textarea { font-family: inherit; }
 .main-empty .big { font-size: 52px; margin-bottom: 12px; filter: saturate(.7); }
 .main-empty h2 { color: var(--muted); font-size: 18px; }
 
-.msgs-pane { flex: 1; display: none; flex-direction: column; min-width: 0; }
+.msgs-pane { flex: 1; min-height: 0; display: none; flex-direction: column; min-width: 0; }
 .msgs-pane.open { display: flex; }
 .chat-head {
   display: flex; align-items: center; gap: 12px; padding: 11px 18px;
@@ -226,7 +228,7 @@ input, select, textarea { font-family: inherit; }
 .chip .avatar { width: 22px; height: 22px; font-size: 10px; }
 .chip .crown { color: var(--gold); font-size: 11px; }
 
-.msgs { flex: 1; overflow-y: auto; padding: 22px 18px; display: flex; flex-direction: column; gap: 4px; }
+.msgs { flex: 1; min-height: 0; overflow-y: auto; padding: 22px 18px; display: flex; flex-direction: column; gap: 4px; }
 .day-sep { text-align: center; margin: 14px 0 8px; }
 .day-sep span {
   font-size: 11px; font-weight: 700; color: var(--muted); background: var(--bg-2);
