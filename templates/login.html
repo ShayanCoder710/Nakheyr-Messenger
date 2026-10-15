@@ -16,7 +16,13 @@
     <p class="auth-switch">حساب نداری؟ <a href="{{ url_for('register') }}">ثبت‌نام</a></p>
   </div>
 </div>
-{% for msg, kind in get_flashed_messages(with_categories=true) %}
-<script>window.addEventListener('load', () => toast('{{ msg }}', '{{ kind }}'));</script>
-{% endfor %}
+{% if get_flashed_messages(with_categories=true) %}
+<script type="module">
+const flashes = [{% for category, message in get_flashed_messages(with_categories=true) %}{{ message|tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+const { Eggy } = await import('{{ url_for('static', filename='js/eggy.js') }}?v=3');
+for (const m of flashes) {
+  await Eggy({ type: 'error', title: '', message: m });
+}
+</script>
+{% endif %}
 {% endblock %}

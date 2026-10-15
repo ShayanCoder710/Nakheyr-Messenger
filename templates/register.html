@@ -8,7 +8,7 @@
     <p class="auth-sub">یکدقیقه‌ای زمان می‌بره، بعدش وارد نخیر شدی</p>
     <form method="post">
       <label class="label" for="username">نام کاربری (انگلیسی)</label>
-      <input class="input" id="username" name="username" required placeholder="sara_k" pattern="[a-zA-Z0-9_]{3,30}">
+      <input class="input" id="username" name="username" required placeholder="sara_k" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="off">
       <label class="label" for="display_name">نام کاربر</label>
       <input class="input" id="display_name" name="display_name" required placeholder="شایان سیدی" minlength="2">
       <label class="label" for="password">پسورد</label>
@@ -18,7 +18,29 @@
     <p class="auth-switch">پیش‌تر ثبت‌نام کردی؟ <a href="{{ url_for('login') }}">ورود</a></p>
   </div>
 </div>
-{% for msg, kind in get_flashed_messages(with_categories=true) %}
-<script>window.addEventListener('load', () => toast('{{ msg }}', '{{ kind }}'));</script>
-{% endfor %}
+{% if get_flashed_messages(with_categories=true) %}
+<script type="module">
+const flashes = [{% for category, message in get_flashed_messages(with_categories=true) %}{{ message|tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
+const { Eggy } = await import('{{ url_for('static', filename='js/eggy.js') }}?v=3');
+for (const m of flashes) {
+  await Eggy({ type: 'error', title: '', message: m });
+}
+</script>
+{% endif %}
+<script>
+(function () {
+  const inp = document.getElementById('username');
+  inp.addEventListener('input', () => {
+    const pos = inp.selectionStart;
+    const clean = inp.value.replace(/[^a-zA-Z0-9_]/g, '');
+    if (clean !== inp.value) {
+      inp.value = clean;
+      inp.setSelectionRange(Math.min(pos, clean.length), Math.min(pos, clean.length));
+    }
+  });
+  inp.addEventListener('keydown', e => {
+    if (e.key.length === 1 && !/^[a-zA-Z0-9_]$/.test(e.key)) e.preventDefault();
+  });
+})();
+</script>
 {% endblock %}
