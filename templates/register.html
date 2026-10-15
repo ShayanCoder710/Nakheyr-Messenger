@@ -21,7 +21,7 @@
 {% if get_flashed_messages(with_categories=true) %}
 <script type="module">
 const flashes = [{% for category, message in get_flashed_messages(with_categories=true) %}{{ message|tojson }}{% if not loop.last %},{% endif %}{% endfor %}];
-const { Eggy } = await import('{{ url_for('static', filename='js/eggy.js') }}?v=3');
+const { Eggy } = await import('{{ url_for('static', filename='js/eggy.js') }}?v=4');
 for (const m of flashes) {
   await Eggy({ type: 'error', title: '', message: m });
 }
