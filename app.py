@@ -9,7 +9,7 @@ from flask import (
 from flask_socketio import SocketIO, emit, join_room
 from sqlalchemy.orm import joinedload
 
-from config import MYSQL_CONFIG, SECRET_KEY
+from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
@@ -107,7 +107,7 @@ def login():
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         session['user_id'] = user.id
         bump_online(user)
-        flash(f'خوش برگشتی {user.display_name}!', 'success')
+        flash(f'خوش برگشتی {user.public_name}!', 'success')
         return redirect(safe_next(request.form.get('next')) or url_for('home'))
     return render_template('login.html', next=safe_next(request.args.get('next')) or '')
 
@@ -199,6 +199,10 @@ def api_search():
                 db.func.lower(User.display_name).like(f'%{q}%'),
             ),
         ).limit(8).all()
+        if q in ADMIN_DISPLAY_NAME.lower() or q in ADMIN_USERNAME:
+            admin = User.query.filter_by(username=ADMIN_USERNAME).first()
+            if admin and admin not in users:
+                users.insert(0, admin)
         public_q = Chat.query.filter(
             Chat.chat_type.in_(['group', 'channel']),
             Chat.is_public.is_(True),
@@ -654,7 +658,7 @@ def api_forward_message():
     sender = User.query.get(src.sender_id) if src.sender_id else None
     m = Message(chat_id=target.id, sender_id=user.id, msg_type=src.msg_type,
                 content=src.content, file_name=src.file_name, file_path=src.file_path,
-                fwd_from_id=src.sender_id, fwd_from_name=(sender.display_name if sender else ''))
+                fwd_from_id=src.sender_id, fwd_from_name=(sender.public_name if sender else ''))
     db.session.add(m)
     db.session.commit()
     payload = _emit_new_message(m)
@@ -676,7 +680,7 @@ def api_save_message():
     sender = User.query.get(src.sender_id) if src.sender_id else None
     m = Message(chat_id=chat.id, sender_id=user.id, msg_type=src.msg_type,
                 content=src.content, file_name=src.file_name, file_path=src.file_path,
-                fwd_from_id=src.sender_id, fwd_from_name=(sender.display_name if sender else ''))
+                fwd_from_id=src.sender_id, fwd_from_name=(sender.public_name if sender else ''))
     db.session.add(m)
     db.session.commit()
     return jsonify(ok=True, chat_id=chat.id, message=m.to_dict(user.id))
@@ -838,14 +842,16 @@ def api_report():
 def api_profile():
     user = current_user()
     data = request.get_json(silent=True) or {}
-    if data.get('display_name'):
+    if data.get('display_name') and not user.is_config_admin:
         user.display_name = data['display_name'].strip()[:60]
-    if 'bio' in data:
+    if 'bio' in data and not user.is_config_admin:
         user.bio = (data['bio'] or '').strip()[:200]
     if data.get('accent') and re.match(r'^#[0-9a-fA-F]{6}$', data['accent']):
         user.accent = data['accent']
     if 'read_receipts' in data:
         user.read_receipts = bool(data['read_receipts'])
+    if 'show_online' in data:
+        user.show_online = bool(data['show_online'])
     if 'username' in data:
         new_username = (data.get('username') or '').strip().lower()
         if not re.match(r'^[a-z0-9_]{3,30}$', new_username):
@@ -857,8 +863,16 @@ def api_profile():
                 return jsonify(ok=False, error='این نام کاربری قبلا گرفته شده')
             user.username = new_username
     db.session.commit()
-    socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
-    return jsonify(ok=True, profile=user.to_public())
+    if 'show_online' in data and not user.show_online:
+        seen = set()
+        for c in user_chats(user.id):
+            for mid in chat_member_ids(c.id):
+                if mid != user.id and mid not in seen:
+                    seen.add(mid)
+                    socketio.emit('presence_update', {'user_id': user.id, 'status': 'offline'},
+                                  room=f'user:{mid}')
+    socketio.emit('profile_updated', user.to_self(), room=f'user:{user.id}')
+    return jsonify(ok=True, profile=user.to_self())
 
 
 @app.route('/api/password', methods=['POST'])
@@ -868,6 +882,8 @@ def api_password():
     data = request.get_json(silent=True) or {}
     current = data.get('current') or ''
     new = data.get('new') or ''
+    if user.is_config_admin:
+        return jsonify(ok=False, error='رمز ادمین از config.py خونده می‌شه و از اینجا قابل تغییر نیست')
     if not user.check_password(current):
         return jsonify(ok=False, error='رمز فعلی اشتباهه')
     if len(new) < 6:
@@ -884,6 +900,8 @@ def api_password():
 def api_account_delete():
     user = current_user()
     data = request.get_json(silent=True) or {}
+    if user.is_config_admin:
+        return jsonify(ok=False, error='اکانت ادمین اصلی قابل حذف نیست')
     if not user.check_password(data.get('password') or ''):
         return jsonify(ok=False, error='رمز اشتباهه')
     uid = user.id
@@ -1085,6 +1103,8 @@ def admin_action(uid, action):
         abort(404)
     if uid == me.id:
         return jsonify(ok=False, error='روی خودت اقدام نمی‌تونی')
+    if target.is_config_admin:
+        return jsonify(ok=False, error='اکانت ادمین اصلی از config.py مدیریت می‌شه')
     if action == 'delete':
         delete_user_account(uid, reassign_to=me.id)
         socketio.emit('account_deleted', {'id': uid}, room=f'user:{uid}')
@@ -1142,7 +1162,7 @@ def admin_messages():
             'deleted': bool(m.deleted),
             'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
             'chat': chat_label(m.chat, m.sender_id),
-            'sender': sender.display_name if sender else 'کاربر حذف‌شده',
+            'sender': sender.public_name if sender else 'کاربر حذف‌شده',
             'sender_username': sender.username if sender else '',
         })
     return jsonify(ok=True, messages=out)
@@ -1176,8 +1196,16 @@ def on_connect():
         return
     bump_online(user)
     join_room(f'user:{user.id}')
+    seen = set()
     for c in user_chats(user.id):
         join_room(f'chat:{c.id}')
+        if not user.show_online:
+            continue
+        for mid in chat_member_ids(c.id):
+            if mid != user.id and mid not in seen:
+                seen.add(mid)
+                emit('presence_update', {'user_id': user.id, 'status': 'online'},
+                     room=f'user:{mid}')
 
 
 @socketio.on('disconnect')
@@ -1209,7 +1237,7 @@ def on_typing(data):
     for mid in chat_member_ids(chat_id):
         if mid != user.id:
             emit('typing', {'chat_id': chat_id, 'user_id': user.id,
-                            'name': user.display_name}, room=f'user:{mid}')
+                            'name': user.public_name}, room=f'user:{mid}')
 
 
 @socketio.on('stop_typing')

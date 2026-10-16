@@ -1,14 +1,6 @@
 const S = io({ transports: ['websocket', 'polling'] });
 const CD = window.CHAT_DATA || {};
 CD.joined = window.JOINED !== false;
-const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🙏', '👏', '😍', '🤔', '👌'];
-const EMOJI_SETS = [
-  { icon: '😀', emojis: ['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','😏','😒','😞','😔','😟','😕','🙁','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕'] },
-  { icon: '👋', emojis: ['👍','👎','👌','✌️','🤞','🤟','🤘','🤙','👈','👉','👆','👇','☝️','✋','🤚','🖐','🖖','👋','🤝','🙏','✊','👊','🤛','🤜','👏','🙌','👐','🤲','💪','🦾','🖕','✍️','💅','🫶','❤️','🧡','💛','💚','💙','💜','🖤','🤍','🤎','💔','❣️','💕','💞','💓','💗','💖','💘','💝','🔥','✨','⭐','🌟','💫','💥','💯','🎉','🎊','🎈','🎁'] },
-  { icon: '🍔', emojis: ['🍏','🍎','🍐','🍊','🍋','🍌','🍉','🍇','🍓','🫐','🍈','🍒','🍑','🥭','🍍','🥥','🥝','🍅','🍆','🥑','🥦','🥬','🥒','🌶','🫑','🌽','🥕','🧄','🧅','🥔','🍠','🥐','🍞','🥖','🥨','🧀','🥚','🍳','🥞','🧇','🥓','🍔','🍟','🍕','🌭','🥪','🌮','🌯','🍜','🍝','🍣','🍱','🍛','🍚','🍙','🍘','🍥','🥠','🍢','🍡','🍧','🍨','🍦','🥧','🧁','🍰','🎂','🍮','🍭','🍬','🍫','🍿','🍩','🍪','☕','🍵','🧋','🥤','🍺','🍻','🥂','🍷','🍸','🍹'] },
-  { icon: '⚽', emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥊','🥋','⛳','⛸','🎿','🛷','🥌','🎯','🪃','🏹','🎣','🤿','🥊','🎽','🛹','🛼','🚗','🚕','🚙','🚌','🚎','🏎','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🏍','✈️','🚀','🛸','🚁','⛵','🚤','🛥','🚢'] },
-  { icon: '💡', emojis: ['⌚','📱','💻','⌨️','🖥','🖨','🖱','💽','💾','💿','📀','📷','📸','📹','🎥','📞','☎️','📟','📠','📺','📻','🧭','⏱','⏰','🕰','⌛','⏳','🔋','🔌','💡','🔦','🕯','🧯','🛢','💸','💵','💴','💶','💷','💰','💳','💎','⚖️','🧰','🔧','🔨','⚒','🛠','⛏','🔩','⚙️','🧱','⛓','🧲','🔫','💣','🧨','🪓','🔪','🗡','⚔️','🛡','🚬','⚰️','🏺','🔮','📿','🧿','💊','💉','🩸','🔬','🔭','📡','💈','⚗️','🧪','🧫','🧬','🩹','🩺','📖','📚','📝','✏️','🖊','🖋','✒️','🖌','🖍','📌','📍','📎','🖇','📐','📏','🧮','📊','📈','📉','🗂','📁','📂','🗞','📰','📓','📔','📒','📕','📗','📘','📙','📃','📄','📑','🔖','🔗','📅','📆','🗓','📇','🗃','🗄','📋','📁'] },
-];
 const SWATCHES = ['#e5393b', '#c62828', '#8e1c1c', '#ff5252', '#b71c1c', '#d84315', '#e5484d', '#4a4a4a'];
 
 function applyAccent(color) {
@@ -309,7 +301,9 @@ function setHead() {
   if (c.chat_type === 'dm') {
     const p = c.peer || {};
     displayName = p.display_name || c.name || 'کاربر';
-    subText = p.username ? ('@' + p.username + (p.status === 'online' ? ' · آنلاین' : ' · آفلاین')) : '';
+    const status = p.status === 'online' ? 'آنلاین' : 'آفلاین';
+    const narrow = window.innerWidth <= 480;
+    subText = p.username ? (narrow ? status : ('@' + p.username + ' · ' + status)) : status;
     av = p.avatar || '';
     if (p.id) repBtn.style.display = 'grid';
   } else {
@@ -337,6 +331,12 @@ function setHead() {
     if (p.id) repBtn.style.display = 'grid';
   }
 }
+
+let _headResizeT;
+window.addEventListener('resize', () => {
+  clearTimeout(_headResizeT);
+  _headResizeT = setTimeout(() => { if (CD.chat) setHead(); }, 120);
+});
 
 document.addEventListener('click', e => {
   const chip = e.target.closest('.chip[data-username]');
@@ -695,27 +695,56 @@ document.addEventListener('mousedown', e => {
   if (!e.target.closest('#emojiPicker')) hidePicker();
 });
 
+const ALL_EMOJIS = [...new Set(EMOJI_SETS.flatMap(s => s.emojis))];
+function searchEmojis(q) {
+  return ALL_EMOJIS.filter(e => e === q || (EMOJI_KEYWORDS[e] || '').includes(q)).slice(0, 240);
+}
+
 function buildEmojiPanel() {
   const tabs = document.getElementById('epTabs');
   const body = document.getElementById('epBody');
+  const search = document.getElementById('epSearch');
   tabs.innerHTML = EMOJI_SETS.map((s, i) =>
     `<button type="button" data-tab="${i}" class="${i === 0 ? 'on' : ''}" title="دسته ${i + 1}">${s.icon}</button>`).join('');
+  let current = 0;
   const renderSet = i => {
+    current = i;
     const set = EMOJI_SETS[i];
     body.innerHTML = set.emojis.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('');
+    body.scrollTop = 0;
+  };
+  const runSearch = () => {
+    const q = (search.value || '').trim().toLowerCase();
+    if (!q) { tabs.style.display = 'flex'; renderSet(current); return; }
+    tabs.style.display = 'none';
+    const found = searchEmojis(q);
+    body.innerHTML = found.length
+      ? found.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('')
+      : '<div class="ep-empty">چیزی پیدا نشد</div>';
     body.scrollTop = 0;
   };
   tabs.querySelectorAll('button').forEach(b => b.onclick = () => {
     tabs.querySelectorAll('button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
+    search.value = '';
     renderSet(+b.dataset.tab);
   });
+  search.oninput = runSearch;
+  search.onkeydown = ev => {
+    if (ev.key === 'Enter') {
+      ev.preventDefault();
+      const first = body.querySelector('[data-em]');
+      if (first) insertEmoji(first.dataset.em);
+    }
+  };
   renderSet(0);
 }
 
 function hideEmojiPanel() {
   const p = document.getElementById('emojiPanel');
   if (p) p.style.display = 'none';
+  const s = document.getElementById('epSearch');
+  if (s) s.value = '';
   const b = document.getElementById('btnEmoji');
   if (b) b.classList.remove('active');
 }
@@ -1613,6 +1642,10 @@ function openProfilePage() {
   document.getElementById('pmAvClear').style.display = window.ME.avatar ? 'inline-flex' : 'none';
   const rr = document.getElementById('pmReadReceipts');
   if (rr) rr.checked = window.ME.read_receipts !== false;
+  const so = document.getElementById('pmShowOnline');
+  if (so) so.checked = window.ME.show_online !== false;
+  const ad = document.getElementById('pmAdmin');
+  if (ad) ad.style.display = window.ME.is_admin ? 'inline-flex' : 'none';
   loadBlocks();
 }
 
@@ -1623,6 +1656,20 @@ if (pmRR) pmRR.onchange = e => {
     if (j.ok) {
       window.ME.read_receipts = on;
       toast(on ? 'تیک خوانده‌شدن روشن شد' : 'تیک خوانده‌شدن خاموش شد');
+    } else {
+      e.target.checked = !on;
+      toast(j.error, 'error');
+    }
+  });
+};
+
+const pmSO = document.getElementById('pmShowOnline');
+if (pmSO) pmSO.onchange = e => {
+  const on = e.target.checked;
+  api('/api/profile', { show_online: on }).then(j => {
+    if (j.ok) {
+      window.ME.show_online = on;
+      toast(on ? 'وضعیت آنلاین برای دیگران نمایش داده می‌شود' : 'وضعیت آنلاین برای دیگران پنهان شد');
     } else {
       e.target.checked = !on;
       toast(j.error, 'error');

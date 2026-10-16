@@ -292,7 +292,7 @@ input, select, textarea { font-family: inherit; }
 .chat-head .avatar { width: 42px; height: 42px; }
 .chat-head .t { flex: 1; min-width: 0; }
 .chat-head .t b { font-size: 15.5px; font-weight: 700; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.chat-head .t small { color: var(--muted); font-size: 12.5px; display: block; }
+.chat-head .t small { color: var(--muted); font-size: 12.5px; display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .chat-search {
   display: flex; align-items: center; gap: 8px;
   padding: 8px max(16px, calc((100% - var(--chat-max)) / 2));
@@ -474,17 +474,17 @@ input, select, textarea { font-family: inherit; }
 .sender-line { font-size: 12px; font-weight: 800; color: var(--accent-2); margin-bottom: 2px; }
 
 .emoji-pick {
-  position: absolute; bottom: 26px; right: 10px; z-index: 7;
-  display: none; grid-template-columns: repeat(6, 24px); gap: 2px;
+  position: fixed; z-index: 210; display: none;
+  width: max-content; grid-template-columns: repeat(6, 30px); gap: 2px;
   background: var(--panel); border: 1px solid var(--line-2); border-radius: 14px;
   padding: 6px; box-shadow: 0 8px 22px rgba(0, 0, 0, .45);
 }
-#emojiPicker { position: fixed; z-index: 210; display: none; }
 #emojiPicker.global { display: grid; }
 .emoji-pick button {
-  width: 24px; height: 24px; border: none; background: none; font-size: 15px; border-radius: 8px;
+  width: 30px; height: 30px; border: none; background: none; font-size: 18px; line-height: 1;
+  display: grid; place-items: center; border-radius: 8px;
 }
-.emoji-pick button:hover { background: var(--bg-3); transform: scale(1.1); }
+.emoji-pick button:hover { background: var(--bg-3); transform: scale(1.12); }
 
 .emoji-panel {
   position: fixed;
@@ -498,6 +498,13 @@ input, select, textarea { font-family: inherit; }
   animation: popIn .14s ease;
 }
 @keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.98); } }
+.ep-search { padding: 8px 8px 2px; }
+.ep-search input {
+  width: 100%; box-sizing: border-box; border: 1px solid var(--line-2); background: var(--bg-3);
+  color: var(--text); border-radius: 10px; padding: 7px 11px; font: inherit; font-size: 13px; outline: none;
+}
+.ep-search input:focus { border-color: var(--accent); }
+.ep-empty { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 24px 0; font-size: 13px; }
 .ep-tabs {
   display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line);
   background: transparent; overflow-x: auto;
@@ -720,6 +727,8 @@ input, select, textarea { font-family: inherit; }
 .fwd-row:hover { background: var(--bg-3); }
 .fwd-row .blk-id { min-width: 0; }
 .fwd-row .blk-id small { color: var(--dim); font-size: 11px; }
+
+.pass-fields { display: grid; gap: 10px; }
 
 .switch-row {
   display: flex; align-items: center; justify-content: space-between; gap: 12px;

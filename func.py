@@ -8,7 +8,7 @@ from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
 from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
-from config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_DISPLAY_NAME, ADMIN_BIO
+from config import ADMIN_USERNAME
 from sqlalchemy.orm import joinedload
 
 IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'}
@@ -29,14 +29,19 @@ def init_db():
     if not admin:
         admin = User(
             username=ADMIN_USERNAME,
-            display_name=ADMIN_DISPLAY_NAME,
-            bio=ADMIN_BIO,
+            display_name='',
+            bio='',
+            password_hash='',
             accent='#e5393b',
             is_admin=True,
             is_verified=True,
         )
-        admin.set_password(ADMIN_PASSWORD)
         db.session.add(admin)
+        db.session.commit()
+    elif admin.display_name or admin.bio or admin.password_hash:
+        admin.display_name = ''
+        admin.bio = ''
+        admin.password_hash = ''
         db.session.commit()
 
 
@@ -70,6 +75,7 @@ def _ensure_columns():
         ('messages', 'fwd_from_id', "INTEGER NULL"),
         ('messages', 'fwd_from_name', "VARCHAR(60) NOT NULL DEFAULT ''"),
         ('users', 'read_receipts', "BOOLEAN NOT NULL DEFAULT 1"),
+        ('users', 'show_online', "BOOLEAN NOT NULL DEFAULT 1"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -292,7 +298,7 @@ def chat_display_name(chat, viewer, members=None):
     if chat.chat_type == 'dm':
         ms = chat.members if members is None else members
         other = next((m.user for m in ms if m.user_id != viewer.id), None)
-        return other.display_name if other else 'ذخیره‌شده‌ها'
+        return other.public_name if other else 'ذخیره‌شده‌ها'
     return chat.name or 'گروه'
 
 
@@ -402,7 +408,7 @@ def unread_counts(user):
         last_text = ''
         if last:
             sender = next((m.user for m in members if m.user_id == last.sender_id), None)
-            prefix = (f'{sender.display_name} · ' if sender and chat.chat_type != 'dm' else '')
+            prefix = (f'{sender.public_name} · ' if sender and chat.chat_type != 'dm' else '')
             last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
         is_notes = chat.chat_type == 'dm' and all(m.user_id == uid for m in members)
@@ -457,7 +463,7 @@ def avatar_html(user, size=''):
         initial = (user.get('display_name') or '?').strip()[:1]
         inner = f'<img src="{av}" alt="">' if av else initial
         return f'<div class="{cls}">{inner}</div>'
-    inner = f'<img src="{user.avatar_url}" alt="">' if user.avatar else (user.display_name or '?').strip()[:1]
+    inner = f'<img src="{user.avatar_url}" alt="">' if user.avatar else (user.public_name or '?').strip()[:1]
     return f'<div class="{cls}">{inner}</div>'
 
 
@@ -517,5 +523,5 @@ def chat_label(chat, viewer_id=None):
         return ''
     if chat.chat_type == 'dm':
         other = next((m.user for m in chat.members if m.user_id != viewer_id), None)
-        return other.display_name if other else 'پیوی'
+        return other.public_name if other else 'پیوی'
     return chat.name or ('گروه' if chat.chat_type == 'group' else 'کانال')

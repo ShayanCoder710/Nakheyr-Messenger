@@ -6,9 +6,14 @@
     <div class="side-head">
       <a href="{{ url_for('home') }}" style="text-decoration:none" id="sideProfileLink">{% if me %}{{ avatar_html(me) | safe }}{% endif %}</a>
       <div class="who">
-        <b>{{ me.display_name }} {% if me.is_verified %}<span title="اعتمادسنجی شد">✔</span>{% endif %}</b>
+        <b>{{ me.public_name }} {% if me.is_verified %}<span title="اعتمادسنجی شد">✔</span>{% endif %}</b>
         <span>@{{ me.username }}</span>
       </div>
+      {% if me.is_admin %}
+      <a class="icon-btn" href="{{ url_for('admin_panel') }}" title="پنل ادمین">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6z"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 1 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 1 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 1 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 1 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+      </a>
+      {% endif %}
     </div>
     <div class="search-box">
       <svg class="search-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 3.5a7 7 0 1 0 4.3 12.5l4.35 4.35 1.4-1.4L16.2 14.6a7 7 0 0 0-5.7-11.1zM4.5 10.5a6 6 0 1 1 6 6 6 6 0 0 1-6-6z"/></svg>
@@ -310,6 +315,10 @@
       <span>نمایش تیک خوانده‌شدن<small>اگه خاموش باشه، دیگران نمی‌فهمن پیام‌هاشون رو خوندی</small></span>
       <input type="checkbox" id="pmReadReceipts">
     </label>
+    <label class="switch-row">
+      <span>نمایش وضعیت آنلاین<small>اگه خاموش باشه، دیگران همیشه تو رو آفلاین می‌بینن</small></span>
+      <input type="checkbox" id="pmShowOnline">
+    </label>
     <label class="label">عکس پروفایل</label>
     <div class="av-picker" id="pmAvPick">
       <label class="av-drop" id="pmAvDrop">
@@ -323,10 +332,12 @@
       </div>
     </div>
     <label class="label">تغییر رمز عبور</label>
-    <input class="input" id="pmCurPass" type="password" placeholder="رمز فعلی" autocomplete="current-password">
-    <input class="input" id="pmNewPass" type="password" placeholder="رمز جدید (حداقل ۶ کاراکتر)" autocomplete="new-password">
-    <input class="input" id="pmNewPass2" type="password" placeholder="تکرار رمز جدید" autocomplete="new-password">
-    <button class="btn" id="pmChangePass" style="margin-top:10px">تغییر رمز عبور</button>
+    <div class="pass-fields">
+      <input class="input" id="pmCurPass" type="password" placeholder="رمز فعلی" autocomplete="current-password">
+      <input class="input" id="pmNewPass" type="password" placeholder="رمز جدید (حداقل ۶ کاراکتر)" autocomplete="new-password">
+      <input class="input" id="pmNewPass2" type="password" placeholder="تکرار رمز جدید" autocomplete="new-password">
+    </div>
+    <button class="btn" id="pmChangePass" style="margin-top:12px">تغییر رمز عبور</button>
     <label class="label">کاربران بلاک‌شده</label>
     <div class="blocked-list" id="pmBlocks"><small style="color:var(--dim)">کسی رو بلاک نکردی</small></div>
     <div class="danger-zone">
@@ -336,6 +347,7 @@
     </div>
     <div class="pm-actions">
       <button class="btn primary" id="pmSave">ذخیره</button>
+      <a class="btn" id="pmAdmin" href="{{ url_for('admin_panel') }}" style="display:none">🛠 پنل ادمین</a>
       <button class="btn danger" id="pmLogout">خروج</button>
       <button class="btn ghost" id="pmBack">برگشت</button>
     </div>
@@ -369,6 +381,7 @@
 <div class="emoji-pick" id="emojiPicker" style="display:none"></div>
 
 <div class="emoji-panel" id="emojiPanel" style="display:none">
+  <div class="ep-search"><input id="epSearch" type="text" placeholder="جستجوی ایموجی…" autocomplete="off"></div>
   <div class="ep-tabs" id="epTabs"></div>
   <div class="ep-body" id="epBody"></div>
 </div>
@@ -386,5 +399,6 @@ window.JOINED = {{ 'true' if chat is none or role else 'false' }};
 </script>
 {% endblock %}
 {% block extra_js %}
+<script src="{{ url_for('static', filename='js/emoji-data.js') }}"></script>
 <script src="{{ url_for('static', filename='js/chat.js') }}"></script>
 {% endblock %}

@@ -1,7 +1,10 @@
+import hmac
 import json
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
+
+from config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_DISPLAY_NAME, ADMIN_BIO
 
 db = SQLAlchemy()
 
@@ -21,16 +24,33 @@ class User(db.Model):
     is_banned = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
+    show_online = db.Column(db.Boolean, default=True, nullable=False)
     status = db.Column(db.String(10), default='offline')
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     streak_days = db.Column(db.Integer, default=0)
     last_streak_day = db.Column(db.DateTime, default=datetime.utcnow)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
+    @property
+    def is_config_admin(self):
+        return self.username == ADMIN_USERNAME
+
+    @property
+    def public_name(self):
+        return ADMIN_DISPLAY_NAME if self.is_config_admin else (self.display_name or '')
+
+    @property
+    def public_bio(self):
+        return ADMIN_BIO if self.is_config_admin else (self.bio or '')
+
     def set_password(self, value):
+        if self.is_config_admin:
+            return
         self.password_hash = generate_password_hash(value)
 
     def check_password(self, value):
+        if self.is_config_admin:
+            return hmac.compare_digest(str(value or ''), str(ADMIN_PASSWORD))
         return check_password_hash(self.password_hash, value)
 
     @property
@@ -41,19 +61,20 @@ class User(db.Model):
         return {
             'id': self.id,
             'username': self.username,
-            'display_name': self.display_name,
-            'bio': self.bio,
+            'display_name': self.public_name,
+            'bio': self.public_bio,
             'avatar': self.avatar_url,
             'accent': self.accent,
             'is_admin': self.is_admin,
             'is_verified': self.is_verified,
-            'status': self.status,
+            'status': self.status if self.show_online else 'offline',
             'read_receipts': bool(self.read_receipts),
         }
 
     def to_self(self):
         data = self.to_public()
         data['is_banned'] = self.is_banned
+        data['show_online'] = bool(self.show_online)
         data['created_at'] = self.created_at.isoformat()
         data['streak_days'] = self.streak_days
         return data
