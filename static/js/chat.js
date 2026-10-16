@@ -92,7 +92,7 @@ function canPinMsg(m) {
 }
 
 function lastSenderOf(mid) {
-  const msgs = (CD.initialMessages || []).filter(x => !x.deleted);
+  const msgs = (CD.initialMessages || []).filter(x => !x.deleted && x.msg_type !== 'system');
   for (let i = msgs.length - 1; i >= 0; i--) {
     if (msgs[i].id === mid) return i > 0 ? msgs[i - 1].sender_id : null;
   }
@@ -100,7 +100,7 @@ function lastSenderOf(mid) {
 }
 
 function nextSenderOf(mid) {
-  const msgs = (CD.initialMessages || []).filter(x => !x.deleted);
+  const msgs = (CD.initialMessages || []).filter(x => !x.deleted && x.msg_type !== 'system');
   for (let i = 0; i < msgs.length; i++) {
     if (msgs[i].id === mid) return i < msgs.length - 1 ? msgs[i + 1].sender_id : null;
   }
@@ -162,6 +162,9 @@ function tickIcon(seen) {
 
 function renderMsg(m) {
   if (m.deleted) return '';
+  if (m.msg_type === 'system') {
+    return `<div class="sys-msg" data-mid="${m.id}"><span>${esc(m.content)}</span></div>`;
+  }
   const url = esc(m.file_url || '');
   const fname = esc(m.file_name || '');
   let body = '';
@@ -355,9 +358,10 @@ function updateConvPreview(m) {
   if (!m || !m.chat_id) return;
   const el = document.querySelector('.conv[data-chat-id="' + m.chat_id + '"]');
   if (!el) { refreshConvList(); return; }
+  const sys = m.msg_type === 'system';
   const mine = m.sender_id === window.ME.id;
   let prefix = '';
-  if (el.dataset.type !== 'dm') {
+  if (!sys && el.dataset.type !== 'dm') {
     if (mine) prefix = 'شما · ';
     else {
       const mm = (CD.members || []).find(x => x.id === m.sender_id);
@@ -1159,7 +1163,7 @@ document.getElementById('msgs').addEventListener('touchstart', e => {
 function selectAllMine() {
   selectedIds.clear();
   (CD.initialMessages || []).forEach(m => {
-    if (!m.deleted && m.sender_id === window.ME.id) selectedIds.add(m.id);
+    if (!m.deleted && m.sender_id === window.ME.id && m.msg_type !== 'system') selectedIds.add(m.id);
   });
   syncSelection();
 }
@@ -1722,13 +1726,10 @@ function openSettings() {
     : c.name.charAt(0);
   const nameInp = document.getElementById('csNameInput');
   const descInp = document.getElementById('csDescInput');
-  const unameInp = document.getElementById('csUsernameInput');
   nameInp.value = c.name;
   descInp.value = c.description || '';
-  unameInp.value = c.username || '';
   nameInp.disabled = !canEdit;
   descInp.disabled = !canEdit;
-  unameInp.disabled = !canEdit;
   const vis = document.getElementById('csVis');
   vis.querySelectorAll('button').forEach(b => b.style.display = 'inline-flex');
   if (!canEdit) {
@@ -1746,7 +1747,7 @@ function openSettings() {
   if (csPrev) csPrev.style.display = 'none';
   document.getElementById('csAvUpload').style.display = canEdit ? 'inline-flex' : 'none';
   document.getElementById('csAvClear').style.display = (canEdit && c.avatar) ? 'inline-flex' : 'none';
-  document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + (c.username || c.id);
+  document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + c.id;
   document.getElementById('csMembersHead').textContent = 'اعضا (' + ((CD.members || []).length) + ')';
   renderMembers(CD.members || []);
   loadMembers(c.id);
@@ -1882,7 +1883,6 @@ document.getElementById('csSave').onclick = async () => {
     ? {
         name: document.getElementById('csNameInput').value.trim(),
         description: document.getElementById('csDescInput').value.trim(),
-        username: document.getElementById('csUsernameInput').value.trim().toLowerCase(),
         is_public: visVal === 'public'
       }
     : {};
@@ -2192,7 +2192,7 @@ searchInput.oninput = () => {
         <div class="sr-item" data-chat="${c.id}">
           <span class="type-icon"><img src="/static/icons/${c.chat_type === 'channel' ? 'channel' : 'group'}.svg" alt=""></span>
           <div style="flex:1; min-width:0"><b>${esc(c.name)}</b>
-          <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'}${c.username ? ` · @${esc(c.username)}` : ''} ${c.is_public ? '· ' + bi('globe') + ' عمومی' : '· ' + bi('lock') + ' خصوصی'}${c.is_member ? ' · ' + bi('check-circle') + ' عضو هستی' : ''}</small></div>
+          <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'} ${c.is_public ? '· ' + bi('globe') + ' عمومی' : '· ' + bi('lock') + ' خصوصی'}${c.is_member ? ' · ' + bi('check-circle') + ' عضو هستی' : ''}</small></div>
           ${c.is_member ? '' : `<button class="btn sm sr-join" data-join="${c.id}">پیوستن</button>`}
         </div>`).join('');
     }

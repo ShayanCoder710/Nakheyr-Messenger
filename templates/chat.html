@@ -211,8 +211,6 @@
     <input class="input" id="csNameInput" maxlength="60">
     <label class="label">توضیح</label>
     <textarea class="input" id="csDescInput" rows="2" maxlength="200"></textarea>
-    <label class="label">نام کاربری گپ (لینک اختصاصی)</label>
-    <input class="input" id="csUsernameInput" maxlength="30" placeholder="مثلاً my_group" dir="ltr" style="direction:ltr;text-align:left">
     <label class="label">نوع گپ</label>
     <div class="seg" id="csVis">
       <button type="button" data-val="public">{{ bi('globe') }} عمومی (هرکسی می‌تونه وارد بشه)</button>
@@ -225,8 +223,10 @@
         <span id="csAvLabel">{{ bi('camera') }} انتخاب عکس…</span>
         <img id="csAvPrev" alt="" style="display:none">
       </label>
-      <button class="btn sm" id="csAvUpload">آپلود</button>
-      <button class="btn sm ghost" id="csAvClear" style="display:none">حذف</button>
+      <div class="av-actions">
+        <button class="btn" id="csAvUpload">آپلود</button>
+        <button class="btn ghost" id="csAvClear" style="display:none">حذف</button>
+      </div>
     </div>
     <label class="label">ارسال دعوت (لینک عضویت)</label>
     <div class="inv-row">

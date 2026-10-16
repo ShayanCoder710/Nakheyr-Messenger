@@ -16,7 +16,7 @@ from func import (
     kind_for, INLINE_UNSAFE_EXT,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
-    username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES,
+    username_taken, RESERVED_USERNAMES,
     get_or_create_notes, delete_user_account, chat_label,
     member_perms, default_perms, PERMISSION_KEYS, PERMISSION_LABELS
 )
@@ -178,7 +178,10 @@ def chat_page(chat_id):
 @require_auth
 def chat_page_by_username(username):
     user = current_user()
-    chat = Chat.query.filter(db.func.lower(Chat.username) == username.lower()).first()
+    if username.isdigit():
+        chat = Chat.query.get(int(username))
+    else:
+        chat = Chat.query.filter(db.func.lower(Chat.username) == username.lower()).first()
     if not chat or chat.chat_type == 'dm':
         abort(404)
     if not can_view_chat(user, chat):
@@ -320,11 +323,15 @@ def api_chat_settings(chat_id):
     role = my_role_in(user, chat)
     data = request.get_json(silent=True) or {}
     wants_visibility = 'is_public' in data
-    wants_edit = any(k in data for k in ('name', 'description', 'username'))
+    wants_edit = any(k in data for k in ('name', 'description'))
     if wants_visibility and role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='تغییر نوع گپ فقط برای صاحب و ادمین گپ')
     if wants_edit and role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='تغییر نام و توضیح فقط برای صاحب و ادمین گپ')
+    noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+    old_name = chat.name
+    old_desc = chat.description or ''
+    old_public = bool(chat.is_public)
     changed = False
     if 'name' in data:
         new_name = (data.get('name') or '').strip()
@@ -332,15 +339,6 @@ def api_chat_settings(chat_id):
             return jsonify(ok=False, error='نام حداقل ۲ حرف')
         chat.name = new_name[:60]
         changed = True
-    if 'username' in data:
-        new_uname = (data.get('username') or '').strip().lower()
-        if new_uname != (chat.username or ''):
-            if not CHAT_USERNAME_RE.match(new_uname):
-                return jsonify(ok=False, error='نام کاربری گپ: با حرف انگلیسی شروع بشه، ۳ تا ۳۰ حرف/عدد/_')
-            if new_uname in RESERVED_USERNAMES or username_taken(new_uname, chat_id=chat.id):
-                return jsonify(ok=False, error='این نام کاربری گرفته شده')
-            chat.username = new_uname
-            changed = True
     if 'description' in data:
         chat.description = (data.get('description') or '').strip()[:200]
         changed = True
@@ -351,7 +349,26 @@ def api_chat_settings(chat_id):
         db.session.commit()
         for mid in chat_member_ids(chat.id):
             socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+        if chat.name != old_name:
+            post_system_message(chat, user, f'نام {noun} از «{old_name}» به «{chat.name}» تغییر کرد')
+        if (chat.description or '') != old_desc:
+            post_system_message(chat, user, f'توضیحات {noun} تغییر کرد')
+        if bool(chat.is_public) != old_public:
+            state = 'عمومی' if chat.is_public else 'خصوصی'
+            post_system_message(chat, user, f'{noun} {state} شد')
     return jsonify(ok=True, chat=chat.to_public(user), role=role)
+
+
+def post_system_message(chat, actor, text):
+    m = Message(chat_id=chat.id, sender_id=actor.id, msg_type='system', content=text)
+    db.session.add(m)
+    db.session.commit()
+    payload = m.to_dict(actor.id)
+    socketio.emit('new_message', payload, room=f'user:{actor.id}')
+    for mid in chat_member_ids(chat.id):
+        if mid != actor.id:
+            socketio.emit('new_message', payload, room=f'user:{mid}')
+    return payload
 
 
 @app.route('/api/chat/<int:chat_id>/members', methods=['GET', 'POST'])
@@ -492,6 +509,8 @@ def api_chat_avatar(chat_id):
         db.session.commit()
         for mid in chat_member_ids(chat.id):
             socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+        noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+        post_system_message(chat, user, f'عکس {noun} حذف شد')
         return jsonify(ok=True, avatar='')
     f = request.files.get('avatar')
     if not f or not f.filename:
@@ -507,6 +526,8 @@ def api_chat_avatar(chat_id):
     db.session.commit()
     for mid in chat_member_ids(chat.id):
         socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+    noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+    post_system_message(chat, user, f'عکس {noun} تغییر کرد')
     return jsonify(ok=True, avatar=chat.avatar_url)
 
 

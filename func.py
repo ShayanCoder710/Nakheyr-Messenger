@@ -189,13 +189,6 @@ def _ensure_chat_usernames():
             "WHERE table_schema = DATABASE() AND table_name = 'chats' "
             "AND index_name = 'ix_chats_username' AND non_unique = 0"
         )).scalar()
-    missing = Chat.query.filter(
-        Chat.chat_type.in_(['group', 'channel']), Chat.username.is_(None)
-    ).all()
-    if missing:
-        for chat in missing:
-            chat.username = generate_chat_username(chat.name, chat.chat_type)
-        db.session.commit()
     if not indexed:
         with db.engine.begin() as conn:
             try:
@@ -366,7 +359,7 @@ _DM_LOCKS = {}
 
 def create_group(owner, name, description, member_ids, is_public=True):
     chat = Chat(chat_type='group', name=name, description=description, owner_id=owner.id,
-                is_public=is_public, username=generate_chat_username(name, 'group'))
+                is_public=is_public)
     db.session.add(chat)
     db.session.flush()
     db.session.add(ChatMember(chat_id=chat.id, user_id=owner.id, role='owner'))
@@ -379,7 +372,7 @@ def create_group(owner, name, description, member_ids, is_public=True):
 
 def create_channel(owner, name, description, is_public=True):
     chat = Chat(chat_type='channel', name=name, description=description, owner_id=owner.id,
-                is_public=is_public, username=generate_chat_username(name, 'channel'))
+                is_public=is_public)
     db.session.add(chat)
     db.session.flush()
     db.session.add(ChatMember(chat_id=chat.id, user_id=owner.id, role='owner'))
@@ -440,6 +433,8 @@ def snippet(content, msg_type='text'):
     if msg_type == 'file':
         return 'فایل'
     text = (content or '').replace('\n', ' ')
+    if msg_type == 'system':
+        return text[:60] + ('…' if len(text) > 60 else '')
     return text[:40] + ('…' if len(text) > 40 else '')
 
 
@@ -475,6 +470,7 @@ def unread_counts(user):
             Message.chat_id.in_(chat_ids),
             Message.deleted.is_(False),
             Message.sender_id != uid,
+            Message.msg_type != 'system',
         )
     ).all():
         if row.id in hidden_ids:
@@ -516,7 +512,9 @@ def unread_counts(user):
         last_text = ''
         if last:
             sender = next((m.user for m in members if m.user_id == last.sender_id), None)
-            if last.sender_id == uid:
+            if last.msg_type == 'system':
+                prefix = ''
+            elif last.sender_id == uid:
                 prefix = 'شما · ' if chat.chat_type != 'dm' else ''
             elif sender and chat.chat_type != 'dm':
                 prefix = f'{sender.public_name} · '

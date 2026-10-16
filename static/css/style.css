@@ -355,6 +355,13 @@ input, select, textarea { font-family: inherit; }
   border: 1px solid var(--line); padding: 4px 15px; border-radius: 999px; display: inline-block;
   backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
 }
+.sys-msg { text-align: center; margin: 8px 0; }
+.sys-msg span {
+  font-size: 12px; color: var(--muted); background: rgba(22, 22, 28, .92);
+  border: 1px solid var(--line); padding: 5px 15px; border-radius: 999px; display: inline-block;
+  max-width: 88%; line-height: 1.7;
+  backdrop-filter: blur(6px); -webkit-backdrop-filter: blur(6px);
+}
 .mrow { display: flex; align-items: flex-end; gap: 8px; margin-top: 2px; position: relative; flex-direction: row-reverse; justify-content: flex-start; }
 .mrow.who { margin-top: 10px; }
 .mrow.mine-row { flex-direction: row; justify-content: flex-start; }
@@ -803,6 +810,7 @@ input, select, textarea { font-family: inherit; }
 @keyframes flashRow { 0%, 60% { filter: brightness(1.5); } }
 
 .typing-bar { height: 20px; padding: 0 max(16px, calc((100% - var(--chat-max)) / 2)); font-size: 12px; color: var(--muted); display: flex; align-items: center; gap: 7px; }
+.typing-bar:empty { display: none; }
 .typing-dots { display: inline-flex; gap: 3px; }
 .typing-dots i { width: 5px; height: 5px; border-radius: 50%; background: var(--accent-2); animation: td 1s infinite; }
 .typing-dots i:nth-child(2) { animation-delay: .18s; }
