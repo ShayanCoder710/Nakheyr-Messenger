@@ -12,17 +12,53 @@ from config import ADMIN_USERNAME
 from sqlalchemy.orm import joinedload
 
 IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'heif', 'tiff'}
-VIDEO_EXT = {'mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'mpeg', 'mpg', 'ogv', 'ts'}
+VIDEO_EXT = {'mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'mpeg', 'mpg', 'ogv'}
 AUDIO_EXT = {'mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus', 'weba', 'wma', 'amr'}
 DOC_EXT = {'pdf', 'txt', 'md', 'csv', 'json', 'xml', 'log', 'rtf', 'doc', 'docx', 'odt',
            'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'epub'}
-ARCHIVE_EXT = {'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'}
-CODE_EXT = {'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'sh', 'c', 'cpp', 'h', 'hpp',
-            'java', 'go', 'rs', 'rb', 'php', 'sql', 'yml', 'yaml', 'toml', 'ini', 'kt', 'swift'}
+ARCHIVE_EXT = {'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'cab', 'iso', 'jar', 'war'}
+CODE_EXT = {
+    # وب
+    'html', 'htm', 'xhtml', 'css', 'scss', 'sass', 'less', 'styl', 'vue', 'svelte', 'astro',
+    'js', 'mjs', 'cjs', 'ts', 'mts', 'cts', 'jsx', 'tsx', 'jsonc', 'json5', 'webmanifest',
+    # اسکریپتی
+    'py', 'pyw', 'pyi', 'rb', 'rbw', 'php', 'phtml', 'pl', 'pm', 'lua', 'r', 'rmd', 'jl',
+    'tcl', 'awk', 'sed', 'vbs', 'vba', 'ps1', 'psm1',
+    # کامپایل‌شده
+    'c', 'h', 'cc', 'cpp', 'cxx', 'c++', 'hh', 'hpp', 'hxx', 'cs', 'go', 'rs', 'java',
+    'kt', 'kts', 'scala', 'sc', 'swift', 'm', 'mm', 'dart', 'nim', 'zig', 'v', 'd',
+    'f', 'f90', 'f95', 'for', 'pas', 'pp', 'groovy', 'gradle', 'clj', 'cljs', 'cljc',
+    'el', 'lisp', 'scm', 'rkt', 'ml', 'mli', 'hs', 'lhs', 'erl', 'hrl', 'ex', 'exs', 'eex', 'heex',
+    'fs', 'fsx', 'fsi', 'asm', 's', 'sol', 'mat', 'stan', 'pde', 'ino', 'qml', 'vala', 'vapi',
+    'hx', 'glsl', 'hlsl', 'wgsl', 'frag', 'vert', 'jsp', 'asp', 'aspx', 'cfm', 'ejs', 'hbs',
+    'pug', 'jade', 'njk', 'liquid', 'twig', 'mustache', 'haml', 'slim', 'erb', 'astro',
+    # شل و ابزارها
+    'sh', 'bash', 'zsh', 'fish', 'ksh', 'csh', 'bat', 'cmd', 'mk', 'cmake',
+    'tf', 'tfvars', 'hcl', 'bicep', 'nginx',
+    # کانفیگ و داده
+    'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf', 'properties', 'json', 'xml', 'env',
+    'sql', 'graphql', 'gql', 'proto', 'prisma', 'avsc',
+    # مستندات متنی
+    'tex', 'bib', 'rst', 'adoc', 'asciidoc', 'org', 'ipynb', 'gitignore', 'gitattributes',
+    'editorconfig', 'dockerignore',
+}
+# فایل‌های معروف بدون پسوند
+CODE_NAMES = {'makefile', 'dockerfile', 'jenkinsfile', 'rakefile', 'gemfile', 'procfile',
+              'vagrantfile', 'justfile', 'brewfile', 'cmakelists', 'license', 'readme',
+              'changelog', 'authors', 'notice', 'todo'}
 ALLOWED_EXT = IMAGE_EXT | VIDEO_EXT | AUDIO_EXT | DOC_EXT | ARCHIVE_EXT | CODE_EXT
 # فرمت‌هایی که نباید مستقیم (same-origin) اجرا شوند → به‌صورت دانلود فرستاده می‌شوند
-INLINE_UNSAFE_EXT = {'html', 'htm', 'xhtml', 'svg', 'js', 'mjs', 'xml', 'css'}
+INLINE_UNSAFE_EXT = {'html', 'htm', 'xhtml', 'svg', 'js', 'mjs', 'cjs', 'xml'}
 MAX_FILE_MB = 50
+
+
+def allowed_upload(filename):
+    name = (filename or '').strip()
+    if not name:
+        return False
+    ext = name.rsplit('.', 1)[-1].lower() if '.' in name else ''
+    return ext in ALLOWED_EXT or name.lower() in CODE_NAMES
+
 
 
 def kind_for(filename, mimetype=''):
@@ -227,8 +263,7 @@ def save_avatar(filename):
 
 
 def save_upload_file(file):
-    ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext not in ALLOWED_EXT:
+    if not allowed_upload(file.filename):
         return None
     if file.content_length and file.content_length > MAX_FILE_MB * 1024 * 1024:
         return None

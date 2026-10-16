@@ -133,8 +133,15 @@ function fileIcon(name) {
   if (['ppt', 'pptx', 'odp'].includes(ext)) return '📙';
   if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return '🎧';
   if (['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp'].includes(ext)) return '🎬';
-  if (['txt', 'md', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'toml'].includes(ext)) return '📄';
-  if (['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'sh', 'c', 'cpp', 'h', 'java', 'go', 'rs', 'rb', 'php', 'sql'].includes(ext)) return '💻';
+  if (['txt', 'md', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'toml', 'cfg', 'conf'].includes(ext)) return '📄';
+  const codeExt = ['py', 'pyw', 'js', 'mjs', 'cjs', 'ts', 'jsx', 'tsx', 'html', 'htm', 'css', 'scss', 'sass',
+    'less', 'sh', 'bash', 'zsh', 'bat', 'ps1', 'c', 'cc', 'cpp', 'cxx', 'h', 'hpp', 'cs', 'java', 'kt', 'kts',
+    'go', 'rs', 'rb', 'php', 'pl', 'lua', 'r', 'jl', 'swift', 'm', 'mm', 'dart', 'scala', 'sql', 'graphql',
+    'proto', 'prisma', 'vue', 'svelte', 'astro', 'hs', 'erl', 'ex', 'exs', 'clj', 'lisp', 'asm', 'sol', 'tex',
+    'ipynb', 'ino', 'qml', 'vala', 'hx', 'glsl', 'hlsl', 'wgsl', 'jsp', 'asp', 'aspx', 'ejs', 'hbs', 'pug',
+    'jade', 'njk', 'liquid', 'twig', 'mustache', 'haml', 'slim', 'erb', 'v', 'd', 'nim', 'zig'];
+  const codeNames = ['makefile', 'dockerfile', 'jenkinsfile', 'rakefile', 'gemfile', 'procfile', 'vagrantfile', 'cmakelists'];
+  if (codeExt.includes(ext) || codeNames.includes((name || '').toLowerCase())) return '💻';
   return '📎';
 }
 
