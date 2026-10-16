@@ -777,11 +777,13 @@ def api_mark_read():
         if user.id not in m.read_ids():
             m.set_read(user.id)
             changed = True
+    last_read_id = max((m.id for m in msgs), default=0)
     if changed and user.read_receipts:
         db.session.commit()
         for mid in chat_member_ids(chat.id):
             if mid != user.id:
-                socketio.emit('read_recept', {'chat_id': chat.id, 'user_id': user.id},
+                socketio.emit('read_recept', {'chat_id': chat.id, 'user_id': user.id,
+                                              'last_id': last_read_id},
                               room=f'user:{mid}')
     elif changed:
         db.session.commit()

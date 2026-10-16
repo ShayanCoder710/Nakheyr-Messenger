@@ -153,6 +153,12 @@ function fmtSize(n) {
   return (i === 0 ? n : n.toFixed(1)) + ' ' + u[i];
 }
 
+function tickIcon(seen) {
+  const id = seen ? 'bi-Seen' : 'bi-Sent';
+  const label = seen ? 'Seen-icon' : 'Sent-icon';
+  return `<svg width="14" height="14" viewBox="0 0 18 18" role="img" aria-label="${label}" style="--bi-color: var(--chat-icon-color);"><use href="#${id}"></use></svg>`;
+}
+
 function renderMsg(m) {
   if (m.deleted) return '';
   const url = esc(m.file_url || '');
@@ -181,10 +187,10 @@ function renderMsg(m) {
 
   const sender = m.sender_id ? getMember(m.sender_id) : { display_name: 'سیستم', avatar: '' };
   const mine = m.sender_id === window.ME.id;
-  const isText = m.msg_type === 'text';
   const hasImg = m.msg_type === 'image';
   const isMedia = hasImg || m.msg_type === 'video';
   const imgOnly = hasImg && !m.content;
+  const seen = mine && Array.isArray(m.read_by) && m.read_by.some(id => String(id) !== String(window.ME.id));
   const newGroup = String(m.sender_id) !== String(lastSenderOf(m.id));
   const groupTail = String(nextSenderOf(m.id)) !== String(m.sender_id);
   const reply = m.reply && !m.reply.deleted
@@ -205,7 +211,7 @@ function renderMsg(m) {
           ${unameLink}
           <span>${fmtTime(m.created_at)}</span>
           ${m.is_edited ? '<span class="edited">ویرایش شده</span>' : ''}
-          ${mine && (isText || isMedia) ? `<span class="ticks" data-mid="${m.id}">✓</span>` : ''}
+          ${mine ? `<span class="ticks" data-mid="${m.id}">${tickIcon(seen)}</span>` : ''}
         </div>
         <div class="reactions" data-mid="${m.id}">${reactionChips(m)}</div>
       </div>
@@ -2354,7 +2360,11 @@ S.on('chat_cleared', d => {
 
 S.on('read_recept', d => {
   if (d.chat_id !== currentChat) return;
-  document.querySelectorAll('.mrow .ticks').forEach(t => t.textContent = '✓✓');
+  const lastId = d.last_id || Infinity;
+  document.querySelectorAll('.mrow .ticks').forEach(t => {
+    const mid = +t.dataset.mid;
+    if (mid <= lastId) t.innerHTML = tickIcon(true);
+  });
 });
 
 S.on('typing', d => {

@@ -34,6 +34,7 @@
   --gold: #f0b34c;
   --green: #4ec06e;
   --me-accent: #e5393b;
+  --chat-icon-color: #FFFFFF;
   --radius: 16px;
   --ctl-h: 40px;
   --chat-max: 760px;
@@ -429,7 +430,8 @@ input, select, textarea { font-family: inherit; }
 .bubble .audio-card .aud { width: 100%; height: 34px; margin-top: 4px; }
 .bubble .img { cursor: zoom-in; }
 .m-meta { display: flex; align-items: center; gap: 6px; margin-top: 2px; color: var(--dim); font-size: 10.5px; line-height: 1.3; flex-wrap: wrap; }
-.m-meta .ticks { color: color-mix(in srgb, var(--me-accent) 20%, #fff 80%); font-weight: 900; }
+.m-meta .ticks { display: inline-flex; align-items: center; line-height: 0; }
+.m-meta .ticks svg { display: block; width: 14px; height: 14px; }
 .m-meta .edited { font-style: italic; }
 .msgs.selecting .mrow .bubble { cursor: pointer; }
 .mrow.sel-selected .bubble { outline: 2px solid var(--accent); outline-offset: 2px; box-shadow: 0 6px 20px -4px var(--accent-glow); }
