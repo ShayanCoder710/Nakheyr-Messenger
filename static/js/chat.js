@@ -297,6 +297,14 @@ function setHead() {
   joinBtn.style.display = 'none';
   repBtn.style.display = 'none';
   peerBtn.style.display = 'none';
+  if (c.is_notes) {
+    displayName = 'فضای شخصی';
+    subText = 'یادداشت‌ها و پیام‌های خودت';
+    headAv.innerHTML = '<img src="/static/icons/notes.svg" alt="">';
+    name.textContent = displayName;
+    sub.textContent = subText;
+    return;
+  }
   if (c.chat_type === 'dm') {
     const p = c.peer || {};
     displayName = p.display_name || c.name || 'کاربر';
@@ -522,10 +530,15 @@ window.addEventListener('popstate', () => {
 });
 
 function renderConvItem(it) {
-  const lock = (it.chat_type !== 'dm' && it.is_public === false) ? ' 🔒' : '';
-  const av = it.avatar
-    ? `<div class="avatar conv-av" style="border-radius:14px"><img src="${it.avatar}" alt=""></div>`
-    : `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
+  const lock = (it.chat_type !== 'dm' && !it.is_notes && it.is_public === false) ? ' 🔒' : '';
+  let av;
+  if (it.is_notes) {
+    av = `<div class="avatar conv-av" style="border-radius:14px"><img src="/static/icons/notes.svg" alt=""></div>`;
+  } else if (it.avatar) {
+    av = `<div class="avatar conv-av" style="border-radius:14px"><img src="${it.avatar}" alt=""></div>`;
+  } else {
+    av = `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
+  }
   return `
     <div class="conv ${it.chat_id === currentChat ? 'active' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}">
       ${av}
@@ -546,23 +559,47 @@ function loadConvList() {
   const seq = ++convSeq;
   fetch('/api/conversations').then(r => r.json()).then(j => {
     if (seq !== convSeq) return;
-    const byCat = { dm: [], group: [], channel: [] };
+    const byCat = { dm: [], group: [], channel: [], notes: [] };
     j.conversations.forEach(it => {
-      byCat[it.chat_type] = byCat[it.chat_type] || [];
-      byCat[it.chat_type].push(it);
+      const cat = it.is_notes ? 'notes' : it.chat_type;
+      byCat[cat] = byCat[cat] || [];
+      byCat[cat].push(it);
     });
-    for (const cat of ['dm', 'group', 'channel']) {
+    for (const cat of ['dm', 'group', 'channel', 'notes']) {
       const list = document.getElementById('convList' + cat.charAt(0).toUpperCase() + cat.slice(1));
-      list.innerHTML = byCat[cat].map(renderConvItem).join('')
-        || '<div class="conv-empty">—</div>';
+      if (!list) continue;
+      let html;
+      if (cat === 'notes') {
+        html = byCat.notes.map(renderConvItem).join('')
+          + (byCat.notes.length
+            ? ''
+            : `<button class="conv new-notes" id="newNotesBtn" title="فضای شخصی رو بساز">
+                 <span class="avatar conv-av" style="border-radius:14px"><img src="/static/icons/notes.svg" alt=""></span>
+                 <div class="body"><div class="row1"><b>فضای شخصی من</b></div><div class="row2"><span>یادداشت و پیام به خودت</span></div></div>
+               </button>`);
+      } else {
+        html = byCat[cat].map(renderConvItem).join('') || '<div class="conv-empty">—</div>';
+      }
+      list.innerHTML = html;
       const head = document.querySelector(`.conv-section-head[data-cat="${cat}"] span`);
-      if (head) {
+      if (head && cat !== 'notes') {
         if (!head.dataset.base) head.dataset.base = head.textContent;
         head.textContent = head.dataset.base + ' (' + byCat[cat].length + ')';
       }
     }
+    const nn = document.getElementById('newNotesBtn');
+    if (nn) nn.onclick = () => openNotes();
     setActiveConv(currentChat);
   });
+}
+
+let _notesChatId = null;
+async function openNotes() {
+  const r = await api('/api/notes', {});
+  if (!r.ok || !r.chat_id) { toast(r.error || 'خطا', 'error'); return; }
+  _notesChatId = r.chat_id;
+  openChat(r.chat_id);
+  refreshConvList();
 }
 
 function initConvHeads() {

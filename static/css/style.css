@@ -222,6 +222,7 @@ input, select, textarea { font-family: inherit; }
 .conv.active .row2 span { color: rgba(255, 255, 255, .7); }
 .conv.active time { color: rgba(255, 255, 255, .85); }
 .conv .avatar { width: 50px; height: 50px; font-size: 18px; }
+.conv.new-notes { background: none; border: none; font: inherit; color: inherit; width: 100%; text-align: inherit; }
 .conv .body { flex: 1; min-width: 0; }
 .conv .row1 { display: flex; justify-content: space-between; gap: 8px; align-items: baseline; }
 .conv .row1 b { font-size: 14.5px; font-weight: 700; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }

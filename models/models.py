@@ -91,6 +91,8 @@ class Chat(db.Model):
             'owner_id': self.owner_id,
             'is_public': bool(self.is_public),
         }
+        if current_user:
+            data['is_notes'] = bool(self.chat_type == 'dm' and self.members and all(m.user_id == getattr(current_user, 'id', 0) for m in self.members))
         if self.chat_type == 'dm' and current_user:
             uid = getattr(current_user, 'id', current_user)
             other = next((m.user for m in self.members if m.user_id != uid), None)

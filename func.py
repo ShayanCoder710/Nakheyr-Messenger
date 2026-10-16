@@ -272,8 +272,32 @@ def save_chat_avatar(owner, filename):
 def chat_display_name(chat, viewer):
     if chat.chat_type == 'dm':
         other = next((m.user for m in chat.members if m.user_id != viewer.id), None)
-        return other.display_name if other else 'گپ'
+        return other.display_name if other else 'ذخیره‌شده‌ها'
     return chat.name or 'گروه'
+
+
+def get_or_create_notes(user):
+    chat = Chat.query.filter(
+        Chat.chat_type == 'dm',
+        Chat.members.any(ChatMember.user_id == user.id),
+        ~Chat.members.any(ChatMember.user_id != user.id),
+    ).first()
+    if chat:
+        return chat, False
+    with _DM_LOCKS.setdefault(f'notes:{user.id}', threading.Lock()):
+        chat = Chat.query.filter(
+            Chat.chat_type == 'dm',
+            Chat.members.any(ChatMember.user_id == user.id),
+            ~Chat.members.any(ChatMember.user_id != user.id),
+        ).first()
+        if chat:
+            return chat, False
+        chat = Chat(chat_type='dm')
+        db.session.add(chat)
+        db.session.flush()
+        db.session.add(ChatMember(chat_id=chat.id, user_id=user.id))
+        db.session.commit()
+        return chat, True
 
 
 def snippet(content, msg_type='text'):
@@ -320,7 +344,8 @@ def unread_counts(user):
             prefix = (f'{sender.display_name} · ' if sender and chat.chat_type != 'dm' else '')
             last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
-        if chat.chat_type == 'dm':
+        is_notes = chat.chat_type == 'dm' and all(m.user_id == user.id for m in chat.members)
+        if chat.chat_type == 'dm' and not is_notes:
             other = next((m.user for m in chat.members if m.user_id != user.id), None)
             peer_username = other.username if other else ''
         out.append({
@@ -328,6 +353,7 @@ def unread_counts(user):
             'chat_type': chat.chat_type,
             'name': chat_display_name(chat, user),
             'peer_username': peer_username,
+            'is_notes': is_notes,
             'avatar': chat.avatar_url,
             'is_public': bool(chat.is_public),
             'owner_id': chat.owner_id,

@@ -14,7 +14,8 @@ from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
-    username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES
+    username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES,
+    get_or_create_notes
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -268,6 +269,14 @@ def api_dm():
     if is_blocked(user.id, peer.id):
         return jsonify(ok=False, error='تو یا کاربر مقابل، همدیگه رو بلاک کرده.')
     chat, created = get_or_create_dm(user, peer)
+    return jsonify(ok=True, chat_id=chat.id, created=created)
+
+
+@app.route('/api/notes', methods=['POST'])
+@require_auth
+def api_notes():
+    user = current_user()
+    chat, created = get_or_create_notes(user)
     return jsonify(ok=True, chat_id=chat.id, created=created)
 
 
