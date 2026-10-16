@@ -194,7 +194,7 @@ function renderMsg(m) {
   const hasImg = m.msg_type === 'image';
   const isMedia = hasImg || m.msg_type === 'video';
   const imgOnly = hasImg && !m.content;
-  const seen = mine && Array.isArray(m.read_by) && m.read_by.some(id => String(id) !== String(window.ME.id));
+  const seen = mine && window.ME.read_receipts !== false && Array.isArray(m.read_by) && m.read_by.some(id => String(id) !== String(window.ME.id));
   const newGroup = String(m.sender_id) !== String(lastSenderOf(m.id));
   const groupTail = String(nextSenderOf(m.id)) !== String(m.sender_id);
   const reply = m.reply && !m.reply.deleted
@@ -203,16 +203,17 @@ function renderMsg(m) {
   const fwd = m.fwd_from_name ? `<div class="fwd-tag">${bi('share')} فوروارد شده از <b>${esc(m.fwd_from_name)}</b></div>` : '';
   const pinTag = m.pinned ? `<span class="pin-tag">${bi('pin-angle-fill')} پین شده</span>` : '';
   const title = (!mine && sender.title) ? ` <span class="member-title" title="لقب در این گروه">${esc(sender.title)}</span>` : '';
-  const unameLink = (!mine && sender.username) ? ` <a class="u-link" data-u="${esc(sender.username)}" title="پیوی با ${esc(sender.display_name)}">@${esc(sender.username)}</a>` : '';
+  const isDm = !!(CD.chat && CD.chat.chat_type === 'dm');
+  const isChannel = !!(CD.chat && CD.chat.chat_type === 'channel');
+  const showSender = !mine && !isDm && !isChannel && newGroup;
   const html = `
     <div class="mrow ${mine ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
       ${mine ? '' : (groupTail ? `<span class="av-click" data-profile-user="${esc(sender.username || '')}">${avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm')}</span>` : '<div class="avatar sm ghost"></div>')}
       <div class="bubble ${mine ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
-        ${mine ? '' : (newGroup ? `<div class="sender-line">${esc(sender.display_name)}${title}</div>` : '')}
+        ${showSender ? `<div class="sender-line">${esc(sender.display_name)}${title}</div>` : ''}
         ${fwd}${reply}${body}
         <div class="m-meta">
           ${pinTag}
-          ${unameLink}
           <span>${fmtTime(m.created_at)}</span>
           ${m.is_edited ? '<span class="edited">ویرایش شده</span>' : ''}
           ${mine ? `<span class="ticks" data-mid="${m.id}">${tickIcon(seen)}</span>` : ''}
@@ -2530,6 +2531,7 @@ S.on('chat_cleared', d => {
 });
 
 S.on('read_recept', d => {
+  if (window.ME.read_receipts === false) return;
   if (d.chat_id !== currentChat) return;
   const lastId = d.last_id || Infinity;
   document.querySelectorAll('.mrow .ticks').forEach(t => {

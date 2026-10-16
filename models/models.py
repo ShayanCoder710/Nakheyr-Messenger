@@ -192,6 +192,17 @@ class Message(db.Model):
         except Exception:
             return []
 
+    def visible_read_ids(self):
+        ids = self.read_ids()
+        if not ids:
+            return []
+        hidden = {
+            u.id for u in User.query.filter(
+                User.id.in_(ids), User.read_receipts.is_(False)
+            ).all()
+        }
+        return [i for i in ids if i not in hidden]
+
     def set_read(self, user_id):
         ids = self.read_ids()
         if user_id not in ids:
@@ -216,7 +227,7 @@ class Message(db.Model):
             'reply_to': self.reply_to,
             'fwd_from_id': self.fwd_from_id,
             'fwd_from_name': self.fwd_from_name or '',
-            'read_by': self.read_ids(),
+            'read_by': self.visible_read_ids(),
             'created_at': self.created_at.isoformat(),
         }
         if self.reply_to:

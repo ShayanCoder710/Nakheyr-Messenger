@@ -169,7 +169,7 @@ def chat_page(chat_id):
     msgs = []
     for m in Message.query.filter_by(chat_id=chat.id, deleted=False).order_by(Message.id.desc()).limit(50).all()[::-1]:
         msgs.append(m.to_dict(user.id))
-    members = [m.user.to_public() for m in chat.members if m.user]
+    members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
     return render_template('chat.html', chat=chat, user=user, messages=msgs,
                            members=members, role=my_role_in(user, chat))
 

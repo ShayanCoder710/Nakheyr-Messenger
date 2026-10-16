@@ -208,7 +208,7 @@ input, select, textarea { font-family: inherit; }
 .ico-img { width: 20px; height: 20px; display: block; pointer-events: none; }
 .icon-btn:hover .ico-img, .icon-btn.active .ico-img { filter: brightness(1.7); }
 
-.search-box { padding: 12px 14px 8px; position: relative; }
+.search-box { padding: 12px 14px 8px; position: relative; z-index: 30; }
 .search-box .input {
   height: 42px; padding: 0 16px 0 44px; border-radius: 999px;
   background: var(--bg-3); border: 1px solid transparent; font-size: 13.5px;
@@ -219,7 +219,7 @@ input, select, textarea { font-family: inherit; }
   color: var(--dim); pointer-events: none;
 }
 .search-results {
-  position: absolute; top: calc(100% - 4px); right: 14px; left: 14px; z-index: 50;
+  position: absolute; top: calc(100% - 4px); right: 14px; left: 14px; z-index: 300;
   background: rgba(28, 28, 35, .96); border: 1px solid var(--line-2); border-radius: 18px;
   box-shadow: var(--shadow); max-height: 340px; overflow-y: auto; overflow-x: hidden; display: none;
   backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); padding: 6px;
