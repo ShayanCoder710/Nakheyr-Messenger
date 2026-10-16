@@ -20,6 +20,7 @@ class User(db.Model):
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)
+    read_receipts = db.Column(db.Boolean, default=True)
     status = db.Column(db.String(10), default='offline')
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     streak_days = db.Column(db.Integer, default=0)
@@ -47,6 +48,7 @@ class User(db.Model):
             'is_admin': self.is_admin,
             'is_verified': self.is_verified,
             'status': self.status,
+            'read_receipts': bool(self.read_receipts),
         }
 
     def to_self(self):
@@ -141,6 +143,8 @@ class Message(db.Model):
     deleted = db.Column(db.Boolean, default=False)
     pinned = db.Column(db.Boolean, default=False)
     reply_to = db.Column(db.Integer, nullable=True)
+    fwd_from_id = db.Column(db.Integer, nullable=True)
+    fwd_from_name = db.Column(db.String(60), default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     def react_dict(self):
@@ -180,6 +184,8 @@ class Message(db.Model):
             'deleted': self.deleted,
             'pinned': self.pinned,
             'reply_to': self.reply_to,
+            'fwd_from_id': self.fwd_from_id,
+            'fwd_from_name': self.fwd_from_name or '',
             'read_by': self.read_ids(),
             'created_at': self.created_at.isoformat(),
         }
@@ -194,6 +200,17 @@ class Message(db.Model):
                     'deleted': parent.deleted,
                 }
         return data
+
+
+class HiddenMessage(db.Model):
+    __tablename__ = 'hidden_messages'
+    __table_args__ = (db.UniqueConstraint('user_id', 'message_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=False, index=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
 
 class Block(db.Model):

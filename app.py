@@ -10,7 +10,7 @@ from flask_socketio import SocketIO, emit, join_room
 from sqlalchemy.orm import joinedload
 
 from config import MYSQL_CONFIG, SECRET_KEY
-from models.models import db, User, Chat, ChatMember, Message, Report, Block
+from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
@@ -487,6 +487,7 @@ def api_chat_delete(chat_id):
         if os.path.exists(p):
             os.remove(p)
     member_ids = chat_member_ids(chat.id)
+    HiddenMessage.query.filter_by(chat_id=chat.id).delete()
     db.session.delete(chat)
     try:
         db.session.commit()
@@ -605,6 +606,130 @@ def api_delete_message():
     return jsonify(ok=True)
 
 
+def _emit_new_message(m):
+    payload = m.to_dict(m.sender_id)
+    socketio.emit('new_message', payload, room=f'user:{m.sender_id}')
+    for mid in chat_member_ids(m.chat_id):
+        if mid != m.sender_id:
+            socketio.emit('new_message', payload, room=f'user:{mid}')
+    return payload
+
+
+def _can_write_chat(user, chat):
+    if user.is_admin:
+        return True
+    if chat.chat_type == 'dm':
+        return True
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first() and not chat.is_public:
+        return False
+    if chat.chat_type == 'channel':
+        role = my_role_in(user, chat)
+        return chat.owner_id == user.id or role == 'admin'
+    return True
+
+
+@app.route('/api/message/forward', methods=['POST'])
+@require_auth
+def api_forward_message():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    src = Message.query.get(int(data.get('message_id') or 0))
+    if not src or src.deleted:
+        return jsonify(ok=False, error='پیام پیدا نشد')
+    src_chat = Chat.query.get(src.chat_id)
+    if not src_chat or not can_view_chat(user, src_chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    target = Chat.query.get(int(data.get('chat_id') or 0))
+    if not target or not can_view_chat(user, target):
+        return jsonify(ok=False, error='گپ مقصد پیدا نشد')
+    if not _can_write_chat(user, target):
+        return jsonify(ok=False, error='دسترسی برای ارسال در مقصد نداری')
+    if target.chat_type == 'dm':
+        peer = next((m.user for m in target.members if m.user_id != user.id), None)
+        if peer and is_blocked(user.id, peer.id):
+            return jsonify(ok=False, error='کاربر رو بلاک کردی — اول بازش کن')
+    if target.chat_type != 'dm' and not ChatMember.query.filter_by(chat_id=target.id, user_id=user.id).first():
+        db.session.add(ChatMember(chat_id=target.id, user_id=user.id, role='member'))
+        db.session.flush()
+    sender = User.query.get(src.sender_id) if src.sender_id else None
+    m = Message(chat_id=target.id, sender_id=user.id, msg_type=src.msg_type,
+                content=src.content, file_name=src.file_name, file_path=src.file_path,
+                fwd_from_id=src.sender_id, fwd_from_name=(sender.display_name if sender else ''))
+    db.session.add(m)
+    db.session.commit()
+    payload = _emit_new_message(m)
+    return jsonify(ok=True, message=payload, chat_id=target.id)
+
+
+@app.route('/api/message/save', methods=['POST'])
+@require_auth
+def api_save_message():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    src = Message.query.get(int(data.get('message_id') or 0))
+    if not src or src.deleted:
+        return jsonify(ok=False, error='پیام پیدا نشد')
+    src_chat = Chat.query.get(src.chat_id)
+    if not src_chat or not can_view_chat(user, src_chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    chat, _ = get_or_create_notes(user)
+    sender = User.query.get(src.sender_id) if src.sender_id else None
+    m = Message(chat_id=chat.id, sender_id=user.id, msg_type=src.msg_type,
+                content=src.content, file_name=src.file_name, file_path=src.file_path,
+                fwd_from_id=src.sender_id, fwd_from_name=(sender.display_name if sender else ''))
+    db.session.add(m)
+    db.session.commit()
+    return jsonify(ok=True, chat_id=chat.id, message=m.to_dict(user.id))
+
+
+@app.route('/api/message/hide', methods=['POST'])
+@require_auth
+def api_hide_message():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    m = Message.query.get(int(data.get('message_id') or 0))
+    if not m:
+        abort(404)
+    if not HiddenMessage.query.filter_by(user_id=user.id, message_id=m.id).first():
+        db.session.add(HiddenMessage(user_id=user.id, chat_id=m.chat_id, message_id=m.id))
+        db.session.commit()
+    return jsonify(ok=True)
+
+
+@app.route('/api/chat/<int:chat_id>/clear', methods=['POST'])
+@require_auth
+def api_clear_history(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    data = request.get_json(silent=True) or {}
+    everyone = bool(data.get('for_everyone'))
+    role = my_role_in(user, chat)
+    if everyone:
+        allowed = user.is_admin or role in ('owner', 'admin') or chat.chat_type == 'dm'
+        if not allowed:
+            return jsonify(ok=False, error='فقط مدیر گپ می‌تونه برای همه پاک کنه')
+        msgs = Message.query.filter_by(chat_id=chat.id, deleted=False).all()
+        for m in msgs:
+            m.deleted = True
+            m.content = ''
+        db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_cleared', {'chat_id': chat.id}, room=f'user:{mid}')
+        return jsonify(ok=True, for_everyone=True, count=len(msgs))
+    existing = {row[0] for row in db.session.execute(
+        db.select(HiddenMessage.message_id).filter_by(user_id=user.id)
+    ).all()}
+    added = 0
+    for m in Message.query.filter_by(chat_id=chat.id, deleted=False).all():
+        if m.id not in existing:
+            db.session.add(HiddenMessage(user_id=user.id, chat_id=chat.id, message_id=m.id))
+            added += 1
+    db.session.commit()
+    return jsonify(ok=True, for_everyone=False, count=added)
+
+
 @app.route('/api/chat/<int:chat_id>/prefs', methods=['POST'])
 @require_auth
 def api_chat_prefs(chat_id):
@@ -640,12 +765,14 @@ def api_mark_read():
         if user.id not in m.read_ids():
             m.set_read(user.id)
             changed = True
-    if changed:
+    if changed and user.read_receipts:
         db.session.commit()
         for mid in chat_member_ids(chat.id):
             if mid != user.id:
                 socketio.emit('read_recept', {'chat_id': chat.id, 'user_id': user.id},
                               room=f'user:{mid}')
+    elif changed:
+        db.session.commit()
     return jsonify(ok=True)
 
 
@@ -717,6 +844,8 @@ def api_profile():
         user.bio = (data['bio'] or '').strip()[:200]
     if data.get('accent') and re.match(r'^#[0-9a-fA-F]{6}$', data['accent']):
         user.accent = data['accent']
+    if 'read_receipts' in data:
+        user.read_receipts = bool(data['read_receipts'])
     if 'username' in data:
         new_username = (data.get('username') or '').strip().lower()
         if not re.match(r'^[a-z0-9_]{3,30}$', new_username):
@@ -917,7 +1046,12 @@ def api_messages(chat_id):
     if not chat or not can_view_chat(user, chat):
         abort(404)
     before = request.args.get('before', type=int)
+    hidden = [row[0] for row in db.session.execute(
+        db.select(HiddenMessage.message_id).filter_by(user_id=user.id)
+    ).all()]
     q = Message.query.filter_by(chat_id=chat.id, deleted=False)
+    if hidden:
+        q = q.filter(~Message.id.in_(hidden))
     if before:
         q = q.filter(Message.id < before)
     msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]

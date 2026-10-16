@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
-from models.models import db, User, Chat, ChatMember, Message, Report, Block
+from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
 from config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_DISPLAY_NAME, ADMIN_BIO
 from sqlalchemy.orm import joinedload
 
@@ -67,6 +67,9 @@ def _ensure_columns():
         ('chats', 'username', "VARCHAR(30) NULL"),
         ('chat_members', 'muted', "BOOLEAN NOT NULL DEFAULT 0"),
         ('chat_members', 'archived', "BOOLEAN NOT NULL DEFAULT 0"),
+        ('messages', 'fwd_from_id', "INTEGER NULL"),
+        ('messages', 'fwd_from_name', "VARCHAR(60) NOT NULL DEFAULT ''"),
+        ('users', 'read_receipts', "BOOLEAN NOT NULL DEFAULT 1"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -349,14 +352,19 @@ def unread_counts(user):
         return []
     uid = user.id
     chat_ids = [c.id for c in chats]
+    hidden_ids = {row[0] for row in db.session.execute(
+        db.select(HiddenMessage.message_id).filter_by(user_id=uid)
+    ).all()}
     unread_by_chat = {}
     for row in db.session.execute(
-        db.select(Message.chat_id, Message.read_by).filter(
+        db.select(Message.id, Message.chat_id, Message.read_by).filter(
             Message.chat_id.in_(chat_ids),
             Message.deleted.is_(False),
             Message.sender_id != uid,
         )
     ).all():
+        if row.id in hidden_ids:
+            continue
         try:
             read_ids = json.loads(row.read_by or '[]')
         except Exception:
@@ -374,11 +382,14 @@ def unread_counts(user):
         members_by_chat.setdefault(m.chat_id, []).append(m)
         if m.user_id == user.id:
             my_member[m.chat_id] = m
+    last_q = db.select(db.func.max(Message.id)).filter(
+        Message.chat_id.in_(chat_ids),
+        Message.deleted.is_(False),
+    )
+    if hidden_ids:
+        last_q = last_q.filter(~Message.id.in_(hidden_ids))
     max_ids = [row[0] for row in db.session.execute(
-        db.select(db.func.max(Message.id)).filter(
-            Message.chat_id.in_(chat_ids),
-            Message.deleted.is_(False),
-        ).group_by(Message.chat_id)
+        last_q.group_by(Message.chat_id)
     ).all()]
     lasts = {}
     if max_ids:
@@ -478,6 +489,12 @@ def delete_user_account(uid, reassign_to=None):
     if msg_ids:
         Report.query.filter(Report.message_id.in_(msg_ids)).update(
             {'message_id': None}, synchronize_session=False)
+        HiddenMessage.query.filter(HiddenMessage.message_id.in_(msg_ids)).delete(
+            synchronize_session=False)
+    if dm_chat_ids:
+        HiddenMessage.query.filter(HiddenMessage.chat_id.in_(dm_chat_ids)).delete(
+            synchronize_session=False)
+    HiddenMessage.query.filter_by(user_id=uid).delete(synchronize_session=False)
     Chat.query.filter_by(owner_id=uid).update({'owner_id': reassign_to}, synchronize_session=False)
     if dm_chat_ids:
         for c in Chat.query.filter(Chat.id.in_(dm_chat_ids)).all():

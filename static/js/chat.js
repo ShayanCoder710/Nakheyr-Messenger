@@ -129,6 +129,7 @@ function renderMsg(m) {
   const reply = m.reply && !m.reply.deleted
     ? `<div class="reply-ref" data-goto="${m.reply.id}"><b>${esc((getMember(m.reply.sender_id) || {}).display_name || 'کاربر')}</b> ${esc(m.reply.content || '(تصویر/فایل)')}</div>`
     : '';
+  const fwd = m.fwd_from_name ? `<div class="fwd-tag">↪ فوروارد شده از <b>${esc(m.fwd_from_name)}</b></div>` : '';
   const pinTag = m.pinned ? '<span class="pin-tag">📌 پین شده</span>' : '';
   const title = (!mine && sender.title) ? ` <span class="member-title" title="لقب در این گروه">${esc(sender.title)}</span>` : '';
   const unameLink = (!mine && sender.username) ? ` <a class="u-link" data-u="${esc(sender.username)}" title="پیوی با ${esc(sender.display_name)}">@${esc(sender.username)}</a>` : '';
@@ -137,7 +138,7 @@ function renderMsg(m) {
       ${mine ? '' : (groupTail ? avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm') : '<div class="avatar sm ghost"></div>')}
       <div class="bubble ${mine ? 'me' : ''} ${hasImg ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
         ${mine ? '' : (newGroup ? `<div class="sender-line">${esc(sender.display_name)}${sender.is_verified ? ' ✔' : ''}${title}</div>` : '')}
-        ${reply}${body}
+        ${fwd}${reply}${body}
         <div class="m-meta">
           ${pinTag}
           ${unameLink}
@@ -868,6 +869,70 @@ document.addEventListener('click', e => {
   }
 });
 
+let _fwdMid = null;
+async function openForward(mid) {
+  _fwdMid = mid;
+  const modal = document.getElementById('fwdModal');
+  const list = document.getElementById('fwdList');
+  list.innerHTML = '<small style="color:var(--dim)">در حال بارگذاری…</small>';
+  modal.classList.add('show');
+  const j = await fetch('/api/conversations').then(r => r.json()).catch(() => null);
+  if (!j) { list.innerHTML = '<small style="color:var(--dim)">بارگذاری نشد</small>'; return; }
+  const convs = j.conversations || [];
+  if (!convs.length) { list.innerHTML = '<small style="color:var(--dim)">هنوز گپی نداری</small>'; return; }
+  const kindFa = c => c.chat_type === 'dm' ? (c.is_notes ? 'پیام‌های ذخیره‌شده' : 'گفتگو') : c.chat_type === 'group' ? 'گروه' : 'کانال';
+  list.innerHTML = convs.map(c => `
+    <div class="fwd-row" data-cid="${c.chat_id}">
+      <span class="avatar sm">${avatarInner(c.name, c.avatar)}</span>
+      <div class="blk-id"><b>${esc(c.name)}</b><small>${kindFa(c)}</small></div>
+    </div>`).join('');
+  list.querySelectorAll('[data-cid]').forEach(b => b.onclick = () => doForward(+b.dataset.cid));
+}
+
+async function doForward(chatId) {
+  if (!_fwdMid) return;
+  const r = await api('/api/message/forward', { message_id: _fwdMid, chat_id: chatId });
+  document.getElementById('fwdModal').classList.remove('show');
+  if (r.ok) {
+    toast('فوروارد شد');
+    refreshConvList();
+  } else toast(r.error, 'error');
+}
+
+function removeMsgRow(mid) {
+  const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`);
+  if (!wrapper) return;
+  const target = wrapper.classList.contains('mrow') ? wrapper : (wrapper.querySelector('.mrow') || wrapper);
+  target.remove();
+}
+
+function hideForMe(mid) {
+  removeMsgRow(mid);
+  const arr = CD.initialMessages || [];
+  const i = arr.findIndex(x => x.id === mid);
+  if (i > -1) arr.splice(i, 1);
+  api('/api/message/hide', { message_id: mid }).then(j => { if (!j.ok) toast(j.error || 'حذف نشد', 'error'); });
+}
+
+function clearHistory(chatId) {
+  const run = forEveryone => api('/api/chat/' + chatId + '/clear', { for_everyone: forEveryone }).then(j => {
+    if (!j.ok) return toast(j.error, 'error');
+    toast(forEveryone ? 'تاریخچه برای همه پاک شد' : 'تاریخچه پاک شد');
+    if (currentChat === chatId) {
+      CD.initialMessages = [];
+      renderAllMessages();
+      document.getElementById('pinnedBar').style.display = 'none';
+    }
+    refreshConvList();
+  });
+  showCtxMenu(window.innerWidth / 2, window.innerHeight / 2, [
+    { label: 'پاک کردن برای من', icon: '🙈', fn: () => run(false) },
+    { label: 'پاک کردن برای همه', icon: '🧹', danger: true, fn: () => openConfirm('پاک کردن تاریخچه', 'همه‌ی پیام‌های این گپ برای همه پاک می‌شه. این کار قابل بازگشت نیست', () => run(true), 'پاک کن') },
+  ]);
+}
+
+document.getElementById('fwdCancel').onclick = () => document.getElementById('fwdModal').classList.remove('show');
+
 function toggleSelect(mid) {
   if (selectedIds.has(mid)) selectedIds.delete(mid);
   else selectedIds.add(mid);
@@ -1546,8 +1611,24 @@ function openProfilePage() {
     prev.style.display = 'none';
   }
   document.getElementById('pmAvClear').style.display = window.ME.avatar ? 'inline-flex' : 'none';
+  const rr = document.getElementById('pmReadReceipts');
+  if (rr) rr.checked = window.ME.read_receipts !== false;
   loadBlocks();
 }
+
+const pmRR = document.getElementById('pmReadReceipts');
+if (pmRR) pmRR.onchange = e => {
+  const on = e.target.checked;
+  api('/api/profile', { read_receipts: on }).then(j => {
+    if (j.ok) {
+      window.ME.read_receipts = on;
+      toast(on ? 'تیک خوانده‌شدن روشن شد' : 'تیک خوانده‌شدن خاموش شد');
+    } else {
+      e.target.checked = !on;
+      toast(j.error, 'error');
+    }
+  });
+};
 
 async function loadBlocks() {
   const box = document.getElementById('pmBlocks');
@@ -1823,6 +1904,13 @@ document.addEventListener('contextmenu', e => {
     showCtxMenu(e.clientX, e.clientY, [
       { label: 'واکنش بده', icon: '🙂', fn: () => openEmojiPicker(mid, e.clientX, e.clientY) },
       { label: 'پاسخ', icon: '↩', fn: () => openReply(mid) },
+      { label: 'فوروارد', icon: '↪', fn: () => openForward(mid) },
+      { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: '🔖', fn: () => {
+        api('/api/message/save', { message_id: mid }).then(j => {
+          if (j.ok) toast('در پیام‌های ذخیره‌شده ذخیره شد');
+          else toast(j.error, 'error');
+        });
+      } },
       m.content ? { label: 'کپی متن', icon: '📋', fn: () => {
         copyText(m.content).then(() => toast('کپی شد')).catch(() => toast('کپی نشد', 'error'));
       } } : null,
@@ -1838,6 +1926,7 @@ document.addEventListener('contextmenu', e => {
         const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
         if (row) editMessage(mid, row);
       } } : null,
+      { label: 'حذف برای من', icon: '🙈', danger: true, fn: () => hideForMe(mid) },
       (mine || window.ME.is_admin) ? { label: 'حذف پیام', icon: '🗑', danger: true, fn: () => {
         localDeleteMid(mid);
         api('/api/message/delete', { message_id: mid }).then(j => {
@@ -1878,6 +1967,7 @@ document.addEventListener('contextmenu', e => {
           else toast(j.error, 'error');
         });
       } },
+      { label: 'پاک کردن تاریخچه', icon: '🧹', danger: true, fn: () => clearHistory(chatId, isDm) },
       !isDm ? { label: 'تنظیمات گپ', icon: '⚙', fn: () => openChat(chatId).then(openSettings) } : null,
       !isDm && CD.chat && +CD.chat.id === chatId && CD.role && CD.role !== 'owner' ? {
         label: 'ترک گروه / کانال', icon: '🚪', danger: true, fn: () => {
@@ -2043,6 +2133,15 @@ S.on('message_deleted', d => {
     const target = row ? row.closest('#m' + d.message_id) || row : wrapper;
     target.remove();
   }
+});
+
+S.on('chat_cleared', d => {
+  if (d.chat_id === currentChat) {
+    CD.initialMessages = [];
+    renderAllMessages();
+    document.getElementById('pinnedBar').style.display = 'none';
+  }
+  refreshConvList();
 });
 
 S.on('read_recept', d => {
