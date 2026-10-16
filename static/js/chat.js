@@ -341,6 +341,38 @@ function attachMore() {
   });
 }
 
+function shortSnippet(m) {
+  const t = m.msg_type;
+  if (t === 'image') return 'تصویر';
+  if (t === 'video') return 'ویدیو';
+  if (t === 'audio') return 'پیام صوتی';
+  if (t === 'file') return 'فایل';
+  const text = (m.content || '').replace(/\n/g, ' ');
+  return text.slice(0, 40) + (text.length > 40 ? '…' : '');
+}
+
+function updateConvPreview(m) {
+  if (!m || !m.chat_id) return;
+  const el = document.querySelector('.conv[data-chat-id="' + m.chat_id + '"]');
+  if (!el) { refreshConvList(); return; }
+  const mine = m.sender_id === window.ME.id;
+  let prefix = '';
+  if (el.dataset.type !== 'dm') {
+    if (mine) prefix = 'شما · ';
+    else {
+      const mm = (CD.members || []).find(x => x.id === m.sender_id);
+      if (!mm) { refreshConvList(); return; }
+      prefix = (mm.display_name || 'کاربر') + ' · ';
+    }
+  }
+  const row2 = el.querySelector('.row2 span');
+  if (row2) row2.textContent = prefix + shortSnippet(m);
+  const time = el.querySelector('time');
+  if (time) time.textContent = fmtTime(m.created_at);
+  const list = el.parentElement;
+  if (list && list.firstElementChild !== el) list.insertBefore(el, list.firstElementChild);
+}
+
 function appendMsg(m) {
   const body = document.getElementById('msgsBody');
   if (document.getElementById('m' + m.id)) { registerMessage(m); return; }
@@ -349,7 +381,7 @@ function appendMsg(m) {
   const own = m.sender_id === window.ME.id;
   body.insertAdjacentHTML('beforeend', `<div id="m${m.id}">${renderMsg(m)}</div>`);
   scrollToBottom(own);
-  refreshConvList();
+  updateConvPreview(m);
   if (selecting) syncSelection();
 }
 
@@ -2438,14 +2470,14 @@ S.on('new_message', m => {
     const row = document.querySelector(`#m${m.id}`);
     if (row) row.outerHTML = '<div id="m' + m.id + '">' + renderMsg(m) + '</div>';
     else appendMsg(m);
-    refreshConvList();
+    updateConvPreview(m);
     return;
   }
   if (m.chat_id === currentChat) {
     appendMsg(m);
     api('/api/mark-read', { chat_id: m.chat_id });
   } else {
-    refreshConvList();
+    updateConvPreview(m);
   }
 });
 
