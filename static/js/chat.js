@@ -963,6 +963,7 @@ async function bulkDelete() {
     CD.initialMessages = (await rr.json()).messages;
     document.getElementById('msgsBody').innerHTML = '';
     renderAllMessages();
+    attachMore();
   } else toast(r.error, 'error');
 }
 
@@ -1793,6 +1794,7 @@ if (CD.chat) {
   loadPinned();
   refreshConvList();
   setChatted(true);
+  attachMore();
 } else {
   refreshConvList();
 }
@@ -1824,6 +1826,7 @@ async function resyncCurrentChat() {
     setHead();
     document.getElementById('msgsBody').innerHTML = '';
     renderAllMessages();
+    attachMore();
     if (wasBottom) scrollToBottom(true);
     loadPinned();
   } catch (e) {}
