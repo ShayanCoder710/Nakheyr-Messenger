@@ -7,6 +7,7 @@ from flask import (
     flash, abort, jsonify, send_from_directory
 )
 from flask_socketio import SocketIO, emit, join_room
+from sqlalchemy.orm import joinedload
 
 from config import MYSQL_CONFIG, SECRET_KEY
 from models.models import db, User, Chat, ChatMember, Message, Report, Block
@@ -40,11 +41,16 @@ with app.app_context():
 
 @app.before_request
 def touch_online():
+    if request.endpoint == 'static':
+        return
     user = current_user()
     if not user or user.is_banned:
         return
+    now = datetime.utcnow()
+    if user.status == 'online' and user.last_seen and (now - user.last_seen).total_seconds() < 20:
+        return
     user.status = 'online'
-    user.last_seen = datetime.utcnow()
+    user.last_seen = now
     try:
         db.session.commit()
     except Exception:
@@ -79,16 +85,8 @@ def my_role_in(user, chat):
 @require_auth
 def home():
     user = current_user()
-    items = unread_counts(user)
-    seen = set()
-    contacts = []
-    for c in user_chats(user.id):
-        for m in c.members:
-            if m.user and m.user.id != user.id and m.user.id not in seen:
-                seen.add(m.user.id)
-                contacts.append(m.user.to_public())
-    return render_template('chat.html', chat=None, user=user, items=items,
-                           contacts=contacts, messages=[], members=[], role=None, game=None)
+    return render_template('chat.html', chat=None, user=user,
+                           messages=[], members=[], role=None)
 
 
 @app.route('/login', methods=['GET', 'POST'])
@@ -160,7 +158,10 @@ def logout():
 @require_auth
 def chat_page(chat_id):
     user = current_user()
-    chat = Chat.query.get(chat_id)
+    chat = db.session.execute(
+        db.select(Chat).where(Chat.id == chat_id)
+        .options(joinedload(Chat.members).joinedload(ChatMember.user))
+    ).scalars().first()
     if not chat or not can_view_chat(user, chat):
         abort(404)
     msgs = []
@@ -168,11 +169,7 @@ def chat_page(chat_id):
         msgs.append(m.to_dict(user.id))
     members = [m.user.to_public() for m in chat.members if m.user]
     return render_template('chat.html', chat=chat, user=user, messages=msgs,
-                           members=members, role=my_role_in(user, chat),
-                           items=unread_counts(user),
-                           contacts=[m.user.to_public() for c in user_chats(user.id)
-                                     for m in c.members
-                                     if m.user and m.user.id != user.id])
+                           members=members, role=my_role_in(user, chat))
 
 
 @app.route('/chat/<username>')
@@ -738,7 +735,7 @@ def api_avatar():
 
 @app.route('/files/avatar/<path:fname>')
 def static_avatar(fname):
-    return send_from_directory(app.config['AVATAR_DIR'], fname)
+    return send_from_directory(app.config['AVATAR_DIR'], fname, max_age=31536000)
 
 
 @app.route('/files/<path:fname>')
@@ -755,7 +752,7 @@ def static_files(fname):
         abort(403)
     if not (uid_part.isdigit() and int(uid_part) == user.id) and not user.is_admin:
         abort(403)
-    return send_from_directory(app.config['UPLOAD_DIR'], fname)
+    return send_from_directory(app.config['UPLOAD_DIR'], fname, max_age=31536000)
 
 
 @app.route('/api/message/pin', methods=['POST'])

@@ -1,3 +1,4 @@
+import json
 import os
 import re
 import secrets
@@ -7,6 +8,7 @@ from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
 from models.models import db, User, Chat, ChatMember, Message, Report, Block
+from sqlalchemy.orm import joinedload
 
 IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'}
 ALLOWED_EXT = IMAGE_EXT | {
@@ -269,9 +271,10 @@ def save_chat_avatar(owner, filename):
     return fname
 
 
-def chat_display_name(chat, viewer):
+def chat_display_name(chat, viewer, members=None):
     if chat.chat_type == 'dm':
-        other = next((m.user for m in chat.members if m.user_id != viewer.id), None)
+        ms = chat.members if members is None else members
+        other = next((m.user for m in ms if m.user_id != viewer.id), None)
         return other.display_name if other else 'ذخیره‌شده‌ها'
     return chat.name or 'گروه'
 
@@ -327,31 +330,61 @@ def user_chats(user_id):
 
 
 def unread_counts(user):
-    out = []
-    for chat in user_chats(user.id):
-        msgs = Message.query.filter(
-            Message.chat_id == chat.id,
+    chats = user_chats(user.id)
+    if not chats:
+        return []
+    uid = user.id
+    chat_ids = [c.id for c in chats]
+    unread_by_chat = {}
+    for row in db.session.execute(
+        db.select(Message.chat_id, Message.read_by).filter(
+            Message.chat_id.in_(chat_ids),
             Message.deleted.is_(False),
-            Message.sender_id != user.id,
-        ).all()
-        unread = sum(1 for m in msgs if user.id not in m.read_ids())
-        last = Message.query.filter(
-            Message.chat_id == chat.id, Message.deleted.is_(False)
-        ).order_by(Message.id.desc()).first()
+            Message.sender_id != uid,
+        )
+    ).all():
+        try:
+            read_ids = json.loads(row.read_by or '[]')
+        except Exception:
+            read_ids = []
+        if uid not in read_ids:
+            unread_by_chat[row.chat_id] = unread_by_chat.get(row.chat_id, 0) + 1
+    members_by_chat = {}
+    mem_rows = db.session.execute(
+        db.select(ChatMember)
+        .where(ChatMember.chat_id.in_(chat_ids))
+        .options(joinedload(ChatMember.user))
+    ).scalars().all()
+    for m in mem_rows:
+        members_by_chat.setdefault(m.chat_id, []).append(m)
+    max_ids = [row[0] for row in db.session.execute(
+        db.select(db.func.max(Message.id)).filter(
+            Message.chat_id.in_(chat_ids),
+            Message.deleted.is_(False),
+        ).group_by(Message.chat_id)
+    ).all()]
+    lasts = {}
+    if max_ids:
+        for m in Message.query.filter(Message.id.in_(max_ids)).all():
+            lasts[m.chat_id] = m
+    out = []
+    for chat in chats:
+        members = members_by_chat.get(chat.id, [])
+        last = lasts.get(chat.id)
         last_text = ''
         if last:
-            sender = next((m.user for m in chat.members if m.user_id == last.sender_id), None)
+            sender = next((m.user for m in members if m.user_id == last.sender_id), None)
             prefix = (f'{sender.display_name} · ' if sender and chat.chat_type != 'dm' else '')
             last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
-        is_notes = chat.chat_type == 'dm' and all(m.user_id == user.id for m in chat.members)
+        is_notes = chat.chat_type == 'dm' and all(m.user_id == uid for m in members)
         if chat.chat_type == 'dm' and not is_notes:
-            other = next((m.user for m in chat.members if m.user_id != user.id), None)
+            other = next((m.user for m in members if m.user_id != uid), None)
             peer_username = other.username if other else ''
         out.append({
             'chat_id': chat.id,
             'chat_type': chat.chat_type,
-            'name': chat_display_name(chat, user),
+            'name': chat_display_name(chat, user, members),
             'peer_username': peer_username,
             'is_notes': is_notes,
             'avatar': chat.avatar_url,
@@ -359,7 +392,7 @@ def unread_counts(user):
             'owner_id': chat.owner_id,
             'last': last_text,
             'last_at': last.created_at.isoformat() if last else '',
-            'unread': unread,
+            'unread': unread_by_chat.get(chat.id, 0),
         })
     out.sort(key=lambda x: x['last_at'], reverse=True)
     return out

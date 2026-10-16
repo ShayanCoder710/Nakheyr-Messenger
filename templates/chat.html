@@ -333,7 +333,6 @@ window.CHAT_DATA = {
   chat: {{ chat.to_public(me) | tojson if chat else 'null' }},
   role: {{ role | tojson }},
   members: {{ members | tojson }},
-  contacts: {{ contacts | tojson }},
   initialMessages: {{ messages | tojson }}
 };
 window.CURRENT_CHAT = {{ chat.id | tojson if chat else 'null' }};
