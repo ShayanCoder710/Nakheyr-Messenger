@@ -924,6 +924,40 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
 .mi-time { margin-inline-start: auto; color: var(--dim); }
 .mi-body { font-size: 13px; line-height: 1.8; word-break: break-word; white-space: pre-wrap; }
 
+.side-toggle { transition: background .16s ease; }
+.side-toggle svg { transition: transform .2s ease; }
+.side-search-btn { display: none; }
+.side-title {
+  flex: 1; min-width: 0; text-align: center; font-weight: 800; font-size: 16.5px;
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+
+@media (min-width: 861px) {
+  .sidebar { transition: width .2s ease; }
+  .sidebar.collapsed { width: 78px; }
+  .sidebar.collapsed .side-title,
+  .sidebar.collapsed .search-box,
+  .sidebar.collapsed .conv-section-head,
+  .sidebar.collapsed .conv .body,
+  .sidebar.collapsed .conv-empty,
+  .sidebar.collapsed .fab-menu { display: none; }
+  .sidebar.collapsed .side-head { flex-direction: column; gap: 8px; padding: 12px 0; }
+  .sidebar.collapsed #sideToggle { order: -1; }
+  .sidebar.collapsed .side-head .avatar { width: 42px; height: 42px; }
+  .sidebar.collapsed .side-toggle svg { transform: scaleX(-1); }
+  .sidebar.collapsed .conv-sections { padding: 6px 10px 88px; }
+  .sidebar.collapsed .conv { justify-content: center; padding: 8px 0; }
+  .sidebar.collapsed .conv .conv-av { width: 44px; height: 44px; font-size: 16px; }
+  .sidebar.collapsed .conv + .conv::before { display: none; }
+  .sidebar.collapsed .conv.active { box-shadow: inset 0 0 0 2px rgba(229, 57, 59, .5); }
+  .sidebar.collapsed .conv[data-unread]:not([data-unread="0"]) .conv-av::after {
+    content: ''; position: absolute; top: -3px; right: -3px;
+    width: 12px; height: 12px; border-radius: 50%; background: var(--accent);
+    border: 2px solid var(--panel); box-sizing: border-box;
+  }
+  .sidebar.collapsed .fab-wrap { left: 50%; right: auto; transform: translateX(-50%); }
+}
+
 @media (max-width: 900px) {
   .sidebar { width: 310px; }
   .bubble { max-width: 78%; }
@@ -944,7 +978,10 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
   .icon-btn { width: 36px; height: 36px; font-size: 15px; }
   .side-head { padding: 10px 12px; gap: 10px; }
   .side-head .avatar { width: 38px; height: 38px; }
-  .search-box { padding: 10px 10px 4px; }
+  .side-toggle { display: none; }
+  .side-search-btn { display: grid; }
+  .search-box { display: none; padding: 10px 10px 4px; }
+  .sidebar.search-open .search-box { display: block; animation: fadeIn .14s ease; }
   .search-ico { top: 20px; left: 21px; }
   .search-box .input { padding-left: 38px; }
   .conv { padding: 9px 10px; }

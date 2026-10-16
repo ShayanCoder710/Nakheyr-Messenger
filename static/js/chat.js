@@ -19,6 +19,35 @@ let typingTimers = {};
 let typingSent = false;
 let typingSelfTimer = null;
 
+const sideEl = document.querySelector('.sidebar');
+const sideToggleBtn = document.getElementById('sideToggle');
+const SIDE_KEY = 'nakheyr_side_collapsed';
+function setSideCollapsed(v) {
+  if (!sideEl) return;
+  sideEl.classList.toggle('collapsed', v);
+  if (sideToggleBtn) sideToggleBtn.title = v ? 'باز کردن سایدبار' : 'جمع کردن سایدبار';
+}
+if (sideEl && sideToggleBtn) {
+  setSideCollapsed(localStorage.getItem(SIDE_KEY) === '1');
+  sideToggleBtn.onclick = e => {
+    e.stopPropagation();
+    const v = !sideEl.classList.contains('collapsed');
+    setSideCollapsed(v);
+    try { localStorage.setItem(SIDE_KEY, v ? '1' : '0'); } catch (_) {}
+  };
+}
+const sideSearchBtn = document.getElementById('sideSearchBtn');
+if (sideEl && sideSearchBtn) {
+  sideSearchBtn.onclick = e => {
+    e.stopPropagation();
+    const open = sideEl.classList.toggle('search-open');
+    if (open) {
+      const inp = document.getElementById('searchInput');
+      if (inp) inp.focus();
+    }
+  };
+}
+
 function api(path, body) {
   return fetch(path, {
     method: 'POST',
@@ -545,7 +574,7 @@ function renderConvItem(it) {
   }
   const muteIco = it.muted ? '<span class="conv-mute" title="بی‌صدا">🔕</span>' : '';
   return `
-    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}">
+    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}" data-unread="${it.unread || 0}">
       ${av}
       <div class="body">
         <div class="row1"><b>${esc(it.name)}${lock}</b><span class="conv-meta">${muteIco}<time>${fmtTime(it.last_at)}</time></span></div>
