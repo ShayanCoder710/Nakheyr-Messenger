@@ -4,7 +4,6 @@ function buildUserActions(tr, uid, s) {
   const defs = [
     ['ban', s.is_banned ? 'رفع مسدود' : 'مسدودسازی', s.is_banned ? 'primary' : 'danger'],
     ['admin', s.is_admin ? 'سلب ادمین' : 'ادمین کردن', ''],
-    ['verify', s.is_verified ? 'سلب ✔' : 'اعتمادسنجی', ''],
     ['messages', '💬 پیام‌ها', ''],
     ['delete', '🗑 حذف اکانت', 'danger'],
   ];
@@ -43,9 +42,8 @@ function handleUserAction(btn) {
       const s = j.state;
       let badge = '';
       if (s.is_admin) badge += '<span class="badge red">ادمین</span>';
-      if (s.is_verified) badge += '<span class="badge gold">✔</span>';
       if (s.is_banned) badge += '<span class="badge">مسدود</span>';
-      if (!s.is_admin && !s.is_verified && !s.is_banned) badge += '<span class="badge green">فعال</span>';
+      if (!s.is_admin && !s.is_banned) badge += '<span class="badge green">فعال</span>';
       tr.children[1].innerHTML = badge;
       buildUserActions(tr, uid, s);
       toast('انجام شد');
@@ -69,7 +67,7 @@ function renderMsgs(list, showSender) {
   box.innerHTML = list.map(m => `
     <div class="msg-item${m.deleted ? ' del' : ''}">
       <div class="mi-top">
-        ${showSender ? '<b>' + esc(m.sender || '') + '</b><small>@' + esc(m.sender_username || '') + '</small>' : ''}
+        ${showSender ? '<b>' + esc(m.sender || '') + '</b>' + (m.sender_username ? '<small>@' + esc(m.sender_username) + '</small>' : '') : ''}
         <span class="mi-chat">${esc(m.chat || '')}</span>
         <span class="mi-time">${esc(m.created_at || '')}</span>
       </div>
@@ -91,18 +89,6 @@ function openUserMessages(uid, tr) {
     .catch(() => toast('خطا', 'error'));
 }
 
-document.getElementById('btnAllMsgs').onclick = () => {
-  openMsgModal('پیام‌های اخیر پلتفرم', 'در حال بارگذاری…');
-  fetch('/admin/messages')
-    .then(r => r.json())
-    .then(j => {
-      if (!j.ok) return toast(j.error, 'error');
-      document.getElementById('msgSub').textContent = j.messages.length + ' پیام آخر';
-      renderMsgs(j.messages, true);
-    })
-    .catch(() => toast('خطا', 'error'));
-};
-
 document.getElementById('msgClose').onclick = () => document.getElementById('msgModal').classList.remove('show');
 document.getElementById('msgX').onclick = () => document.getElementById('msgModal').classList.remove('show');
 document.getElementById('msgModal').addEventListener('click', e => {
@@ -112,10 +98,24 @@ document.addEventListener('keydown', e => {
   if (e.key === 'Escape') document.getElementById('msgModal').classList.remove('show');
 });
 
+function openReportConversation(rid) {
+  openMsgModal('گفتگوی گزارش‌شده', 'در حال بارگذاری…');
+  fetch(`/admin/report/${rid}/conversation`)
+    .then(r => r.json())
+    .then(j => {
+      if (!j.ok) return toast(j.error, 'error');
+      document.getElementById('msgSub').textContent =
+        (j.reporter || '') + ' ↔ ' + (j.reported || '') + ' · ' + j.messages.length + ' پیام';
+      renderMsgs(j.messages, true);
+    })
+    .catch(() => toast('خطا', 'error'));
+}
+
 function handleReportAction(btn) {
   const item = btn.closest('.report-item');
   const rid = item.dataset.rid;
   const act = btn.dataset.act;
+  if (act === 'view') return openReportConversation(rid);
   fetch(`/admin/report/${rid}/${act}`, { method: 'GET' })
     .then(r => r.json())
     .then(j => {

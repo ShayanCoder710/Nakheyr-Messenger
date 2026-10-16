@@ -389,6 +389,18 @@
   <div class="ep-body" id="epBody"></div>
 </div>
 
+<div class="media-viewer" id="mediaViewer">
+  <div class="mv-bar">
+    <span class="mv-name" id="mvName"></span>
+    <div class="mv-tools">
+      <a class="mv-btn" id="mvOpen" href="#" target="_blank" rel="noopener" title="باز کردن در تب جدید">↗</a>
+      <a class="mv-btn" id="mvDownload" href="#" download title="دریافت">⬇</a>
+      <button class="mv-btn" id="mvClose" title="بستن">✕</button>
+    </div>
+  </div>
+  <div class="mv-stage" id="mvStage"></div>
+</div>
+
 <script>
 window.ME = {{ me.to_self() | tojson }};
 window.CHAT_DATA = {

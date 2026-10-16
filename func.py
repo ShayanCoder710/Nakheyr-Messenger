@@ -11,12 +11,30 @@ from models.models import db, User, Chat, ChatMember, Message, Report, Block, Hi
 from config import ADMIN_USERNAME
 from sqlalchemy.orm import joinedload
 
-IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'}
-ALLOWED_EXT = IMAGE_EXT | {
-    'pdf', 'mp3', 'wav', 'mp4', 'mov', 'webm', 'txt', 'zip', 'rar', '7z',
-    'doc', 'docx', 'xls', 'xlsx', 'ppt', 'pptx', 'csv', 'json',
-}
-MAX_FILE_MB = 25
+IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp', 'avif', 'heic', 'heif', 'tiff'}
+VIDEO_EXT = {'mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp', 'mpeg', 'mpg', 'ogv', 'ts'}
+AUDIO_EXT = {'mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus', 'weba', 'wma', 'amr'}
+DOC_EXT = {'pdf', 'txt', 'md', 'csv', 'json', 'xml', 'log', 'rtf', 'doc', 'docx', 'odt',
+           'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'epub'}
+ARCHIVE_EXT = {'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'}
+CODE_EXT = {'py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'sh', 'c', 'cpp', 'h', 'hpp',
+            'java', 'go', 'rs', 'rb', 'php', 'sql', 'yml', 'yaml', 'toml', 'ini', 'kt', 'swift'}
+ALLOWED_EXT = IMAGE_EXT | VIDEO_EXT | AUDIO_EXT | DOC_EXT | ARCHIVE_EXT | CODE_EXT
+# فرمت‌هایی که نباید مستقیم (same-origin) اجرا شوند → به‌صورت دانلود فرستاده می‌شوند
+INLINE_UNSAFE_EXT = {'html', 'htm', 'xhtml', 'svg', 'js', 'mjs', 'xml', 'css'}
+MAX_FILE_MB = 50
+
+
+def kind_for(filename, mimetype=''):
+    ext = filename.rsplit('.', 1)[-1].lower() if filename and '.' in filename else ''
+    if ext in IMAGE_EXT or (mimetype or '').startswith('image/'):
+        return 'image'
+    if ext in VIDEO_EXT or (mimetype or '').startswith('video/'):
+        return 'video'
+    if ext in AUDIO_EXT or (mimetype or '').startswith('audio/'):
+        return 'audio'
+    return 'file'
+
 
 
 def init_db():
@@ -34,7 +52,6 @@ def init_db():
             password_hash='',
             accent='#e5393b',
             is_admin=True,
-            is_verified=True,
         )
         db.session.add(admin)
         db.session.commit()
@@ -211,7 +228,7 @@ def save_avatar(filename):
 
 def save_upload_file(file):
     ext = file.filename.rsplit('.', 1)[-1].lower() if '.' in file.filename else ''
-    if ext not in ALLOWED_EXT or file.mimetype.startswith('text/html'):
+    if ext not in ALLOWED_EXT:
         return None
     if file.content_length and file.content_length > MAX_FILE_MB * 1024 * 1024:
         return None
@@ -220,7 +237,14 @@ def save_upload_file(file):
     fname = f'{secrets.token_hex(4)}_{safe_name}'
     target = os.path.join(current_app.config['UPLOAD_DIR'], str(user.id))
     os.makedirs(target, exist_ok=True)
-    file.save(os.path.join(target, fname))
+    dest = os.path.join(target, fname)
+    file.save(dest)
+    if os.path.getsize(dest) > MAX_FILE_MB * 1024 * 1024:
+        try:
+            os.remove(dest)
+        except OSError:
+            pass
+        return None
     return f'{user.id}/{fname}'
 
 
@@ -329,6 +353,10 @@ def get_or_create_notes(user):
 def snippet(content, msg_type='text'):
     if msg_type == 'image':
         return 'تصویر'
+    if msg_type == 'video':
+        return 'ویدیو'
+    if msg_type == 'audio':
+        return 'پیام صوتی'
     if msg_type == 'file':
         return 'فایل'
     text = (content or '').replace('\n', ' ')

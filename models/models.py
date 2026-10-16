@@ -22,7 +22,6 @@ class User(db.Model):
     accent = db.Column(db.String(20), default='#e5393b')
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
-    is_verified = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
     show_online = db.Column(db.Boolean, default=True, nullable=False)
     status = db.Column(db.String(10), default='offline')
@@ -66,7 +65,6 @@ class User(db.Model):
             'avatar': self.avatar_url,
             'accent': self.accent,
             'is_admin': self.is_admin,
-            'is_verified': self.is_verified,
             'status': self.status if self.show_online else 'offline',
             'read_receipts': bool(self.read_receipts),
         }

@@ -6,7 +6,6 @@
     {{ avatar_html(target, 'lg') | safe }}
     <h1>
       {{ target.display_name }}
-      {% if target.is_verified %}<span class="badge gold" title="اعتمادسنجی شد">✔ اعتمادسنجی</span>{% endif %}
       {% if target.is_admin %}<span class="badge red">ادمین</span>{% endif %}
     </h1>
     <div class="uname">@{{ target.username }}</div>

@@ -13,6 +13,7 @@ from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
+    kind_for, INLINE_UNSAFE_EXT,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
     username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES,
@@ -27,7 +28,7 @@ app = Flask(__name__, static_folder='static', template_folder='templates')
 app.config['SECRET_KEY'] = SECRET_KEY
 app.config['SQLALCHEMY_DATABASE_URI'] = MYSQL_CONFIG
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
-app.config['MAX_CONTENT_LENGTH'] = 30 * 1024 * 1024
+app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['UPLOAD_DIR'] = UPLOAD_DIR
 app.config['AVATAR_DIR'] = AVATAR_DIR
 app.config['TEMPLATES_AUTO_RELOAD'] = True
@@ -527,13 +528,20 @@ def api_send_message():
         if chat.owner_id != user.id and role != 'admin':
             return jsonify(ok=False, error='در کانال فقط ادمین‌ها پیام می‌فرستن')
     msg_type = data.get('msg_type', 'text')
+    if msg_type not in ('text', 'image', 'video', 'audio', 'file'):
+        msg_type = 'file'
     content = (data.get('content') or '').strip()
     file_path = data.get('file_path') or ''
-    file_name = data.get('file_name') or ''
+    file_name = (data.get('file_name') or '')[:160]
     if msg_type == 'text' and not content:
         return jsonify(ok=False, error='پیام خالی')
-    if msg_type in ('image', 'file') and not file_path:
-        return jsonify(ok=False, error='فایلی آتچ نشده')
+    if msg_type != 'text':
+        if not file_path:
+            return jsonify(ok=False, error='فایلی آتچ نشده')
+        if not re.match(r'^\d+/[A-Za-z0-9._\-]+$', file_path):
+            return jsonify(ok=False, error='مسیر فایل نامعتبره')
+        if not os.path.isfile(os.path.join(app.config['UPLOAD_DIR'], file_path)):
+            return jsonify(ok=False, error='فایل پیدا نشد')
     m = Message(chat_id=chat.id, sender_id=user.id, msg_type=msg_type,
                 content=content, file_name=file_name, file_path=file_path,
                 reply_to=data.get('reply_to') or None)
@@ -788,8 +796,8 @@ def api_upload():
         return jsonify(ok=False, error='فایلی آپلود نشد')
     path = save_upload_file(f)
     if not path:
-        return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۲۵ مگ).')
-    kind = 'image' if f.mimetype.startswith('image/') else 'file'
+        return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۵۰ مگ).')
+    kind = kind_for(f.filename, f.mimetype)
     return jsonify(ok=True, file_path=path, file_name=f.filename, kind=kind,
                    file_url=f'/files/{path}')
 
@@ -947,18 +955,27 @@ def static_avatar(fname):
 @app.route('/files/<path:fname>')
 def static_files(fname):
     user = current_user()
-    base = os.path.abspath(app.config['UPLOAD_DIR'])
-    target = os.path.abspath(os.path.join(base, fname))
-    if not target.startswith(base + os.sep):
-        abort(404)
-    if not os.path.exists(target):
-        abort(404)
-    uid_part = fname.split('/')[0]
     if not user:
         abort(403)
-    if not (uid_part.isdigit() and int(uid_part) == user.id) and not user.is_admin:
+    base = os.path.abspath(app.config['UPLOAD_DIR'])
+    target = os.path.abspath(os.path.join(base, fname))
+    if not target.startswith(base + os.sep) or not os.path.isfile(target):
+        abort(404)
+    uid_part = fname.split('/')[0]
+    allowed = user.is_admin or (uid_part.isdigit() and int(uid_part) == user.id)
+    if not allowed:
+        msg = Message.query.filter_by(file_path=fname).first()
+        allowed = bool(msg and can_view_chat(user, msg.chat))
+    if not allowed:
         abort(403)
-    return send_from_directory(app.config['UPLOAD_DIR'], fname, max_age=31536000)
+    resp = send_from_directory(app.config['UPLOAD_DIR'], fname, max_age=31536000)
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.cache_control.public = False
+    resp.cache_control.private = True
+    ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
+    if ext in INLINE_UNSAFE_EXT:
+        resp.headers['Content-Disposition'] = 'attachment'
+    return resp
 
 
 @app.route('/api/message/pin', methods=['POST'])
@@ -1089,7 +1106,9 @@ def api_messages(chat_id):
 def admin_panel():
     stats = admin_stats()
     users = User.query.order_by(User.id.desc()).all()
-    reports = Report.query.order_by(Report.id.desc()).all()
+    reports = Report.query.options(
+        joinedload(Report.reporter), joinedload(Report.reported)
+    ).order_by(Report.id.desc()).all()
     return render_template('admin.html', stats=stats, users=users,
                            reports=reports, me=current_user())
 
@@ -1115,14 +1134,12 @@ def admin_action(uid, action):
             target.status = 'offline'
     elif action == 'admin':
         target.is_admin = not target.is_admin
-    elif action == 'verify':
-        target.is_verified = not target.is_verified
     else:
         return jsonify(ok=False, error='غیرمجاز')
     db.session.commit()
     socketio.emit('profile_updated', target.to_public(), room=f'user:{uid}')
     return jsonify(ok=True, user=target.to_public(),
-                   state={'is_admin': bool(target.is_admin), 'is_verified': bool(target.is_verified),
+                   state={'is_admin': bool(target.is_admin),
                           'is_banned': bool(target.is_banned)})
 
 
@@ -1132,7 +1149,9 @@ def admin_user_messages(uid):
     u = User.query.get(uid)
     if not u:
         abort(404)
-    msgs = Message.query.filter_by(sender_id=uid).order_by(Message.id.desc()).limit(150).all()
+    msgs = Message.query.options(
+        joinedload(Message.chat).joinedload(Chat.members).joinedload(ChatMember.user)
+    ).filter_by(sender_id=uid).order_by(Message.id.desc()).limit(150).all()
     out = []
     for m in msgs:
         out.append({
@@ -1147,25 +1166,40 @@ def admin_user_messages(uid):
     return jsonify(ok=True, user=u.to_public(), messages=out)
 
 
-@app.route('/admin/messages')
+@app.route('/admin/report/<int:rid>/conversation')
 @require_admin
-def admin_messages():
-    msgs = Message.query.order_by(Message.id.desc()).limit(200).all()
+def admin_report_conversation(rid):
+    r = Report.query.get(rid)
+    if not r:
+        abort(404)
+    chat = Chat.query.filter(
+        Chat.chat_type == 'dm',
+        Chat.members.any(ChatMember.user_id == r.reporter_id),
+        Chat.members.any(ChatMember.user_id == r.reported_id),
+    ).first()
+    reporter = User.query.get(r.reporter_id)
+    reported = User.query.get(r.reported_id)
+    names = {
+        r.reporter_id: reporter.public_name if reporter else 'کاربر حذف‌شده',
+        r.reported_id: reported.public_name if reported else 'کاربر حذف‌شده',
+    }
     out = []
-    for m in msgs:
-        sender = User.query.get(m.sender_id) if m.sender_id else None
-        out.append({
-            'id': m.id,
-            'content': m.content,
-            'msg_type': m.msg_type,
-            'file_name': m.file_name,
-            'deleted': bool(m.deleted),
-            'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
-            'chat': chat_label(m.chat, m.sender_id),
-            'sender': sender.public_name if sender else 'کاربر حذف‌شده',
-            'sender_username': sender.username if sender else '',
-        })
-    return jsonify(ok=True, messages=out)
+    if chat:
+        msgs = Message.query.filter_by(chat_id=chat.id) \
+            .order_by(Message.id.desc()).limit(200).all()
+        for m in msgs:
+            out.append({
+                'id': m.id,
+                'content': m.content,
+                'msg_type': m.msg_type,
+                'file_name': m.file_name,
+                'deleted': bool(m.deleted),
+                'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+                'sender': names.get(m.sender_id, 'کاربر'),
+            })
+    return jsonify(ok=True, messages=out,
+                   reporter=reporter.public_name if reporter else '',
+                   reported=reported.public_name if reported else '')
 
 
 @app.route('/admin/report/<int:rid>/<action>')

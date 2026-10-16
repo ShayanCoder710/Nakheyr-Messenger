@@ -124,15 +124,50 @@ function copyText(text) {
   });
 }
 
+function fileIcon(name) {
+  const ext = (name || '').split('.').pop().toLowerCase();
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'].includes(ext)) return '🗜️';
+  if (['pdf'].includes(ext)) return '📕';
+  if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return '📘';
+  if (['xls', 'xlsx', 'ods', 'csv'].includes(ext)) return '📗';
+  if (['ppt', 'pptx', 'odp'].includes(ext)) return '📙';
+  if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return '🎧';
+  if (['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp'].includes(ext)) return '🎬';
+  if (['txt', 'md', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'toml'].includes(ext)) return '📄';
+  if (['py', 'js', 'ts', 'jsx', 'tsx', 'html', 'css', 'sh', 'c', 'cpp', 'h', 'java', 'go', 'rs', 'rb', 'php', 'sql'].includes(ext)) return '💻';
+  return '📎';
+}
+
+function fmtSize(n) {
+  if (!n && n !== 0) return '';
+  const u = ['B', 'KB', 'MB', 'GB'];
+  let i = 0;
+  while (n >= 1024 && i < u.length - 1) { n /= 1024; i++; }
+  return (i === 0 ? n : n.toFixed(1)) + ' ' + u[i];
+}
+
 function renderMsg(m) {
   if (m.deleted) return '';
+  const url = esc(m.file_url || '');
+  const fname = esc(m.file_name || '');
   let body = '';
   if (m.msg_type === 'image') {
-    body = `<img class="img" src="${m.file_url}" alt="${esc(m.file_name)}" loading="lazy">`;
+    body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
+    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+  } else if (m.msg_type === 'video') {
+    body = `<div class="vid-wrap"><video class="vid" src="${url}" controls preload="metadata" playsinline></video>`
+      + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">⛶</button></div>`;
+    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+  } else if (m.msg_type === 'audio') {
+    body = `<div class="audio-card"><div class="fi">🎧</div><div class="ac-body"><b>${fname}</b>`
+      + `<audio class="aud" src="${url}" controls preload="metadata"></audio></div></div>`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'file') {
-    body = `<div class="file-card"><div class="fi">📄</div><div><b>${esc(m.file_name)}</b><small>فایل</small></div></div>`;
-    if (m.file_url) body += `<a class="btn sm" style="margin-top:6px" href="${m.file_url}" download>⬇ دریافت</a>`;
+    body = `<div class="file-card"><div class="fi">${fileIcon(m.file_name)}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
+    if (m.file_url) {
+      body += `<div class="file-actions"><a class="btn sm" href="${url}" download="${fname}">⬇ دریافت</a>`
+        + `<a class="btn sm ghost" href="${url}" target="_blank" rel="noopener">↗ باز کردن</a></div>`;
+    }
   } else {
     body = `<div class="txt md">${md(m.content)}</div>`;
   }
@@ -141,6 +176,7 @@ function renderMsg(m) {
   const mine = m.sender_id === window.ME.id;
   const isText = m.msg_type === 'text';
   const hasImg = m.msg_type === 'image';
+  const isMedia = hasImg || m.msg_type === 'video';
   const imgOnly = hasImg && !m.content;
   const newGroup = String(m.sender_id) !== String(lastSenderOf(m.id));
   const groupTail = String(nextSenderOf(m.id)) !== String(m.sender_id);
@@ -154,15 +190,15 @@ function renderMsg(m) {
   const html = `
     <div class="mrow ${mine ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
       ${mine ? '' : (groupTail ? avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm') : '<div class="avatar sm ghost"></div>')}
-      <div class="bubble ${mine ? 'me' : ''} ${hasImg ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
-        ${mine ? '' : (newGroup ? `<div class="sender-line">${esc(sender.display_name)}${sender.is_verified ? ' ✔' : ''}${title}</div>` : '')}
+      <div class="bubble ${mine ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
+        ${mine ? '' : (newGroup ? `<div class="sender-line">${esc(sender.display_name)}${title}</div>` : '')}
         ${fwd}${reply}${body}
         <div class="m-meta">
           ${pinTag}
           ${unameLink}
           <span>${fmtTime(m.created_at)}</span>
           ${m.is_edited ? '<span class="edited">ویرایش شده</span>' : ''}
-          ${mine && (isText || hasImg) ? `<span class="ticks" data-mid="${m.id}">✓</span>` : ''}
+          ${mine && (isText || isMedia) ? `<span class="ticks" data-mid="${m.id}">✓</span>` : ''}
         </div>
         <div class="reactions" data-mid="${m.id}">${reactionChips(m)}</div>
       </div>
@@ -861,7 +897,7 @@ document.addEventListener('click', e => {
   if (selecting) {
     if (_lpJustEntered) { _lpJustEntered = false; return; }
     const row = e.target.closest('.mrow');
-    if (row && !e.target.closest('a, .reply-ref, .reactions')) {
+    if (row && !e.target.closest('a, .reply-ref, .reactions, [data-media], video, audio')) {
       e.preventDefault();
       toggleSelect(+row.dataset.mid);
     }
@@ -1156,28 +1192,120 @@ document.getElementById('msgInput').addEventListener('input', function () {
 });
 
 document.getElementById('btnAttach').onclick = () => document.getElementById('fileInput').click();
-document.getElementById('fileInput').onchange = async e => {
+
+function renderAttachPreview() {
+  const pv = document.getElementById('attachPreview');
+  if (!pendingFile) {
+    pv.classList.remove('show');
+    pv.innerHTML = '';
+    return;
+  }
+  const icon = pendingFile.kind === 'image' ? '' : pendingFile.kind === 'video' ? '🎬'
+    : pendingFile.kind === 'audio' ? '🎧' : fileIcon(pendingFile.name);
+  const thumb = pendingFile.kind === 'image'
+    ? `<img src="${esc(pendingFile.url)}" alt="">`
+    : `<span class="ap-ic">${icon}</span>`;
+  const size = pendingFile.size ? `<small>${fmtSize(pendingFile.size)}</small>` : '';
+  pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span><button data-clearattach>✕</button>`;
+  pv.classList.add('show');
+}
+
+let uploading = false;
+async function handleFiles(file) {
+  if (!file || uploading) return;
+  uploading = true;
+  const pv = document.getElementById('attachPreview');
+  pv.innerHTML = '<span class="ap-ic">⏳</span><span class="fname">در حال آپلود…</span>';
+  pv.classList.add('show');
+  const fd = new FormData();
+  fd.append('file', file);
+  try {
+    const r = await fetch('/api/upload', { method: 'POST', body: fd }).then(x => x.json());
+    if (!r.ok) { toast(r.error, 'error'); uploading = false; renderAttachPreview(); return; }
+    pendingFile = { path: r.file_path, name: r.file_name, kind: r.kind, url: r.file_url, size: file.size };
+    renderAttachPreview();
+    document.getElementById('msgInput').focus();
+  } catch (err) {
+    toast('آپلود ناموفق بود', 'error');
+    renderAttachPreview();
+  } finally {
+    uploading = false;
+  }
+}
+
+document.getElementById('fileInput').onchange = e => {
   const f = e.target.files[0];
   e.target.value = '';
-  if (!f) return;
-  const fd = new FormData();
-  fd.append('file', f);
-  const r = await fetch('/api/upload', { method: 'POST', body: fd }).then(x => x.json());
-  if (!r.ok) { toast(r.error, 'error'); e.target.value = ''; return; }
-  pendingFile = { path: r.file_path, name: r.file_name, kind: r.kind, url: r.file_url };
-  const pv = document.getElementById('attachPreview');
-  pv.innerHTML = r.kind === 'image'
-    ? `<img src="${r.file_url}"><span class="fname">${esc(f.name)}</span>`
-    : `<span class="fname">📄 ${esc(f.name)}</span>`;
-  pv.insertAdjacentHTML('beforeend', '<button data-clearattach>✕</button>');
-  pv.classList.add('show');
+  handleFiles(f);
 };
 document.addEventListener('click', e => {
   if (e.target.closest('[data-clearattach]')) {
     pendingFile = null;
-    document.getElementById('attachPreview').classList.remove('show');
-    document.getElementById('attachPreview').innerHTML = '';
+    renderAttachPreview();
   }
+});
+
+const dropZone = document.getElementById('app') || document.body;
+['dragenter', 'dragover'].forEach(ev => dropZone.addEventListener(ev, e => {
+  if (!currentChat || !e.dataTransfer || !e.dataTransfer.types.includes('Files')) return;
+  e.preventDefault();
+  dropZone.classList.add('dragging');
+}));
+['dragleave', 'drop'].forEach(ev => dropZone.addEventListener(ev, e => {
+  if (ev === 'dragleave' && e.target !== dropZone) return;
+  dropZone.classList.remove('dragging');
+}));
+dropZone.addEventListener('drop', e => {
+  if (!currentChat) return;
+  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
+  if (!f) return;
+  e.preventDefault();
+  handleFiles(f);
+});
+document.getElementById('msgInput').addEventListener('paste', e => {
+  if (!currentChat) return;
+  const items = (e.clipboardData && e.clipboardData.items) || [];
+  for (const it of items) {
+    if (it.kind === 'file') {
+      const f = it.getAsFile();
+      if (f) { e.preventDefault(); handleFiles(f); return; }
+    }
+  }
+});
+
+function openMediaViewer(src, kind, name) {
+  if (!src) return;
+  const v = document.getElementById('mediaViewer');
+  const stage = document.getElementById('mvStage');
+  stage.innerHTML = kind === 'video'
+    ? `<video src="${esc(src)}" controls autoplay playsinline></video>`
+    : `<img src="${esc(src)}" alt="${esc(name || '')}">`;
+  document.getElementById('mvName').textContent = name || '';
+  const dl = document.getElementById('mvDownload');
+  dl.href = src;
+  dl.setAttribute('download', name || '');
+  const op = document.getElementById('mvOpen');
+  op.href = src;
+  op.style.display = kind === 'video' ? 'none' : '';
+  v.classList.add('show');
+}
+function closeMediaViewer() {
+  const v = document.getElementById('mediaViewer');
+  if (!v.classList.contains('show')) return;
+  v.classList.remove('show');
+  document.getElementById('mvStage').innerHTML = '';
+}
+document.addEventListener('click', e => {
+  const media = e.target.closest('[data-media]');
+  if (media) {
+    e.preventDefault();
+    openMediaViewer(media.dataset.src, media.dataset.media, media.dataset.name);
+    return;
+  }
+  if (e.target.id === 'mvClose' || e.target.id === 'mediaViewer' || e.target.id === 'mvStage') closeMediaViewer();
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') closeMediaViewer();
 });
 
 async function loadMembers(chatId) {
@@ -1885,7 +2013,7 @@ searchInput.oninput = () => {
       html += '<h4>افراد</h4>' + users.map(u => `
         <div class="sr-item" data-uid="${u.id}" data-username="${esc(u.username)}">
           <span class="avatar">${avatarInner(u.display_name, u.avatar, u.status === 'online')}</span>
-          <div><b>${esc(u.display_name)}${u.is_verified ? ' ✔' : ''}</b><small>@${esc(u.username)} · ${u.status === 'online' ? 'آنلاین' : 'آفلاین'}</small></div>
+          <div><b>${esc(u.display_name)}</b><small>@${esc(u.username)} · ${u.status === 'online' ? 'آنلاین' : 'آفلاین'}</small></div>
         </div>`).join('');
     }
     if (r.chats.length) {
