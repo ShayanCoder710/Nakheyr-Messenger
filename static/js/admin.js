@@ -1,7 +1,41 @@
+function buildUserActions(tr, uid, s) {
+  const actions = tr.querySelector('.tbl-actions');
+  actions.innerHTML = '';
+  const defs = [
+    ['ban', s.is_banned ? 'رفع مسدود' : 'مسدودسازی', s.is_banned ? 'primary' : 'danger'],
+    ['admin', s.is_admin ? 'سلب ادمین' : 'ادمین کردن', ''],
+    ['verify', s.is_verified ? 'سلب ✔' : 'اعتمادسنجی', ''],
+    ['messages', '💬 پیام‌ها', ''],
+    ['delete', '🗑 حذف اکانت', 'danger'],
+  ];
+  defs.forEach(([a, label, cls]) => {
+    const b = document.createElement('button');
+    b.className = 'btn sm ' + cls;
+    b.dataset.act = a;
+    b.textContent = label;
+    b.onclick = () => handleUserAction(b);
+    actions.appendChild(b);
+  });
+}
+
 function handleUserAction(btn) {
   const tr = btn.closest('tr');
   const uid = tr.dataset.uid;
   const act = btn.dataset.act;
+  if (act === 'messages') return openUserMessages(uid, tr);
+  if (act === 'delete') {
+    const name = tr.querySelector('.user-cell b').textContent;
+    if (!confirm('اکانت «' + name + '» کامل حذف بشه؟ همه‌ی پیام‌ها و پیوی‌هاش می‌ره و این کار برگشت‌پذیر نیست.')) return;
+    fetch(`/admin/user/${uid}/delete`, { method: 'GET' })
+      .then(r => r.json())
+      .then(j => {
+        if (!j.ok) return toast(j.error, 'error');
+        tr.remove();
+        toast('اکانت حذف شد');
+      })
+      .catch(() => toast('خطا', 'error'));
+    return;
+  }
   fetch(`/admin/user/${uid}/${act}`, { method: 'GET' })
     .then(r => r.json())
     .then(j => {
@@ -13,25 +47,70 @@ function handleUserAction(btn) {
       if (s.is_banned) badge += '<span class="badge">مسدود</span>';
       if (!s.is_admin && !s.is_verified && !s.is_banned) badge += '<span class="badge green">فعال</span>';
       tr.children[1].innerHTML = badge;
-      const actions = tr.querySelector('.tbl-actions');
-      actions.innerHTML = '';
-      const defs = [
-        ['ban', s.is_banned ? 'رفع مسدود' : 'مسدودسازی', s.is_banned ? 'primary' : 'danger'],
-        ['admin', s.is_admin ? 'سلب ادمین' : 'ادمین کردن', ''],
-        ['verify', s.is_verified ? 'سلب ✔' : 'اعتمادسنجی', ''],
-      ];
-      defs.forEach(([a, label, cls]) => {
-        const b = document.createElement('button');
-        b.className = 'btn sm ' + cls;
-        b.dataset.act = a;
-        b.textContent = label;
-        b.onclick = () => handleUserAction(b);
-        actions.appendChild(b);
-      });
+      buildUserActions(tr, uid, s);
       toast('انجام شد');
     })
     .catch(() => toast('خطا', 'error'));
 }
+
+function openMsgModal(title, sub) {
+  document.getElementById('msgTitle').textContent = title;
+  document.getElementById('msgSub').textContent = sub || '';
+  document.getElementById('msgList').innerHTML = '';
+  document.getElementById('msgModal').classList.add('show');
+}
+
+function renderMsgs(list, showSender) {
+  const box = document.getElementById('msgList');
+  if (!list.length) {
+    box.innerHTML = '<p style="color:var(--dim); font-size:13px">پیامی نیست.</p>';
+    return;
+  }
+  box.innerHTML = list.map(m => `
+    <div class="msg-item${m.deleted ? ' del' : ''}">
+      <div class="mi-top">
+        ${showSender ? '<b>' + esc(m.sender || '') + '</b><small>@' + esc(m.sender_username || '') + '</small>' : ''}
+        <span class="mi-chat">${esc(m.chat || '')}</span>
+        <span class="mi-time">${esc(m.created_at || '')}</span>
+      </div>
+      <div class="mi-body">${m.msg_type === 'text' ? esc(m.content || '') : '📎 ' + esc(m.file_name || m.msg_type)}</div>
+    </div>`).join('');
+  box.scrollTop = 0;
+}
+
+function openUserMessages(uid, tr) {
+  const name = tr.querySelector('.user-cell b').textContent;
+  openMsgModal('پیام‌های ' + name, 'در حال بارگذاری…');
+  fetch(`/admin/user/${uid}/messages`)
+    .then(r => r.json())
+    .then(j => {
+      if (!j.ok) return toast(j.error, 'error');
+      document.getElementById('msgSub').textContent = j.messages.length + ' پیام آخر';
+      renderMsgs(j.messages, false);
+    })
+    .catch(() => toast('خطا', 'error'));
+}
+
+document.getElementById('btnAllMsgs').onclick = () => {
+  openMsgModal('پیام‌های اخیر پلتفرم', 'در حال بارگذاری…');
+  fetch('/admin/messages')
+    .then(r => r.json())
+    .then(j => {
+      if (!j.ok) return toast(j.error, 'error');
+      document.getElementById('msgSub').textContent = j.messages.length + ' پیام آخر';
+      renderMsgs(j.messages, true);
+    })
+    .catch(() => toast('خطا', 'error'));
+};
+
+document.getElementById('msgClose').onclick = () => document.getElementById('msgModal').classList.remove('show');
+document.getElementById('msgX').onclick = () => document.getElementById('msgModal').classList.remove('show');
+document.getElementById('msgModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.currentTarget.classList.remove('show');
+});
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape') document.getElementById('msgModal').classList.remove('show');
+});
 
 function handleReportAction(btn) {
   const item = btn.closest('.report-item');

@@ -118,6 +118,8 @@ class ChatMember(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     role = db.Column(db.String(10), default='member')
     title = db.Column(db.String(30), default='')
+    muted = db.Column(db.Boolean, default=False)
+    archived = db.Column(db.Boolean, default=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='memberships')
 

@@ -16,7 +16,7 @@ from func import (
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
     username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES,
-    get_or_create_notes
+    get_or_create_notes, delete_user_account, chat_label
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -605,6 +605,25 @@ def api_delete_message():
     return jsonify(ok=True)
 
 
+@app.route('/api/chat/<int:chat_id>/prefs', methods=['POST'])
+@require_auth
+def api_chat_prefs(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    m = ChatMember.query.filter_by(chat_id=chat_id, user_id=user.id).first()
+    if not m:
+        return jsonify(ok=False, error='عضو این گپ نیستی')
+    data = request.get_json(silent=True) or {}
+    if 'muted' in data:
+        m.muted = bool(data['muted'])
+    if 'archived' in data:
+        m.archived = bool(data['archived'])
+    db.session.commit()
+    return jsonify(ok=True, muted=bool(m.muted), archived=bool(m.archived))
+
+
 @app.route('/api/mark-read', methods=['POST'])
 @require_auth
 def api_mark_read():
@@ -662,6 +681,15 @@ def api_block():
     return jsonify(ok=True, blocked=True)
 
 
+@app.route('/api/blocks', methods=['GET'])
+@require_auth
+def api_blocks():
+    user = current_user()
+    ids = [b.blocked_user_id for b in Block.query.filter_by(user_id=user.id).all()]
+    users = User.query.filter(User.id.in_(ids)).all() if ids else []
+    return jsonify(ok=True, users=[u.to_public() for u in users])
+
+
 @app.route('/api/report', methods=['POST'])
 @require_auth
 def api_report():
@@ -702,6 +730,37 @@ def api_profile():
     db.session.commit()
     socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
     return jsonify(ok=True, profile=user.to_public())
+
+
+@app.route('/api/password', methods=['POST'])
+@require_auth
+def api_password():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    current = data.get('current') or ''
+    new = data.get('new') or ''
+    if not user.check_password(current):
+        return jsonify(ok=False, error='رمز فعلی اشتباهه')
+    if len(new) < 6:
+        return jsonify(ok=False, error='رمز جدید باید حداقل ۶ کاراکتر باشه')
+    if new == current:
+        return jsonify(ok=False, error='رمز جدید باید با رمز فعلی فرق کنه')
+    user.set_password(new)
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@app.route('/api/account/delete', methods=['POST'])
+@require_auth
+def api_account_delete():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    if not user.check_password(data.get('password') or ''):
+        return jsonify(ok=False, error='رمز اشتباهه')
+    uid = user.id
+    session.pop('user_id', None)
+    delete_user_account(uid)
+    return jsonify(ok=True)
 
 
 @app.route('/api/avatar', methods=['POST'])
@@ -892,6 +951,10 @@ def admin_action(uid, action):
         abort(404)
     if uid == me.id:
         return jsonify(ok=False, error='روی خودت اقدام نمی‌تونی')
+    if action == 'delete':
+        delete_user_account(uid, reassign_to=me.id)
+        socketio.emit('account_deleted', {'id': uid}, room=f'user:{uid}')
+        return jsonify(ok=True, deleted=True)
     if action == 'ban':
         target.is_banned = not target.is_banned
         if target.is_banned:
@@ -907,6 +970,48 @@ def admin_action(uid, action):
     return jsonify(ok=True, user=target.to_public(),
                    state={'is_admin': bool(target.is_admin), 'is_verified': bool(target.is_verified),
                           'is_banned': bool(target.is_banned)})
+
+
+@app.route('/admin/user/<int:uid>/messages')
+@require_admin
+def admin_user_messages(uid):
+    u = User.query.get(uid)
+    if not u:
+        abort(404)
+    msgs = Message.query.filter_by(sender_id=uid).order_by(Message.id.desc()).limit(150).all()
+    out = []
+    for m in msgs:
+        out.append({
+            'id': m.id,
+            'content': m.content,
+            'msg_type': m.msg_type,
+            'file_name': m.file_name,
+            'deleted': bool(m.deleted),
+            'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+            'chat': chat_label(m.chat, uid),
+        })
+    return jsonify(ok=True, user=u.to_public(), messages=out)
+
+
+@app.route('/admin/messages')
+@require_admin
+def admin_messages():
+    msgs = Message.query.order_by(Message.id.desc()).limit(200).all()
+    out = []
+    for m in msgs:
+        sender = User.query.get(m.sender_id) if m.sender_id else None
+        out.append({
+            'id': m.id,
+            'content': m.content,
+            'msg_type': m.msg_type,
+            'file_name': m.file_name,
+            'deleted': bool(m.deleted),
+            'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+            'chat': chat_label(m.chat, m.sender_id),
+            'sender': sender.display_name if sender else 'کاربر حذف‌شده',
+            'sender_username': sender.username if sender else '',
+        })
+    return jsonify(ok=True, messages=out)
 
 
 @app.route('/admin/report/<int:rid>/<action>')

@@ -9,6 +9,7 @@
     </div>
     <a href="#stats" class="active">📊 آمار</a>
     <a href="#users">👥 کاربران</a>
+    <a href="#recentMsgs">📨 پیام‌ها</a>
     <a href="#reports">🚨 گزارش‌ها</a>
     <a href="{{ url_for('home') }}">💬 بازگشت به گپ</a>
   </aside>
@@ -40,6 +41,11 @@
       {% if not reports or not reports|selectattr('status', 'equalto', 'open')|list %}<p style="color:var(--dim); font-size:13px">گزارش بازی نیست. همه‌چیز امنه ✅</p>{% endif %}
     </div>
 
+    <div id="recentMsgs">
+      <h2 class="section-title">📨 پیام‌های اخیر</h2>
+      <button class="btn" id="btnAllMsgs">نمایش ۲۰۰ پیام آخر</button>
+    </div>
+
     <div id="users">
       <h2 class="section-title">👥 مدیریت کاربران</h2>
       <div class="table-scroll">
@@ -64,12 +70,16 @@
             </td>
             <td>{{ u.created_at.strftime('%d/%m/%Y') }}</td>
             <td>
-              <div class="tbl-actions" style="display:flex; gap:6px; flex-wrap:wrap">
+              <div class="tbl-actions">
                 {% if u.id != me.id %}
                 <button class="btn sm {% if u.is_banned %}primary{% else %}danger{% endif %}" data-act="ban">{{ 'رفع مسدود' if u.is_banned else 'مسدودسازی' }}</button>
                 <button class="btn sm" data-act="admin">{{ 'سلب ادمین' if u.is_admin else 'ادمین کردن' }}</button>
                 <button class="btn sm" data-act="verify">{{ 'سلب ✔' if u.is_verified else 'اعتمادسنجی' }}</button>
                 {% else %}<span style="color:var(--dim); font-size:12px">خودت</span>{% endif %}
+                <button class="btn sm" data-act="messages">💬 پیام‌ها</button>
+                {% if u.id != me.id %}
+                <button class="btn sm danger" data-act="delete">🗑 حذف اکانت</button>
+                {% endif %}
               </div>
             </td>
           </tr>
@@ -77,6 +87,18 @@
         </tbody>
       </table>
       </div>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="msgModal">
+  <div class="box">
+    <button type="button" class="modal-x" id="msgX" title="بستن">✕</button>
+    <h3 id="msgTitle">پیام‌ها</h3>
+    <p class="sub" id="msgSub"></p>
+    <div class="msg-list" id="msgList"></div>
+    <div class="row">
+      <button class="btn ghost" id="msgClose">بستن</button>
     </div>
   </div>
 </div>

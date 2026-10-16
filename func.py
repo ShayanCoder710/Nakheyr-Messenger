@@ -8,6 +8,7 @@ from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
 from models.models import db, User, Chat, ChatMember, Message, Report, Block
+from config import ADMIN_USERNAME, ADMIN_PASSWORD, ADMIN_DISPLAY_NAME, ADMIN_BIO
 from sqlalchemy.orm import joinedload
 
 IMAGE_EXT = {'png', 'jpg', 'jpeg', 'gif', 'webp', 'svg', 'bmp'}
@@ -23,17 +24,18 @@ def init_db():
     db.create_all()
     _ensure_columns()
     _ensure_chat_usernames()
-    admin = User.query.filter_by(username='admin').first()
+    _migrate_accent_colors()
+    admin = User.query.filter_by(username=ADMIN_USERNAME).first()
     if not admin:
         admin = User(
-            username='admin',
-            display_name='مدیر نخیر',
-            bio='اکانت رسمی مدیریت پیام‌رسان نخیر',
+            username=ADMIN_USERNAME,
+            display_name=ADMIN_DISPLAY_NAME,
+            bio=ADMIN_BIO,
             accent='#e5393b',
             is_admin=True,
             is_verified=True,
         )
-        admin.set_password('Nakheyr#2026')
+        admin.set_password(ADMIN_PASSWORD)
         db.session.add(admin)
         db.session.commit()
 
@@ -63,6 +65,8 @@ def _ensure_columns():
         ('messages', 'reply_to', "INTEGER NULL"),
         ('chats', 'is_public', "BOOLEAN NOT NULL DEFAULT 1"),
         ('chats', 'username', "VARCHAR(30) NULL"),
+        ('chat_members', 'muted', "BOOLEAN NOT NULL DEFAULT 0"),
+        ('chat_members', 'archived', "BOOLEAN NOT NULL DEFAULT 0"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -135,6 +139,16 @@ def _ensure_chat_usernames():
                 conn.execute(text("CREATE UNIQUE INDEX ix_chats_username ON chats (username)"))
             except Exception:
                 pass
+
+
+def _migrate_accent_colors():
+    """Move the old rose default to the new true-red palette."""
+    from sqlalchemy import text
+    with db.engine.begin() as conn:
+        conn.execute(text(
+            "UPDATE users SET accent = '#e5393b' "
+            "WHERE LOWER(accent) IN ('#e11d48', '#e5193b', '#f43f5e')"
+        ))
 
 
 def current_user():
@@ -350,6 +364,7 @@ def unread_counts(user):
         if uid not in read_ids:
             unread_by_chat[row.chat_id] = unread_by_chat.get(row.chat_id, 0) + 1
     members_by_chat = {}
+    my_member = {}
     mem_rows = db.session.execute(
         db.select(ChatMember)
         .where(ChatMember.chat_id.in_(chat_ids))
@@ -357,6 +372,8 @@ def unread_counts(user):
     ).scalars().all()
     for m in mem_rows:
         members_by_chat.setdefault(m.chat_id, []).append(m)
+        if m.user_id == user.id:
+            my_member[m.chat_id] = m
     max_ids = [row[0] for row in db.session.execute(
         db.select(db.func.max(Message.id)).filter(
             Message.chat_id.in_(chat_ids),
@@ -393,6 +410,8 @@ def unread_counts(user):
             'last': last_text,
             'last_at': last.created_at.isoformat() if last else '',
             'unread': unread_by_chat.get(chat.id, 0),
+            'muted': bool(my_member.get(chat.id) and my_member[chat.id].muted),
+            'archived': bool(my_member.get(chat.id) and my_member[chat.id].archived),
         })
     out.sort(key=lambda x: x['last_at'], reverse=True)
     return out
@@ -442,3 +461,44 @@ def admin_stats():
         'banned': User.query.filter_by(is_banned=True).count(),
         'today_msgs': Message.query.filter(Message.created_at >= start).count(),
     }
+
+
+def delete_user_account(uid, reassign_to=None):
+    """Permanently remove a user and their data. DMs are deleted entirely,
+    the user's messages elsewhere are removed, and owned chats are reassigned."""
+    chat_ids = [cid for (cid,) in db.session.query(ChatMember.chat_id).filter_by(user_id=uid).all()]
+    dm_chat_ids = []
+    if chat_ids:
+        dm_chat_ids = [cid for (cid,) in db.session.query(Chat.id).filter(
+            Chat.id.in_(chat_ids), Chat.chat_type == 'dm').all()]
+    msg_q = Message.query.filter(Message.sender_id == uid)
+    if dm_chat_ids:
+        msg_q = Message.query.filter(db.or_(Message.sender_id == uid, Message.chat_id.in_(dm_chat_ids)))
+    msg_ids = [mid for (mid,) in msg_q.with_entities(Message.id).all()]
+    if msg_ids:
+        Report.query.filter(Report.message_id.in_(msg_ids)).update(
+            {'message_id': None}, synchronize_session=False)
+    Chat.query.filter_by(owner_id=uid).update({'owner_id': reassign_to}, synchronize_session=False)
+    if dm_chat_ids:
+        for c in Chat.query.filter(Chat.id.in_(dm_chat_ids)).all():
+            db.session.delete(c)
+        db.session.flush()
+    Message.query.filter_by(sender_id=uid).delete(synchronize_session=False)
+    ChatMember.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    Block.query.filter(db.or_(Block.user_id == uid, Block.blocked_user_id == uid)).delete(
+        synchronize_session=False)
+    Report.query.filter(db.or_(Report.reporter_id == uid, Report.reported_id == uid)).delete(
+        synchronize_session=False)
+    u = User.query.get(uid)
+    if u:
+        db.session.delete(u)
+    db.session.commit()
+
+
+def chat_label(chat, viewer_id=None):
+    if not chat:
+        return ''
+    if chat.chat_type == 'dm':
+        other = next((m.user for m in chat.members if m.user_id != viewer_id), None)
+        return other.display_name if other else 'پیوی'
+    return chat.name or ('گروه' if chat.chat_type == 'group' else 'کانال')

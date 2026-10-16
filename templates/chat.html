@@ -9,14 +9,6 @@
         <b>{{ me.display_name }} {% if me.is_verified %}<span title="اعتمادسنجی شد">✔</span>{% endif %}</b>
         <span>@{{ me.username }}</span>
       </div>
-      <div class="side-actions">
-        <button class="icon-btn" id="btnNewGroup" title="گروه جدید">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.22 2.22a2.5 2.5 0 0 1 3.54 0l1.02 1.02a2.5 2.5 0 0 1 0 3.54L8.93 18.05l-4.2 1.46a.6.6 0 0 1-.75-.75l1.46-4.2L17.22 2.22m-3.79 8.5-.7-.7 3.29-3.29.7.7-3.29 3.29"/></svg>
-        </button>
-        <button class="icon-btn" id="btnNewChannel" title="کانال جدید">
-          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 5.5 7 10.5h2v3H7l-3 2.25V4.25L14.5 5.5M17 3.88l-1.79 1.28 1.15.16 2.54.36c1.27.18 2.1 1.36 1.92 2.63l-.36 2.54 1.63.23a2.5 2.5 0 1 1-4.8 1.06l-.23-1.63-1.6 1.16L15.5 18.5H12.38v-7.9l5.12-6.72zM21.6 18.5a1.5 1.5 0 1 1-2.8 0l.4-2.82a3.5 3.5 0 0 0 2.4 2.42zM3 13.5V6A1.5 1.5 0 0 1 4.5 4.5H8L5.32 9.23l2.82.4 2.36-1.7-.56-3.43 1.66-1.13A1.5 1.5 0 0 1 15 4.9v.9l-6.5 4.7z"/></svg>
-        </button>
-      </div>
     </div>
     <div class="search-box">
       <svg class="search-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 3.5a7 7 0 1 0 4.3 12.5l4.35 4.35 1.4-1.4L16.2 14.6a7 7 0 0 0-5.7-11.1zM4.5 10.5a6 6 0 1 1 6 6 6 6 0 0 1-6-6z"/></svg>
@@ -24,6 +16,12 @@
       <div class="search-results" id="searchResults"></div>
     </div>
     <div class="conv-sections" id="convSections">
+      <div class="conv-section" id="archiveSection" style="display:none">
+        <div class="conv-section-head" data-cat="archive">
+          <span>📦 آرشیو</span>
+        </div>
+        <div class="conv-list" id="convListArchive"></div>
+      </div>
       <div class="conv-section">
         <div class="conv-section-head" data-cat="dm">
           <span>پیام‌های خصوصی</span>
@@ -48,6 +46,16 @@
         </div>
         <div class="conv-list" id="convListNotes"></div>
       </div>
+    </div>
+    <div class="fab-wrap">
+      <div class="fab-menu" id="fabMenu">
+        <button data-do="group">👥 گروه جدید</button>
+        <button data-do="channel">📢 کانال جدید</button>
+        <button data-do="message">✉️ پیام جدید</button>
+      </div>
+      <button class="fab" id="fabNew" title="گپ جدید" aria-label="گپ جدید">
+        <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
+      </button>
     </div>
   </aside>
 
@@ -81,6 +89,16 @@
         <button class="icon-btn" id="btnReportUser" title="گزارش" style="display:none">
           <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>
         </button>
+        <button class="icon-btn" id="btnChatSearch" title="جستجو در پیام‌ها">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><circle cx="11" cy="11" r="7"/><path d="m20 20-3.2-3.2"/></svg>
+        </button>
+      </div>
+      <div class="chat-search" id="chatSearch" style="display:none">
+        <input class="input" id="chatSearchInput" placeholder="جستجو در پیام‌های این گپ…">
+        <span class="cs-count" id="chatSearchCount"></span>
+        <button class="icon-btn" id="chatSearchPrev" title="قبلی">↑</button>
+        <button class="icon-btn" id="chatSearchNext" title="بعدی">↓</button>
+        <button class="icon-btn" id="chatSearchClose" title="بستن">✕</button>
       </div>
       <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
       <div class="msgs" id="msgs">
@@ -285,7 +303,7 @@
     <input class="input" id="pmUsernameInput" placeholder="انگلیسی، بدون فاصله" pattern="[a-zA-Z0-9_]{3,30}" style="direction:ltr; text-align:left">
     <label class="label">بیو</label>
     <textarea class="input bio-resize" id="pmBioInput" rows="2" maxlength="200"></textarea>
-    <label class="label">رنگ شخصی (بابل پیام‌ها)</label>
+    <label class="label">رنگ پیام‌های من</label>
     <div class="color-swatches" id="pmSwatches"></div>
     <label class="label">عکس پروفایل</label>
     <div class="av-picker" id="pmAvPick">
@@ -298,6 +316,18 @@
         <button class="btn" id="pmAvatarBtn">آپلود</button>
         <button class="btn ghost" id="pmAvClear" style="display:none">حذف</button>
       </div>
+    </div>
+    <label class="label">تغییر رمز عبور</label>
+    <input class="input" id="pmCurPass" type="password" placeholder="رمز فعلی" autocomplete="current-password">
+    <input class="input" id="pmNewPass" type="password" placeholder="رمز جدید (حداقل ۶ کاراکتر)" autocomplete="new-password">
+    <input class="input" id="pmNewPass2" type="password" placeholder="تکرار رمز جدید" autocomplete="new-password">
+    <button class="btn" id="pmChangePass" style="margin-top:10px">تغییر رمز عبور</button>
+    <label class="label">کاربران بلاک‌شده</label>
+    <div class="blocked-list" id="pmBlocks"><small style="color:var(--dim)">کسی رو بلاک نکردی</small></div>
+    <div class="danger-zone">
+      <b>حذف حساب کاربری</b>
+      <p>حسابت و همه‌ی پیام‌ها و گپ‌هات برای همیشه پاک می‌شه. این کار برگشت‌پذیر نیست.</p>
+      <button class="btn danger" id="pmDeleteAccount">🗑 حذف حساب</button>
     </div>
     <div class="pm-actions">
       <button class="btn primary" id="pmSave">ذخیره</button>

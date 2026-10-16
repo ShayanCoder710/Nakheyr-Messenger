@@ -383,6 +383,8 @@ document.addEventListener('keydown', e => {
     document.querySelectorAll('.modal.show, .report-modal.show').forEach(m => m.classList.remove('show'));
     hidePicker();
     cancelSelect();
+    const cs = document.getElementById('chatSearch');
+    if (cs && cs.style.display !== 'none') closeChatSearch();
   }
 });
 
@@ -476,6 +478,7 @@ document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
 async function openChat(id, opts) {
   currentChat = +id;
+  if (typeof closeChatSearch === 'function') closeChatSearch();
   const r = await fetch('/api/messages/' + id);
   let j;
   try { j = await r.json(); } catch (e) { j = {}; }
@@ -539,11 +542,12 @@ function renderConvItem(it) {
   } else {
     av = `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
   }
+  const muteIco = it.muted ? '<span class="conv-mute" title="بی‌صدا">🔕</span>' : '';
   return `
-    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}">
+    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}">
       ${av}
       <div class="body">
-        <div class="row1"><b>${esc(it.name)}${lock}</b><time>${fmtTime(it.last_at)}</time></div>
+        <div class="row1"><b>${esc(it.name)}${lock}</b><span class="conv-meta">${muteIco}<time>${fmtTime(it.last_at)}</time></span></div>
         <div class="row2"><span>${esc(it.last)}</span>${it.unread ? `<span class="unread-pill">${it.unread}</span>` : ''}</div>
       </div>
     </div>`;
@@ -559,13 +563,16 @@ function loadConvList() {
   const seq = ++convSeq;
   fetch('/api/conversations').then(r => r.json()).then(j => {
     if (seq !== convSeq) return;
-    const byCat = { dm: [], group: [], channel: [], notes: [] };
+    const byCat = { dm: [], group: [], channel: [], notes: [], archive: [] };
     j.conversations.forEach(it => {
+      if (it.archived && !it.is_notes) { byCat.archive.push(it); return; }
       const cat = it.is_notes ? 'notes' : it.chat_type;
       byCat[cat] = byCat[cat] || [];
       byCat[cat].push(it);
     });
-    for (const cat of ['dm', 'group', 'channel', 'notes']) {
+    const arcSec = document.getElementById('archiveSection');
+    if (arcSec) arcSec.style.display = byCat.archive.length ? '' : 'none';
+    for (const cat of ['archive', 'dm', 'group', 'channel', 'notes']) {
       const list = document.getElementById('convList' + cat.charAt(0).toUpperCase() + cat.slice(1));
       if (!list) continue;
       let html;
@@ -584,7 +591,7 @@ function loadConvList() {
       const head = document.querySelector(`.conv-section-head[data-cat="${cat}"] span`);
       if (head && cat !== 'notes') {
         if (!head.dataset.base) head.dataset.base = head.textContent;
-        head.textContent = head.dataset.base + ' (' + byCat[cat].length + ')';
+        head.textContent = head.dataset.base.replace(/\s*\(\d+\)$/, '') + ' (' + byCat[cat].length + ')';
       }
     }
     const nn = document.getElementById('newNotesBtn');
@@ -1163,7 +1170,7 @@ function uploadChatAvatar(chatId, file) {
   return fetch('/api/chat/' + chatId + '/avatar', { method: 'POST', body: fd }).then(x => x.json());
 }
 
-document.getElementById('btnNewGroup').onclick = async () => {
+async function openNewGroup() {
   const modal = document.getElementById('newGroupModal');
   modal.classList.add('show');
   segSelect(document.getElementById('groupVis'), 'public');
@@ -1174,7 +1181,7 @@ document.getElementById('btnNewGroup').onclick = async () => {
   document.getElementById('groupMemberPick').innerHTML = r.users.filter(u => !u.is_banned).map(u =>
     `<label><input type="checkbox" value="${u.id}"><span class="avatar sm">${avatarInner(u.display_name, u.avatar)}</span>${esc(u.display_name)}</label>`
   ).join('') || '<small style="color:var(--dim)">کاربری برای دعوت پیدا نشد</small>';
-};
+}
 document.querySelectorAll('#groupVis button').forEach(b => b.onclick = () => segSelect(document.getElementById('groupVis'), b.dataset.val));
 document.getElementById('groupCancel').onclick = () => document.getElementById('newGroupModal').classList.remove('show');
 
@@ -1198,13 +1205,35 @@ document.getElementById('btnCreateGroup').onclick = async () => {
   } else toast(r.error, 'error');
 };
 
-document.getElementById('btnNewChannel').onclick = () => {
+function openNewChannel() {
   document.getElementById('newChannelModal').classList.add('show');
   segSelect(document.getElementById('channelVis'), 'public');
   document.getElementById('channelName').value = '';
   document.getElementById('channelDesc').value = '';
   resetAvPick('channelAv');
+}
+
+const fabMenu = document.getElementById('fabMenu');
+const fabBtn = document.getElementById('fabNew');
+fabBtn.onclick = e => {
+  e.stopPropagation();
+  fabMenu.classList.toggle('show');
+  fabBtn.classList.toggle('open');
 };
+fabMenu.querySelectorAll('button').forEach(b => b.onclick = () => {
+  fabMenu.classList.remove('show');
+  fabBtn.classList.remove('open');
+  const d = b.dataset.do;
+  if (d === 'group') openNewGroup();
+  else if (d === 'channel') openNewChannel();
+  else document.getElementById('searchInput').focus();
+});
+document.addEventListener('click', e => {
+  if (!e.target.closest('.fab-wrap')) {
+    fabMenu.classList.remove('show');
+    fabBtn.classList.remove('open');
+  }
+});
 document.querySelectorAll('#channelVis button').forEach(b => b.onclick = () => segSelect(document.getElementById('channelVis'), b.dataset.val));
 document.getElementById('channelCancel').onclick = () => document.getElementById('newChannelModal').classList.remove('show');
 
@@ -1318,6 +1347,59 @@ document.getElementById('chatHeadId').onclick = () => {
   }
   openSettings();
 };
+
+let _srchMatches = [], _srchIdx = -1;
+function clearChatSearchMarks() {
+  document.querySelectorAll('.mrow.search-hit, .mrow.search-cur').forEach(r => r.classList.remove('search-hit', 'search-cur'));
+}
+function openChatSearch() {
+  document.getElementById('chatSearch').style.display = 'flex';
+  document.getElementById('chatSearchInput').focus();
+  runChatSearch();
+}
+function closeChatSearch() {
+  const bar = document.getElementById('chatSearch');
+  if (!bar) return;
+  bar.style.display = 'none';
+  document.getElementById('chatSearchInput').value = '';
+  document.getElementById('chatSearchCount').textContent = '';
+  _srchMatches = []; _srchIdx = -1;
+  clearChatSearchMarks();
+}
+function runChatSearch() {
+  const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();
+  clearChatSearchMarks();
+  _srchMatches = []; _srchIdx = -1;
+  const cnt = document.getElementById('chatSearchCount');
+  if (!q) { cnt.textContent = ''; return; }
+  _srchMatches = (CD.initialMessages || []).filter(m => (m.content || '').toLowerCase().includes(q));
+  _srchMatches.forEach(m => {
+    const row = document.querySelector(`.mrow[data-mid="${m.id}"]`);
+    if (row) row.classList.add('search-hit');
+  });
+  if (!_srchMatches.length) { cnt.textContent = 'پیدا نشد'; return; }
+  goToMatch(0);
+}
+function goToMatch(i) {
+  if (!_srchMatches.length) return;
+  _srchIdx = (i + _srchMatches.length) % _srchMatches.length;
+  document.querySelectorAll('.mrow.search-cur').forEach(r => r.classList.remove('search-cur'));
+  const row = document.querySelector(`.mrow[data-mid="${_srchMatches[_srchIdx].id}"]`);
+  if (row) { row.classList.add('search-cur'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  document.getElementById('chatSearchCount').textContent = (_srchIdx + 1) + '/' + _srchMatches.length;
+}
+document.getElementById('btnChatSearch').onclick = () => {
+  const bar = document.getElementById('chatSearch');
+  if (bar.style.display === 'none' || !bar.style.display) openChatSearch();
+  else closeChatSearch();
+};
+document.getElementById('chatSearchClose').onclick = closeChatSearch;
+document.getElementById('chatSearchInput').oninput = runChatSearch;
+document.getElementById('chatSearchInput').onkeydown = e => {
+  if (e.key === 'Enter') { e.preventDefault(); goToMatch(_srchIdx + 1); }
+};
+document.getElementById('chatSearchNext').onclick = () => goToMatch(_srchIdx + 1);
+document.getElementById('chatSearchPrev').onclick = () => goToMatch(_srchIdx - 1);
 document.getElementById('csClose').onclick = () => document.getElementById('chatSettingsModal').classList.remove('show');
 document.querySelectorAll('#csVis button').forEach(b => b.onclick = () => segSelect(document.getElementById('csVis'), b.dataset.val));
 
@@ -1464,6 +1546,29 @@ function openProfilePage() {
     prev.style.display = 'none';
   }
   document.getElementById('pmAvClear').style.display = window.ME.avatar ? 'inline-flex' : 'none';
+  loadBlocks();
+}
+
+async function loadBlocks() {
+  const box = document.getElementById('pmBlocks');
+  if (!box) return;
+  const r = await fetch('/api/blocks').then(x => x.json()).catch(() => null);
+  if (!r || !r.ok || !r.users.length) {
+    box.innerHTML = '<small style="color:var(--dim)">کسی رو بلاک نکردی</small>';
+    return;
+  }
+  box.innerHTML = r.users.map(u => `
+    <div class="blk-row" data-uid="${u.id}">
+      <span class="avatar sm">${avatarInner(u.display_name, u.avatar)}</span>
+      <div class="blk-id"><b>${esc(u.display_name)}</b><small>@${esc(u.username)}</small></div>
+      <button class="btn sm" data-unblock="${u.id}">رفع بلاک</button>
+    </div>`).join('');
+  box.querySelectorAll('[data-unblock]').forEach(b => b.onclick = () => {
+    api('/api/block', { user_id: +b.dataset.unblock }).then(j => {
+      if (j.ok) { toast('رفع بلاک شد'); loadBlocks(); }
+      else toast(j.error, 'error');
+    });
+  });
 }
 
 document.getElementById('pmBack').onclick = () => {
@@ -1753,12 +1858,26 @@ document.addEventListener('contextmenu', e => {
     const type = conv.dataset.type;
     const isDm = type === 'dm';
     const peerName = conv.dataset.peer || '';
+    const isMuted = conv.dataset.muted === '1';
+    const isArchived = conv.dataset.archived === '1';
     showCtxMenu(e.clientX, e.clientY, [
       { label: 'باز کردن', icon: '💬', fn: () => openChat(chatId) },
       { label: 'خواندن نشانه‌گذاری', icon: '✓', fn: () => api('/api/mark-read', { chat_id: chatId }).then(() => {
         clearUnread(chatId);
         refreshConvList();
       }) },
+      { label: isMuted ? 'باصدا کردن' : 'بی‌صدا کردن', icon: isMuted ? '🔔' : '🔕', fn: () => {
+        api('/api/chat/' + chatId + '/prefs', { muted: !isMuted }).then(j => {
+          if (j.ok) { toast(j.muted ? 'بی‌صدا شد' : 'باصدا شد'); refreshConvList(); }
+          else toast(j.error, 'error');
+        });
+      } },
+      { label: isArchived ? 'خروج از آرشیو' : 'آرشیو کردن', icon: '📦', fn: () => {
+        api('/api/chat/' + chatId + '/prefs', { archived: !isArchived }).then(j => {
+          if (j.ok) { toast(j.archived ? 'آرشیو شد' : 'از آرشیو درآمد'); refreshConvList(); }
+          else toast(j.error, 'error');
+        });
+      } },
       !isDm ? { label: 'تنظیمات گپ', icon: '⚙', fn: () => openChat(chatId).then(openSettings) } : null,
       !isDm && CD.chat && +CD.chat.id === chatId && CD.role && CD.role !== 'owner' ? {
         label: 'ترک گروه / کانال', icon: '🚪', danger: true, fn: () => {
