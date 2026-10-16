@@ -16,7 +16,7 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     bio = db.Column(db.String(200), default='')
     avatar = db.Column(db.String(120), default='')
-    accent = db.Column(db.String(20), default='#e11d48')
+    accent = db.Column(db.String(20), default='#e5393b')
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
     is_verified = db.Column(db.Boolean, default=False)

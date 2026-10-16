@@ -27,7 +27,7 @@ def init_db():
             username='admin',
             display_name='مدیر نخیر',
             bio='اکانت رسمی مدیریت پیام‌رسان نخیر',
-            accent='#e11d48',
+            accent='#e5393b',
             is_admin=True,
             is_verified=True,
         )
