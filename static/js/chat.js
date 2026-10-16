@@ -65,7 +65,7 @@ function reactionChips(m) {
   const agg = {};
   Object.values(m.reactions || {}).forEach(e => { agg[e] = (agg[e] || 0) + 1; });
   return Object.entries(agg).map(([e, n]) =>
-    `<span class="${e === mine ? 'mine' : ''}" data-emoji="${e}" data-mid="${m.id}">${e} ${n}</span>`
+    `<span class="${e === mine ? 'mine' : ''}" data-emoji="${e}" data-mid="${m.id}"><span class="rx-e">${e}</span>${n}</span>`
   ).join('');
 }
 
@@ -675,7 +675,7 @@ function openEmojiPicker(mid, x, y) {
   p.innerHTML = EMOJIS.map(e => `<button data-emoji="${e}">${e}</button>`).join('');
   p.classList.add('global');
   p.style.display = 'flex';
-  const bw = EMOJIS.length * 34 + 20, bh = 46;
+  const bw = p.offsetWidth, bh = p.offsetHeight;
   let px = x - bw / 2, py = y + 22;
   if (px < 8) px = 8;
   if (px + bw > window.innerWidth - 8) px = window.innerWidth - bw - 8;
