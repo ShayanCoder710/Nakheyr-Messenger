@@ -1,5 +1,6 @@
 const S = io({ transports: ['websocket', 'polling'] });
 const CD = window.CHAT_DATA || {};
+CD.joined = window.JOINED !== false;
 const EMOJIS = ['👍', '❤️', '😂', '😮', '😢', '🔥', '🎉', '🙏', '👏', '😍', '🤔', '👌'];
 const EMOJI_SETS = [
   { icon: '😀', emojis: ['😀','😃','😄','😁','😆','😅','😂','🤣','🥲','😊','😇','🙂','🙃','😉','😌','😍','🥰','😘','😗','😙','😚','😋','😛','😝','😜','🤪','🤨','🧐','🤓','😎','🥸','😏','😒','😞','😔','😟','😕','🙁','😣','😖','😫','😩','🥺','😢','😭','😤','😠','😡','🤬','🤯','😳','🥵','🥶','😱','😨','😰','😥','😓','🤗','🤔','🤭','🤫','🤥','😶','😐','😑','😬','🙄','😯','😦','😧','😮','😲','🥱','😴','🤤','😪','😵','🤐','🥴','🤢','🤮','🤧','😷','🤒','🤕'] },
@@ -8,7 +9,14 @@ const EMOJI_SETS = [
   { icon: '⚽', emojis: ['⚽','🏀','🏈','⚾','🥎','🎾','🏐','🏉','🥏','🎱','🪀','🏓','🏸','🏒','🏑','🥍','🏏','🥊','🥋','⛳','⛸','🎿','🛷','🥌','🎯','🪃','🏹','🎣','🤿','🥊','🎽','🛹','🛼','🚗','🚕','🚙','🚌','🚎','🏎','🚓','🚑','🚒','🚐','🛻','🚚','🚛','🚜','🛵','🏍','✈️','🚀','🛸','🚁','⛵','🚤','🛥','🚢'] },
   { icon: '💡', emojis: ['⌚','📱','💻','⌨️','🖥','🖨','🖱','💽','💾','💿','📀','📷','📸','📹','🎥','📞','☎️','📟','📠','📺','📻','🧭','⏱','⏰','🕰','⌛','⏳','🔋','🔌','💡','🔦','🕯','🧯','🛢','💸','💵','💴','💶','💷','💰','💳','💎','⚖️','🧰','🔧','🔨','⚒','🛠','⛏','🔩','⚙️','🧱','⛓','🧲','🔫','💣','🧨','🪓','🔪','🗡','⚔️','🛡','🚬','⚰️','🏺','🔮','📿','🧿','💊','💉','🩸','🔬','🔭','📡','💈','⚗️','🧪','🧫','🧬','🩹','🩺','📖','📚','📝','✏️','🖊','🖋','✒️','🖌','🖍','📌','📍','📎','🖇','📐','📏','🧮','📊','📈','📉','🗂','📁','📂','🗞','📰','📓','📔','📒','📕','📗','📘','📙','📃','📄','📑','🔖','🔗','📅','📆','🗓','📇','🗃','🗄','📋','📁'] },
 ];
-const SWATCHES = ['#e11d48', '#f43f5e', '#8b5cf6', '#0ea5e9', '#10b981', '#f59e0b', '#f43f5e', '#64748b'];
+const SWATCHES = ['#e11d48', '#e5393b', '#c62828', '#8e1c1c', '#ff5252', '#b71c1c', '#d84315', '#4a4a4a'];
+
+function applyAccent(color) {
+  if (/^#[0-9a-fA-F]{6}$/.test(color || '')) {
+    document.documentElement.style.setProperty('--me-accent', color);
+  }
+}
+applyAccent(window.ME && window.ME.accent);
 
 let currentChat = window.CURRENT_CHAT;
 let pendingFile = null;
@@ -194,7 +202,27 @@ function scrollToBottom(force) {
   if (force || nearBottom()) {
     el.scrollTop = el.scrollHeight;
   }
+  updateScrollBtn();
 }
+
+function updateScrollBtn() {
+  const btn = document.getElementById('scrollDown');
+  const el = document.getElementById('msgs');
+  if (!btn || !el) return;
+  const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
+  btn.classList.toggle('show', dist > 220);
+}
+
+(function initScrollDown() {
+  const el = document.getElementById('msgs');
+  const btn = document.getElementById('scrollDown');
+  if (!el || !btn) return;
+  el.addEventListener('scroll', updateScrollBtn, { passive: true });
+  new MutationObserver(updateScrollBtn).observe(el, { childList: true, subtree: true });
+  btn.addEventListener('click', () => { el.scrollTop = el.scrollHeight; updateScrollBtn(); });
+  window.addEventListener('resize', updateScrollBtn);
+  updateScrollBtn();
+})();
 
 function registerMessage(m) {
   if (!CD.initialMessages) CD.initialMessages = [];
@@ -245,7 +273,7 @@ function attachMore() {
 }
 
 function appendMsg(m) {
-  const body = document.getElementById('msgs');
+  const body = document.getElementById('msgsBody');
   if (document.getElementById('m' + m.id)) { registerMessage(m); return; }
   registerMessage(m);
   ensureDaySep(m.created_at);
@@ -260,7 +288,6 @@ function setHead() {
   const headAv = document.getElementById('chatHeadAvatar');
   const name = document.getElementById('chatHeadName');
   const sub = document.getElementById('chatHeadSub');
-  const strip = document.getElementById('membersStrip');
   const repBtn = document.getElementById('btnReportUser');
   const joinBtn = document.getElementById('btnJoin');
   const peerBtn = document.getElementById('btnPeerProfile');
@@ -271,14 +298,13 @@ function setHead() {
   repBtn.style.display = 'none';
   peerBtn.style.display = 'none';
   if (c.chat_type === 'dm') {
-    const p = c.peer;
-    displayName = p.display_name;
-    subText = '@' + p.username + (p.status === 'online' ? ' · آنلاین' : ' · آفلاین');
-    av = p.avatar;
-    strip.style.display = 'none';
-    repBtn.style.display = 'grid';
+    const p = c.peer || {};
+    displayName = p.display_name || c.name || 'کاربر';
+    subText = p.username ? ('@' + p.username + (p.status === 'online' ? ' · آنلاین' : ' · آفلاین')) : '';
+    av = p.avatar || '';
+    if (p.id) repBtn.style.display = 'grid';
   } else {
-    displayName = c.name;
+    displayName = c.name || (c.chat_type === 'channel' ? 'کانال' : 'گروه');
     const vis = c.is_public ? '🌐 عمومی' : '🔒 خصوصی';
     subText = (c.chat_type === 'channel' ? 'کانال' : 'گروه') + ' · ' + vis + ' · ' + ((c.members || (CD.members || [])).length) + ' عضو';
     av = c.avatar;
@@ -291,21 +317,15 @@ function setHead() {
   headAv.innerHTML = (av ? '<img src="' + av + '" alt="">' : (displayName || '؟').charAt(0));
   name.textContent = displayName;
   sub.textContent = subText;
-  if (c.chat_type !== 'dm' && (CD.members || []).length > 1) {
-    strip.style.display = 'flex';
-    strip.innerHTML = (CD.members || []).map(m =>
-      `<span class="chip" data-member="${m.id}" data-username="${esc(m.username)}" title="راست کلیک برای گزینه‌ها"><span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>${esc(m.display_name)}${m.role === 'owner' ? ' <span class="crown">👑</span>' : m.role === 'admin' ? ' <span class="crown">⭐</span>' : ''}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}</span>`
-    ).join('');
-  } else if (c.chat_type !== 'dm') {
-    strip.style.display = 'none';
-  }
+  const pane = document.getElementById('msgsPane');
+  if (pane) pane.classList.toggle('not-joined', !CD.joined && c.chat_type !== 'dm');
   if (isPeer()) {
-    const p = c.peer;
+    const p = c.peer || {};
     peerBtn.style.display = 'grid';
-    peerBtn.href = '/profile/' + p.username;
-    repBtn.dataset.target = p.id;
-    repBtn.dataset.name = p.display_name;
-    repBtn.style.display = 'grid';
+    peerBtn.href = '/profile/' + (p.username || '');
+    repBtn.dataset.target = p.id || '';
+    repBtn.dataset.name = p.display_name || '';
+    if (p.id) repBtn.style.display = 'grid';
   }
 }
 
@@ -450,6 +470,7 @@ async function openChat(id) {
   const r = await fetch('/api/messages/' + id);
   let j;
   try { j = await r.json(); } catch (e) { j = {}; }
+  if (currentChat !== +id) return;
   if (!r.ok || !j.chat) {
     CD.chat = null;
     CD.role = null;
@@ -463,6 +484,7 @@ async function openChat(id) {
   CD.chat = j.chat;
   CD.role = j.role;
   CD.members = j.members;
+  CD.joined = j.joined !== false;
   setHead();
   document.getElementById('mainEmpty').style.display = 'none';
   document.getElementById('msgsPane').classList.add('open');
@@ -989,49 +1011,57 @@ async function loadMembers(chatId) {
 
 function renderMembers(members) {
   CD.members = members;
-  const ml = document.getElementById('memberList');
   const role = myRole();
   const canManage = role === 'owner' || role === 'admin';
-  ml.innerHTML = `
-    <div class="ml-head">
-      <b>اعضا (${members.length})</b>
-      ${canManage ? `
-        <div class="ml-add">
-          <input class="input ml-add-input" id="mlAddInput" placeholder="نام کاربری برای دعوت">
-          <button class="btn sm" id="mlAddBtn">+</button>
-        </div>` : ''}
-    </div>
-    <div class="ml-list">` + members.map(m => {
-      const canTitle = (role === 'owner' || role === 'admin' || m.id === window.ME.id) && CD.chat && CD.chat.chat_type !== 'dm';
-      return `
-      <div class="item" data-mmember="${m.id}">
-        <span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>
-        <div style="flex:1"><b style="font-size:13px">${esc(m.display_name)}</b>
-          ${m.title ? `<span class="member-title" title="لقب">${esc(m.title)}</span>` : ''}
-          <small style="display:block">@${esc(m.username)}${m.role === 'owner' ? ' · 👑 صاحب' : m.role === 'admin' ? ' · ⭐ ادمین' : ''}</small>
-        </div>
-        ${canTitle ? `<button class="btn sm ghost" data-title="${m.id}" data-cur="${esc(m.title)}">لقب</button>` : ''}
-        ${role === 'owner' && m.id !== window.ME.id ? `<button class="btn sm" data-kick="${m.id}">اخراج</button>` : ''}
-        ${role === 'owner' && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">${m.role === 'admin' ? 'عضو' : '⭐'}</button>` : ''}
-        ${role === 'owner' && m.role !== 'owner' ? `<button class="btn sm ghost" data-transfer="${m.id}" title="انتقال مالکیت">👑</button>` : ''}
-      </div>`;
-    }).join('') + `</div>`;
+  const isOwner = role === 'owner';
+  const isDm = CD.chat && CD.chat.chat_type === 'dm';
+  const head = document.getElementById('csMembersHead');
+  if (head) head.textContent = 'اعضا (' + members.length + ')';
+  const meta = document.getElementById('csMeta');
+  if (meta && CD.chat) {
+    meta.textContent = (CD.chat.chat_type === 'channel' ? 'کانال' : 'گروه') + ' · ' + members.length + ' عضو';
+  }
+  const list = document.getElementById('csMembersList');
+  if (!list) return;
+  const addRow = canManage ? `
+    <div class="mb-add">
+      <input class="input ml-add-input" id="mlAddInput" placeholder="نام کاربری برای دعوت">
+      <button class="btn sm primary" id="mlAddBtn">افزودن</button>
+    </div>` : '';
+  list.innerHTML = addRow + (members.map(m => {
+    const isMe = m.id === window.ME.id;
+    const canTitle = (isOwner || role === 'admin' || isMe) && !isDm;
+    return `
+    <div class="mb-item" data-mmember="${m.id}">
+      <span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>
+      <div class="mb-info">
+        <b>${esc(m.display_name)}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}</b>
+        <small>@${esc(m.username)}${m.role === 'owner' ? ' · 👑 صاحب' : m.role === 'admin' ? ' · ⭐ ادمین' : ''}</small>
+      </div>
+      <div class="mb-actions">
+        ${canTitle ? `<button class="btn sm ghost" data-title="${m.id}" title="ویرایش لقب">لقب</button>` : ''}
+        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">${m.role === 'admin' ? 'عضو کن' : '⭐ ادمین'}</button>` : ''}
+        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm ghost" data-transfer="${m.id}" title="انتقال مالکیت">👑</button>` : ''}
+        ${canManage && !isMe && m.role !== 'owner' ? `<button class="btn sm danger" data-kick="${m.id}">اخراج</button>` : ''}
+      </div>
+    </div>`;
+  }).join('') || '<div class="mb-empty">عضوی نیست</div>');
 
-  ml.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
+  list.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
     openConfirm('اخراج عضو', 'این عضو از گپ اخراج می‌شه و دسترسی‌اش قطع می‌شه', () => {
       api(`/api/chat/${currentChat}/members`, { action: 'kick', user_id: +b.dataset.kick }).then(j => j.ok ? loadMembers(currentChat) : toast(j.error, 'error'));
     }, 'اخراج');
   });
-  ml.querySelectorAll('[data-promote]').forEach(b => b.onclick = () => {
-    api(`/api/chat/${currentChat}/members`, { action: 'promote', user_id: +b.dataset.promote }).then(j => j.ok ? loadMembers(currentChat) : toast(j.error, 'error'));
+  list.querySelectorAll('[data-promote]').forEach(b => b.onclick = () => {
+    api(`/api/chat/${currentChat}/members`, { action: 'promote', user_id: +b.dataset.promote }).then(j => j.ok ? (toast('نقش تغییر کرد'), loadMembers(currentChat)) : toast(j.error, 'error'));
   });
-  ml.querySelectorAll('[data-transfer]').forEach(b => b.onclick = () => {
+  list.querySelectorAll('[data-transfer]').forEach(b => b.onclick = () => {
     openConfirm('انتقال مالکیت', 'مالکیت گروه به این عضو منتقل می‌شه. تو ادمین می‌مونی', () => {
       api(`/api/chat/${currentChat}/members`, { action: 'transfer', user_id: +b.dataset.transfer })
         .then(j => j.ok ? (toast('مالکیت منتقل شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
     }, 'انتقال');
   });
-  ml.querySelectorAll('[data-title]').forEach(b => b.onclick = () => openTitleGlobal(b.dataset.title));
+  list.querySelectorAll('[data-title]').forEach(b => b.onclick = () => openTitleGlobal(b.dataset.title));
   const addBtn = document.getElementById('mlAddBtn');
   if (addBtn) addBtn.onclick = async () => {
     const uname = document.getElementById('mlAddInput').value.trim();
@@ -1043,19 +1073,6 @@ function renderMembers(members) {
       .then(j => j.ok ? (toast(u.display_name + ' دعوت شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
   };
 }
-
-document.getElementById('btnMembers').onclick = async function () {
-  if (!currentChat) return;
-  const ml = document.getElementById('memberList');
-  if (ml.classList.contains('show')) { ml.classList.remove('show'); return; }
-  await loadMembers(currentChat);
-  ml.classList.add('show');
-};
-document.addEventListener('click', e => {
-  if (!e.target.closest('#memberList') && !e.target.closest('#btnMembers')) {
-    document.getElementById('memberList').classList.remove('show');
-  }
-}, true);
 
 document.getElementById('btnJoin').onclick = async () => {
   const r = await api(`/api/chat/${currentChat}/join`, {});
@@ -1196,7 +1213,9 @@ function openSettings() {
   document.getElementById('csAvUpload').style.display = canEdit ? 'inline-flex' : 'none';
   document.getElementById('csAvClear').style.display = (canEdit && c.avatar) ? 'inline-flex' : 'none';
   document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + c.id;
-  renderSettingsMembers(c);
+  document.getElementById('csMembersHead').textContent = 'اعضا (' + ((CD.members || []).length) + ')';
+  renderMembers(CD.members || []);
+  loadMembers(c.id);
   const leave = document.getElementById('csLeave');
   leave.style.display = (c.chat_type !== 'dm' && role && role !== 'owner') ? 'inline-flex' : 'none';
   const del = document.getElementById('csDelete');
@@ -1204,19 +1223,6 @@ function openSettings() {
   del.style.display = canDel ? 'inline-flex' : 'none';
   del.dataset.chatId = c.id;
   document.getElementById('chatSettingsModal').classList.add('show');
-}
-
-function renderSettingsMembers(c) {
-  const members = CD.members || [];
-  document.getElementById('csMembersHead').textContent = 'اعضا (' + members.length + ')';
-  document.getElementById('csMembersList').innerHTML = members.map(m => `
-    <div class="mb-item">
-      <span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>
-      <div style="flex:1; min-width:0">
-        <b>${esc(m.display_name)}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}</b>
-        <small>@${esc(m.username)}${m.role === 'owner' ? ' · 👑 صاحب' : m.role === 'admin' ? ' · ⭐ ادمین' : ''}</small>
-      </div>
-    </div>`).join('') || '<div style="padding:10px; font-size:12px; color:var(--dim)">عضویی نیست</div>';
 }
 
 document.getElementById('chatHeadId').onclick = () => {
@@ -1361,6 +1367,7 @@ function openProfilePage() {
   sw.querySelectorAll('button').forEach(b => b.onclick = () => {
     sw.querySelectorAll('button').forEach(x => x.classList.remove('sel'));
     b.classList.add('sel');
+    applyAccent(b.dataset.c);
   });
   const prev = document.getElementById('pmAvPrev');
   if (window.ME.avatar) {
@@ -1463,6 +1470,7 @@ document.getElementById('pmSave').onclick = async () => {
   });
   if (r.ok) {
     window.ME = Object.assign(window.ME, r.profile);
+    applyAccent(window.ME.accent);
     document.getElementById('pmUsername').textContent = '@' + window.ME.username;
     toast('پروفایل ذخیره شد');
     document.getElementById('pmBio').textContent = window.ME.bio || 'بیویی نداری';
@@ -1729,6 +1737,7 @@ async function resyncCurrentChat() {
     CD.chat = j.chat;
     CD.role = j.role;
     CD.members = j.members || [];
+    CD.joined = j.joined !== false;
     setHead();
     document.getElementById('msgsBody').innerHTML = '';
     renderAllMessages();
@@ -1862,7 +1871,7 @@ S.on('chat_deleted', d => {
 S.on('profile_updated', p => {
   window.ME = Object.assign(window.ME, p);
   refreshSideAvatar();
-  const ml = document.getElementById('memberList');
-  if (ml.classList.contains('show') && currentChat) loadMembers(currentChat);
+  const csm = document.getElementById('chatSettingsModal');
+  if (csm && csm.classList.contains('show') && currentChat) loadMembers(currentChat);
   if (document.getElementById('myProfilePage').style.display === 'grid') openProfilePage();
 });

@@ -7,15 +7,20 @@
       <a href="{{ url_for('home') }}" style="text-decoration:none" id="sideProfileLink">{% if me %}{{ avatar_html(me) | safe }}{% endif %}</a>
       <div class="who">
         <b>{{ me.display_name }} {% if me.is_verified %}<span title="اعتمادسنجی شد">✔</span>{% endif %}</b>
-        <span>@{{ me.username }}{% if me.streak_days and me.streak_days > 1 %} · <span class="streak">🔥 {{ me.streak_days }} روزه</span>{% endif %}</span>
+        <span>@{{ me.username }}</span>
       </div>
       <div class="side-actions">
-        <button class="icon-btn" id="btnNewGroup" title="گروه جدید">+</button>
-        <button class="icon-btn" id="btnNewChannel" title="کانال جدید">≡</button>
+        <button class="icon-btn" id="btnNewGroup" title="گروه جدید">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M17.22 2.22a2.5 2.5 0 0 1 3.54 0l1.02 1.02a2.5 2.5 0 0 1 0 3.54L8.93 18.05l-4.2 1.46a.6.6 0 0 1-.75-.75l1.46-4.2L17.22 2.22m-3.79 8.5-.7-.7 3.29-3.29.7.7-3.29 3.29"/></svg>
+        </button>
+        <button class="icon-btn" id="btnNewChannel" title="کانال جدید">
+          <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14.5 5.5 7 10.5h2v3H7l-3 2.25V4.25L14.5 5.5M17 3.88l-1.79 1.28 1.15.16 2.54.36c1.27.18 2.1 1.36 1.92 2.63l-.36 2.54 1.63.23a2.5 2.5 0 1 1-4.8 1.06l-.23-1.63-1.6 1.16L15.5 18.5H12.38v-7.9l5.12-6.72zM21.6 18.5a1.5 1.5 0 1 1-2.8 0l.4-2.82a3.5 3.5 0 0 0 2.4 2.42zM3 13.5V6A1.5 1.5 0 0 1 4.5 4.5H8L5.32 9.23l2.82.4 2.36-1.7-.56-3.43 1.66-1.13A1.5 1.5 0 0 1 15 4.9v.9l-6.5 4.7z"/></svg>
+        </button>
       </div>
     </div>
     <div class="search-box">
-      <input class="input" id="searchInput" placeholder="جستجوی افراد، گروه‌های عمومی و کانال‌ها…">
+      <svg class="search-ico" viewBox="0 0 24 24" fill="currentColor"><path d="M10.5 3.5a7 7 0 1 0 4.3 12.5l4.35 4.35 1.4-1.4L16.2 14.6a7 7 0 0 0-5.7-11.1zM4.5 10.5a6 6 0 1 1 6 6 6 6 0 0 1-6-6z"/></svg>
+      <input class="input" id="searchInput" placeholder="جستجو…">
       <div class="search-results" id="searchResults"></div>
     </div>
     <div class="conv-sections" id="convSections">
@@ -42,16 +47,18 @@
 
   <main class="main" id="main">
     <div class="main-empty" id="mainEmpty">
-      <div>
-        <div class="big">💬</div>
-        <h2>یک گپ رو انتخاب کن</h2>
-        <p style="color:var(--dim); font-size:13px; margin-top:6px">پیام، عکس، فایل و واکنش‌ها — همه اینجا</p>
+      <div class="empty-state">
+        <div class="empty-ico">💬</div>
+        <div class="me-pill">یک گپ رو انتخاب کن</div>
+        <p>یه گفتگو انتخاب کن تا پیام‌ها اینجا بیان</p>
       </div>
     </div>
 
     <section class="msgs-pane {% if chat %}open{% endif %}" id="msgsPane">
       <div class="chat-head">
-        <button class="icon-btn btn-back" id="btnBackChat" title="بازگشت">›</button>
+        <button class="icon-btn btn-back" id="btnBackChat" title="بازگشت">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M9 6l6 6-6 6"/></svg>
+        </button>
         <div class="head-id" id="chatHeadId" title="تنظیمات و اطلاعات گپ">
           <div class="avatar" id="chatHeadAvatar"></div>
           <div class="t">
@@ -59,17 +66,23 @@
             <small id="chatHeadSub"></small>
           </div>
         </div>
-        <button class="icon-btn" id="btnMembers" title="اعضا">☰</button>
-        <button class="icon-btn" id="btnJoin" title="پیوستن" style="display:none">⤵</button>
-        <a class="icon-btn" id="btnPeerProfile" href="#" title="پروفایل" style="display:none">👤</a>
-        <button class="icon-btn" id="btnReportUser" title="گزارش" style="display:none">🚨</button>
-        <div class="member-list" id="memberList"></div>
+        <button class="icon-btn" id="btnJoin" title="پیوستن" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M15 3h4a2 2 0 0 1 2 2v4"/><path d="M10 14 21 3"/><path d="M18 13v6a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V8a2 2 0 0 1 2-2h6"/></svg>
+        </button>
+        <a class="icon-btn" id="btnPeerProfile" href="#" title="پروفایل" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+        </a>
+        <button class="icon-btn" id="btnReportUser" title="گزارش" style="display:none">
+          <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M4 15s1-1 4-1 5 2 8 2 4-1 4-1V3s-1 1-4 1-5-2-8-2-4 1-4 1z"/><path d="M4 22v-7"/></svg>
+        </button>
       </div>
       <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
-      <div class="members-strip" id="membersStrip" style="display:none"></div>
       <div class="msgs" id="msgs">
         <div id="msgsBody" style="display:contents"></div>
       </div>
+      <button class="scroll-down" id="scrollDown" title="آخرین پیام‌ها" aria-label="آخرین پیام‌ها">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
+      </button>
       <div class="typing-bar" id="typingBar"></div>
       <div class="channel-hint" id="channelHint" style="display:none"><span>🔒 در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
@@ -88,8 +101,10 @@
             <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل"><img class="ico-img" src="{{ url_for('static', filename='icons/clip.svg') }}" alt="پیوست"></button>
           </div>
           <input type="file" id="fileInput" hidden>
-          <textarea class="input composer-input" id="msgInput" rows="1" placeholder="پیام خود را بنویسید…" style="flex:1; min-width:0; width:auto"></textarea>
-          <button class="btn primary send-btn" id="btnSend" style="min-width:88px; height:46px; flex:0 0 auto">ارسال</button>
+          <textarea class="composer-input" id="msgInput" rows="1" placeholder="پیام…"></textarea>
+          <button class="send-btn" id="btnSend" title="ارسال">
+            <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3.4 20.4 21 12 3.4 3.6l3.3 7.5L14 12l-7.3 1.5z"/></svg>
+          </button>
         </div>
       </div>
     </section>
@@ -227,16 +242,18 @@
 
 <div class="profile-page" id="myProfilePage" style="display:none">
   <div class="pm-wrap">
-    <div class="avatar lg" id="pmAvatar" style="margin:0 auto"></div>
-    <h1 style="margin-top:14px" id="pmName"></h1>
-    <div class="uname" id="pmUsername"></div>
-    <p class="bio" id="pmBio" style="text-align:center; color:var(--muted)"></p>
+    <div class="pm-head">
+      <div class="avatar lg" id="pmAvatar"></div>
+      <h1 id="pmName"></h1>
+      <div class="uname" id="pmUsername"></div>
+      <p class="bio" id="pmBio"></p>
+    </div>
     <label class="label">نام نمایشی</label>
     <input class="input" id="pmDisplayName">
     <label class="label">نام کاربری</label>
     <input class="input" id="pmUsernameInput" placeholder="انگلیسی، بدون فاصله" pattern="[a-zA-Z0-9_]{3,30}" style="direction:ltr; text-align:left">
     <label class="label">بیو</label>
-    <textarea class="input bio-resize" id="pmBioInput" rows="2" maxlength="200" style="resize:horizontal; min-width:140px; max-width:100%; width:260px"></textarea>
+    <textarea class="input bio-resize" id="pmBioInput" rows="2" maxlength="200"></textarea>
     <label class="label">رنگ شخصی (بابل پیام‌ها)</label>
     <div class="color-swatches" id="pmSwatches"></div>
     <label class="label">عکس پروفایل</label>
@@ -246,13 +263,15 @@
         <span>📷 عکس انتخاب کن یا بکش و رها کن</span>
         <img id="pmAvPrev" alt="" style="display:none">
       </label>
-      <button class="btn sm" id="pmAvatarBtn">آپلود</button>
-      <button class="btn sm ghost" id="pmAvClear" style="display:none">حذف</button>
+      <div class="av-actions">
+        <button class="btn" id="pmAvatarBtn">آپلود</button>
+        <button class="btn ghost" id="pmAvClear" style="display:none">حذف</button>
+      </div>
     </div>
-    <div style="display:flex; gap:10px; margin-top:22px">
-      <button class="btn primary" id="pmSave" style="flex:1; justify-content:center">ذخیره</button>
+    <div class="pm-actions">
+      <button class="btn primary" id="pmSave">ذخیره</button>
       <button class="btn danger" id="pmLogout">خروج</button>
-      <button class="btn ghost" id="pmBack" style="justify-content:center">برگشت</button>
+      <button class="btn ghost" id="pmBack">برگشت</button>
     </div>
   </div>
 </div>
