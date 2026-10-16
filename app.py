@@ -13,7 +13,8 @@ from models.models import db, User, Chat, ChatMember, Message, Report, Block
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
-    user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar
+    user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
+    username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -91,23 +92,25 @@ def home():
 
 @app.route('/login', methods=['GET', 'POST'])
 def login():
+    def safe_next(target):
+        return target if target and target.startswith('/') and not target.startswith('//') else None
     if current_user():
-        return redirect(url_for('home'))
+        return redirect(safe_next(request.args.get('next')) or url_for('home'))
     if request.method == 'POST':
         username = (request.form.get('username') or '').strip().lower()
         password = request.form.get('password') or ''
         user = User.query.filter_by(username=username).first()
         if not user or not user.check_password(password):
             flash('نام کاربری یا پسورد اشتباهه.', 'error')
-            return render_template('login.html')
+            return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         if user.is_banned:
             flash('حساب شما مسدود شده. با ادمین تماس بگیر.', 'error')
-            return render_template('login.html')
+            return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         session['user_id'] = user.id
         bump_online(user)
         flash(f'خوش برگشتی {user.display_name}!', 'success')
-        return redirect(url_for('home'))
-    return render_template('login.html')
+        return redirect(safe_next(request.form.get('next')) or url_for('home'))
+    return render_template('login.html', next=safe_next(request.args.get('next')) or '')
 
 
 @app.route('/register', methods=['GET', 'POST'])
@@ -127,7 +130,7 @@ def register():
         if len(password) < 6:
             flash('پسورد حداقل ۶ کاراکتر باشد.', 'error')
             return render_template('register.html')
-        if User.query.filter_by(username=username).first():
+        if username in RESERVED_USERNAMES or username_taken(username):
             flash('این نام کاربری قبلا گرفته شده.', 'error')
             return render_template('register.html')
         user = User(username=username, display_name=display)
@@ -171,6 +174,19 @@ def chat_page(chat_id):
                                      if m.user and m.user.id != user.id])
 
 
+@app.route('/chat/<username>')
+@require_auth
+def chat_page_by_username(username):
+    user = current_user()
+    chat = Chat.query.filter(db.func.lower(Chat.username) == username.lower()).first()
+    if not chat or chat.chat_type == 'dm':
+        abort(404)
+    if not can_view_chat(user, chat):
+        flash('این گپ خصوصیه. برای ورود باید دعوت بشی.', 'error')
+        return redirect(url_for('home'))
+    return redirect(url_for('chat_page', chat_id=chat.id))
+
+
 @app.route('/api/search')
 @require_auth
 def api_search():
@@ -190,12 +206,16 @@ def api_search():
             Chat.is_public.is_(True),
             db.or_(
                 db.func.lower(Chat.name).like(f'%{q}%'),
+                db.func.lower(Chat.username).like(f'%{q}%'),
                 db.func.lower(Chat.description).like(f'%{q}%'),
             ),
         ).limit(8).all()
         known = Chat.query.filter(
             Chat.chat_type.in_(['group', 'channel']),
-            db.func.lower(Chat.name).like(f'%{q}%'),
+            db.or_(
+                db.func.lower(Chat.name).like(f'%{q}%'),
+                db.func.lower(Chat.username).like(f'%{q}%'),
+            ),
             Chat.members.any(ChatMember.user_id == user.id),
         ).limit(8).all()
         seen = set()
@@ -212,6 +232,7 @@ def api_search():
             'id': c.id,
             'chat_type': c.chat_type,
             'name': c.name,
+            'username': c.username or '',
             'is_public': bool(c.is_public),
             'is_member': (ChatMember.query.filter_by(chat_id=c.id, user_id=user.id).first() is not None) or user.is_admin,
         } for c in chats],
@@ -287,7 +308,7 @@ def api_chat_settings(chat_id):
     role = my_role_in(user, chat)
     data = request.get_json(silent=True) or {}
     wants_visibility = 'is_public' in data
-    wants_edit = any(k in data for k in ('name', 'description'))
+    wants_edit = any(k in data for k in ('name', 'description', 'username'))
     if wants_visibility and role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='تغییر نوع گپ فقط برای صاحب و ادمین گپ')
     if wants_edit and role not in ('owner', 'admin') and not user.is_admin:
@@ -299,6 +320,15 @@ def api_chat_settings(chat_id):
             return jsonify(ok=False, error='نام حداقل ۲ حرف')
         chat.name = new_name[:60]
         changed = True
+    if 'username' in data:
+        new_uname = (data.get('username') or '').strip().lower()
+        if new_uname != (chat.username or ''):
+            if not CHAT_USERNAME_RE.match(new_uname):
+                return jsonify(ok=False, error='نام کاربری گپ: با حرف انگلیسی شروع بشه، ۳ تا ۳۰ حرف/عدد/_')
+            if new_uname in RESERVED_USERNAMES or username_taken(new_uname, chat_id=chat.id):
+                return jsonify(ok=False, error='این نام کاربری گرفته شده')
+            chat.username = new_uname
+            changed = True
     if 'description' in data:
         chat.description = (data.get('description') or '').strip()[:200]
         changed = True
@@ -658,9 +688,9 @@ def api_profile():
         if not re.match(r'^[a-z0-9_]{3,30}$', new_username):
             return jsonify(ok=False, error='نام کاربری: ۳ تا ۳۰ حرف انگلیسی، عدد یا _')
         if new_username != user.username:
-            if new_username in ('admin',) and not user.is_admin:
+            if new_username in RESERVED_USERNAMES and not user.is_admin:
                 return jsonify(ok=False, error='این نام کاربری رزرو شده')
-            if User.query.filter_by(username=new_username).first():
+            if username_taken(new_username, user_id=user.id):
                 return jsonify(ok=False, error='این نام کاربری قبلا گرفته شده')
             user.username = new_username
     db.session.commit()

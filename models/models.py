@@ -64,6 +64,7 @@ class Chat(db.Model):
     id = db.Column(db.Integer, primary_key=True)
     chat_type = db.Column(db.String(10), nullable=False, default='dm')
     name = db.Column(db.String(60), default='')
+    username = db.Column(db.String(30), unique=True, nullable=True, index=True)
     description = db.Column(db.String(200), default='')
     avatar = db.Column(db.String(120), default='')
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
@@ -84,6 +85,7 @@ class Chat(db.Model):
             'id': self.id,
             'chat_type': self.chat_type,
             'name': self.name,
+            'username': self.username or '',
             'description': self.description,
             'avatar': self.avatar_url,
             'owner_id': self.owner_id,

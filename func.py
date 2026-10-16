@@ -20,6 +20,7 @@ def init_db():
     _ensure_utf8mb4()
     db.create_all()
     _ensure_columns()
+    _ensure_chat_usernames()
     admin = User.query.filter_by(username='admin').first()
     if not admin:
         admin = User(
@@ -59,6 +60,7 @@ def _ensure_columns():
         ('messages', 'pinned', "BOOLEAN NOT NULL DEFAULT 0"),
         ('messages', 'reply_to', "INTEGER NULL"),
         ('chats', 'is_public', "BOOLEAN NOT NULL DEFAULT 1"),
+        ('chats', 'username', "VARCHAR(30) NULL"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -72,6 +74,65 @@ def _ensure_columns():
             if not exists:
                 conn.execute(text(f"ALTER TABLE {table} ADD COLUMN {col} {coldef}"))
         conn.commit()
+
+
+CHAT_USERNAME_RE = re.compile(r'^[a-z][a-z0-9_]{2,29}$')
+RESERVED_USERNAMES = {
+    'admin', 'nakheyr', 'nakhir', 'support', 'group', 'channel', 'settings',
+    'login', 'register', 'logout', 'profile', 'api', 'files', 'static', 'chat',
+}
+
+
+def username_taken(name, user_id=None, chat_id=None):
+    """True if `name` is already used by another user OR another chat."""
+    name = (name or '').lower()
+    if not name:
+        return False
+    u = User.query.filter(db.func.lower(User.username) == name).first()
+    if u and (user_id is None or u.id != user_id):
+        return True
+    c = Chat.query.filter(db.func.lower(Chat.username) == name).first()
+    if c and (chat_id is None or c.id != chat_id):
+        return True
+    return False
+
+
+def _slugify(name):
+    return re.sub(r'[^a-z0-9_]', '', (name or '').lower())
+
+
+def generate_chat_username(name, chat_type):
+    base = _slugify(name)[:26]
+    if not base or not base[0].isalpha():
+        base = ('g' if chat_type == 'group' else 'c') + base
+    base = base[:28]
+    candidate = base
+    while len(candidate) < 3 or username_taken(candidate):
+        candidate = base[:24] + secrets.token_hex(2)
+    return candidate
+
+
+def _ensure_chat_usernames():
+    from sqlalchemy import text
+    with db.engine.connect() as conn:
+        indexed = conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.statistics "
+            "WHERE table_schema = DATABASE() AND table_name = 'chats' "
+            "AND index_name = 'ix_chats_username' AND non_unique = 0"
+        )).scalar()
+    missing = Chat.query.filter(
+        Chat.chat_type.in_(['group', 'channel']), Chat.username.is_(None)
+    ).all()
+    if missing:
+        for chat in missing:
+            chat.username = generate_chat_username(chat.name, chat.chat_type)
+        db.session.commit()
+    if not indexed:
+        with db.engine.begin() as conn:
+            try:
+                conn.execute(text("CREATE UNIQUE INDEX ix_chats_username ON chats (username)"))
+            except Exception:
+                pass
 
 
 def current_user():
@@ -90,7 +151,10 @@ def require_auth(fn):
     def wrapper(*args, **kwargs):
         user = current_user()
         if not user:
-            return redirect(url_for('login'))
+            nxt = request.path
+            if request.query_string:
+                nxt += '?' + request.query_string.decode()
+            return redirect(url_for('login', next=nxt))
         if user.is_banned:
             flash('حساب شما مسدود شده است.', 'error')
             return redirect(url_for('login'))
@@ -173,7 +237,7 @@ _DM_LOCKS = {}
 
 def create_group(owner, name, description, member_ids, is_public=True):
     chat = Chat(chat_type='group', name=name, description=description, owner_id=owner.id,
-                is_public=is_public)
+                is_public=is_public, username=generate_chat_username(name, 'group'))
     db.session.add(chat)
     db.session.flush()
     db.session.add(ChatMember(chat_id=chat.id, user_id=owner.id, role='owner'))
@@ -186,7 +250,7 @@ def create_group(owner, name, description, member_ids, is_public=True):
 
 def create_channel(owner, name, description, is_public=True):
     chat = Chat(chat_type='channel', name=name, description=description, owner_id=owner.id,
-                is_public=is_public)
+                is_public=is_public, username=generate_chat_username(name, 'channel'))
     db.session.add(chat)
     db.session.flush()
     db.session.add(ChatMember(chat_id=chat.id, user_id=owner.id, role='owner'))

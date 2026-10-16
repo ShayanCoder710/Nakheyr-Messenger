@@ -451,12 +451,13 @@ function setActiveConv(id) {
   document.querySelectorAll('.conv').forEach(c => c.classList.toggle('active', String(c.dataset.chatId) === String(id)));
 }
 
-function closeChatPane() {
+function closeChatPane(syncUrl) {
   document.getElementById('msgsPane').classList.remove('open');
   document.getElementById('mainEmpty').style.display = 'grid';
   currentChat = null;
   document.querySelector('.chat-layout').classList.remove('chatted');
   document.querySelectorAll('.conv.active').forEach(c => c.classList.remove('active'));
+  if (syncUrl !== false && location.pathname !== '/') history.pushState({}, '', '/');
 }
 
 function setChatted(on) {
@@ -465,7 +466,7 @@ function setChatted(on) {
 
 document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
-async function openChat(id) {
+async function openChat(id, opts) {
   currentChat = +id;
   const r = await fetch('/api/messages/' + id);
   let j;
@@ -508,7 +509,17 @@ async function openChat(id) {
   Object.keys(typingTimers).forEach(k => { clearTimeout(typingTimers[k]); delete typingTimers[k]; });
   document.getElementById('typingBar').innerHTML = '';
   loadPinned();
+  if (!(opts && opts.fromHistory)) {
+    const url = '/chat/' + id;
+    if (location.pathname !== url) history.pushState({ chat: +id }, '', url);
+  }
 }
+
+window.addEventListener('popstate', () => {
+  const m = location.pathname.match(/^\/chat\/(\d+)/);
+  if (m) openChat(+m[1], { fromHistory: true });
+  else closeChatPane(false);
+});
 
 function renderConvItem(it) {
   const lock = (it.chat_type !== 'dm' && it.is_public === false) ? ' 🔒' : '';
@@ -1191,10 +1202,13 @@ function openSettings() {
     : c.name.charAt(0);
   const nameInp = document.getElementById('csNameInput');
   const descInp = document.getElementById('csDescInput');
+  const unameInp = document.getElementById('csUsernameInput');
   nameInp.value = c.name;
   descInp.value = c.description || '';
+  unameInp.value = c.username || '';
   nameInp.disabled = !canEdit;
   descInp.disabled = !canEdit;
+  unameInp.disabled = !canEdit;
   const vis = document.getElementById('csVis');
   vis.querySelectorAll('button').forEach(b => b.style.display = 'inline-flex');
   if (!canEdit) {
@@ -1212,7 +1226,7 @@ function openSettings() {
   if (csPrev) csPrev.style.display = 'none';
   document.getElementById('csAvUpload').style.display = canEdit ? 'inline-flex' : 'none';
   document.getElementById('csAvClear').style.display = (canEdit && c.avatar) ? 'inline-flex' : 'none';
-  document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + c.id;
+  document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + (c.username || c.id);
   document.getElementById('csMembersHead').textContent = 'اعضا (' + ((CD.members || []).length) + ')';
   renderMembers(CD.members || []);
   loadMembers(c.id);
@@ -1295,6 +1309,7 @@ document.getElementById('csSave').onclick = async () => {
     ? {
         name: document.getElementById('csNameInput').value.trim(),
         description: document.getElementById('csDescInput').value.trim(),
+        username: document.getElementById('csUsernameInput').value.trim().toLowerCase(),
         is_public: visVal === 'public'
       }
     : {};
@@ -1520,7 +1535,7 @@ searchInput.oninput = () => {
         <div class="sr-item" data-chat="${c.id}">
           <span class="type-icon">${c.chat_type === 'channel' ? '📢' : '👥'}</span>
           <div style="flex:1; min-width:0"><b>${esc(c.name)}</b>
-          <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'} ${c.is_public ? '· 🌐 عمومی' : '· 🔒 خصوصی'}${c.is_member ? ' · ✅ عضو هستی' : ''}</small></div>
+          <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'}${c.username ? ` · @${esc(c.username)}` : ''} ${c.is_public ? '· 🌐 عمومی' : '· 🔒 خصوصی'}${c.is_member ? ' · ✅ عضو هستی' : ''}</small></div>
           ${c.is_member ? '' : `<button class="btn sm sr-join" data-join="${c.id}">پیوستن</button>`}
         </div>`).join('');
     }
