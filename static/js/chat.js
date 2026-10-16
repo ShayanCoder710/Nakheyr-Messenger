@@ -674,7 +674,7 @@ function openEmojiPicker(mid, x, y) {
   const p = document.getElementById('emojiPicker');
   p.innerHTML = EMOJIS.map(e => `<button data-emoji="${e}">${e}</button>`).join('');
   p.classList.add('global');
-  p.style.display = 'flex';
+  p.style.display = 'grid';
   const bw = p.offsetWidth, bh = p.offsetHeight;
   let px = x - bw / 2, py = y + 22;
   if (px < 8) px = 8;
@@ -1569,6 +1569,33 @@ document.getElementById('pmSave').onclick = async () => {
 
 document.getElementById('pmLogout').onclick = () => location.href = '/logout';
 
+document.getElementById('pmChangePass').onclick = async () => {
+  const cur = document.getElementById('pmCurPass').value;
+  const nw = document.getElementById('pmNewPass').value;
+  const nw2 = document.getElementById('pmNewPass2').value;
+  if (!cur) return toast('رمز فعلی رو بنویس', 'error');
+  if (nw.length < 6) return toast('رمز جدید حداقل ۶ کاراکتر باشه', 'error');
+  if (nw !== nw2) return toast('تکرار رمز جدید یکسان نیست', 'error');
+  const r = await api('/api/password', { current: cur, new: nw });
+  if (r.ok) {
+    document.getElementById('pmCurPass').value = '';
+    document.getElementById('pmNewPass').value = '';
+    document.getElementById('pmNewPass2').value = '';
+    toast('رمز عبور تغییر کرد ✅');
+  } else toast(r.error, 'error');
+};
+
+document.getElementById('pmDeleteAccount').onclick = () => {
+  openConfirm('حذف حساب کاربری', 'حسابت و همه‌ی پیام‌ها و گپ‌هات کامل پاک می‌شه. این کار برگشت‌پذیر نیست.', () => {
+    const pass = prompt('برای تأیید، رمز عبورت رو وارد کن:');
+    if (pass === null) return;
+    api('/api/account/delete', { password: pass }).then(r => {
+      if (r.ok) { toast('حسابت حذف شد'); setTimeout(() => location.href = '/', 800); }
+      else toast(r.error, 'error');
+    });
+  }, 'حذف حساب');
+};
+
 async function openDmByUsername(username) {
   const r = await api('/api/user/by-username', { username });
   if (!r.ok || !r.user) {
@@ -1961,4 +1988,9 @@ S.on('profile_updated', p => {
   const csm = document.getElementById('chatSettingsModal');
   if (csm && csm.classList.contains('show') && currentChat) loadMembers(currentChat);
   if (document.getElementById('myProfilePage').style.display === 'grid') openProfilePage();
+});
+
+S.on('account_deleted', () => {
+  toast('این اکانت توسط مدیریت حذف شد', 'error');
+  setTimeout(() => location.href = '/logout', 1200);
 });
