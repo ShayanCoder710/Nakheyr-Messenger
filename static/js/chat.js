@@ -1188,6 +1188,40 @@ document.getElementById('btnCreateChannel').onclick = async () => {
   } else toast(r.error, 'error');
 };
 
+function openDmInfo() {
+  if (!CD.chat || CD.chat.chat_type !== 'dm') return;
+  const p = CD.chat.peer || {};
+  if (!p.id) return;
+  window._dmPeer = p;
+  document.getElementById('dmAvatar').innerHTML = avatarInner(p.display_name, p.avatar, p.status === 'online');
+  document.getElementById('dmName').textContent = p.display_name || 'کاربر';
+  document.getElementById('dmUsername').textContent = p.username ? '@' + p.username : '';
+  document.getElementById('dmStatus').textContent = p.status === 'online' ? '🟢 آنلاین' : '⚪ آفلاین';
+  document.getElementById('dmBio').textContent = p.bio || 'بیویی نداره';
+  document.getElementById('dmFull').href = '/profile/' + encodeURIComponent(p.username || '');
+  document.getElementById('dmBlock').textContent = p.blocked ? '✅ لغو بلاک' : '🚫 بلاک';
+  document.getElementById('dmBlockNote').style.display = p.blocked ? 'block' : 'none';
+  document.getElementById('dmModal').classList.add('show');
+}
+
+document.getElementById('dmClose').onclick = () => document.getElementById('dmModal').classList.remove('show');
+document.getElementById('dmBlock').onclick = () => {
+  const p = window._dmPeer;
+  if (!p) return;
+  api('/api/block', { user_id: p.id }).then(j => {
+    if (!j.ok) return toast(j.error, 'error');
+    p.blocked = !!j.blocked;
+    if (CD.chat && CD.chat.peer) CD.chat.peer.blocked = p.blocked;
+    openDmInfo();
+    toast(j.blocked ? 'بلاک شد' : 'بلاک لغو شد', 'success');
+  });
+};
+document.getElementById('dmReport').onclick = () => {
+  const p = window._dmPeer;
+  document.getElementById('dmModal').classList.remove('show');
+  if (p) openReport(p);
+};
+
 function openSettings() {
   if (!CD.chat || CD.chat.chat_type === 'dm') return;
   const c = CD.chat;
@@ -1241,7 +1275,7 @@ function openSettings() {
 
 document.getElementById('chatHeadId').onclick = () => {
   if (CD.chat && CD.chat.chat_type === 'dm' && CD.chat.peer) {
-    location.href = '/profile/' + CD.chat.peer.username;
+    openDmInfo();
     return;
   }
   openSettings();
@@ -1676,10 +1710,7 @@ document.addEventListener('contextmenu', e => {
           }, 'خروج');
         }
       } : null,
-      isDm && peerName ? { label: 'پروفایل ' + peerName, icon: '👤', fn: () => openChat(chatId).then(() => {
-        const p = CD.chat && CD.chat.peer;
-        if (p) location.href = '/profile/' + p.username;
-      }) } : null,
+      isDm && peerName ? { label: 'پروفایل ' + peerName, icon: '👤', fn: () => openChat(chatId).then(openDmInfo) } : null,
       isDm && peerName ? { label: 'گزارش کاربر', icon: '🚨', danger: true, fn: () => openChat(chatId).then(() => {
         if (CD.chat && CD.chat.peer) openReport(CD.chat.peer);
       }) } : null,

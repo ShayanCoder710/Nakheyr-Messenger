@@ -94,7 +94,16 @@ class Chat(db.Model):
         if self.chat_type == 'dm' and current_user:
             uid = getattr(current_user, 'id', current_user)
             other = next((m.user for m in self.members if m.user_id != uid), None)
-            data['peer'] = other.to_public() if other else None
+            if other:
+                peer = other.to_public()
+                try:
+                    from func import is_blocked
+                    peer['blocked'] = is_blocked(uid, other.id)
+                except Exception:
+                    peer['blocked'] = False
+                data['peer'] = peer
+            else:
+                data['peer'] = None
         return data
 
 

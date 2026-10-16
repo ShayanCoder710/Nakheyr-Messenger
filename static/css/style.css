@@ -515,6 +515,9 @@ input, select, textarea { font-family: inherit; }
 .cs-head .avatar { width: 56px; height: 56px; }
 .cs-id b { font-size: 15px; display: block; }
 .cs-id small { color: var(--muted); font-size: 11.5px; }
+.modal .bio { color: var(--muted); font-size: 13.5px; line-height: 1.8; margin: 2px 0 14px; white-space: pre-wrap; }
+#dmModal .p-actions { margin-top: 6px; }
+#dmModal .row { margin-top: 16px; }
 .modal .box input.input + input.input { margin-top: 10px; }
 .modal .box input.input + textarea.input { margin-top: 10px; }
 #csDescInput { margin-top: 12px; }
