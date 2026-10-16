@@ -8,6 +8,7 @@ db = SQLAlchemy()
 
 class User(db.Model):
     __tablename__ = 'users'
+    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
 
     id = db.Column(db.Integer, primary_key=True)
     username = db.Column(db.String(30), unique=True, nullable=False, index=True)
@@ -58,6 +59,7 @@ class User(db.Model):
 
 class Chat(db.Model):
     __tablename__ = 'chats'
+    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
 
     id = db.Column(db.Integer, primary_key=True)
     chat_type = db.Column(db.String(10), nullable=False, default='dm')
@@ -96,7 +98,7 @@ class Chat(db.Model):
 
 class ChatMember(db.Model):
     __tablename__ = 'chat_members'
-    __table_args__ = (db.UniqueConstraint('chat_id', 'user_id'),)
+    __table_args__ = (db.UniqueConstraint('chat_id', 'user_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})
 
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
@@ -109,6 +111,7 @@ class ChatMember(db.Model):
 
 class Message(db.Model):
     __tablename__ = 'messages'
+    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
 
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
@@ -180,7 +183,7 @@ class Message(db.Model):
 
 class Block(db.Model):
     __tablename__ = 'blocks'
-    __table_args__ = (db.UniqueConstraint('user_id', 'blocked_user_id'),)
+    __table_args__ = (db.UniqueConstraint('user_id', 'blocked_user_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -190,6 +193,7 @@ class Block(db.Model):
 
 class Report(db.Model):
     __tablename__ = 'reports'
+    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
 
     id = db.Column(db.Integer, primary_key=True)
     reporter_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)

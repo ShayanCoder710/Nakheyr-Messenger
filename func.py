@@ -17,6 +17,7 @@ MAX_FILE_MB = 25
 
 
 def init_db():
+    _ensure_utf8mb4()
     db.create_all()
     _ensure_columns()
     admin = User.query.filter_by(username='admin').first()
@@ -24,7 +25,7 @@ def init_db():
         admin = User(
             username='admin',
             display_name='مدیر نخیر',
-            bio='اکانت رسمی مدیریت پیامرسان نخیر',
+            bio='اکانت رسمی مدیریت پیام‌رسان نخیر',
             accent='#e11d48',
             is_admin=True,
             is_verified=True,
@@ -32,6 +33,23 @@ def init_db():
         admin.set_password('Nakheyr#2026')
         db.session.add(admin)
         db.session.commit()
+
+
+def _ensure_utf8mb4():
+    from sqlalchemy import text
+    with db.engine.begin() as conn:
+        db_name = conn.execute(text("SELECT DATABASE()")).scalar()
+        conn.execute(text(
+            f"ALTER DATABASE `{db_name}` CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+        ))
+        stale = conn.execute(text(
+            "SELECT table_name FROM information_schema.tables "
+            "WHERE table_schema = DATABASE() AND table_collation NOT LIKE 'utf8mb4%'"
+        )).scalars().all()
+        for table in stale:
+            conn.execute(text(
+                f"ALTER TABLE `{table}` CONVERT TO CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci"
+            ))
 
 
 def _ensure_columns():
