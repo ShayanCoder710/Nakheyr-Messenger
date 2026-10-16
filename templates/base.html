@@ -2,7 +2,7 @@
 <html lang="fa" dir="rtl">
 <head>
 <meta charset="utf-8">
-<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover, interactive-widget=resizes-content">
 <title>{% block title %}نخیر{% endblock %}</title>
 <link rel="icon" type="image/png" href="/static/images/icon.png">
 <link rel="stylesheet" href="{{ url_for('static', filename='icons/bootstrap-icons.css') }}">
@@ -92,6 +92,22 @@ window.copyText = function(text) {
     ok ? resolve() : reject(new Error('copy failed'));
   });
 };
+</script>
+<script>
+(function () {
+  function applyAppHeight() {
+    var vv = window.visualViewport;
+    var h = vv ? vv.height : window.innerHeight;
+    document.documentElement.style.setProperty('--app-h', Math.round(h) + 'px');
+  }
+  applyAppHeight();
+  window.addEventListener('resize', applyAppHeight);
+  window.addEventListener('orientationchange', function () { setTimeout(applyAppHeight, 250); });
+  if (window.visualViewport) {
+    window.visualViewport.addEventListener('resize', applyAppHeight);
+    window.visualViewport.addEventListener('scroll', applyAppHeight);
+  }
+})();
 </script>
 {% block extra_js %}{% endblock %}
 </body>

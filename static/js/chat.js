@@ -206,10 +206,11 @@ function renderMsg(m) {
   const isDm = !!(CD.chat && CD.chat.chat_type === 'dm');
   const isChannel = !!(CD.chat && CD.chat.chat_type === 'channel');
   const showSender = !mine && !isDm && !isChannel && newGroup;
+  const mineRow = mine || isChannel;
   const html = `
-    <div class="mrow ${mine ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
-      ${mine ? '' : (groupTail ? `<span class="av-click" data-profile-user="${esc(sender.username || '')}">${avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm')}</span>` : '<div class="avatar sm ghost"></div>')}
-      <div class="bubble ${mine ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
+    <div class="mrow ${mineRow ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
+      ${(!mine && !isChannel) ? (groupTail ? `<span class="av-click" data-profile-user="${esc(sender.username || '')}">${avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm')}</span>` : '<div class="avatar sm ghost"></div>') : ''}
+      <div class="bubble ${(!isChannel && mine) ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
         ${showSender ? `<div class="sender-line">${esc(sender.display_name)}${title}</div>` : ''}
         ${fwd}${reply}${body}
         <div class="m-meta">
@@ -1074,7 +1075,7 @@ async function doForward(chatId) {
 }
 
 function removeMsgRow(mid) {
-  const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`);
+  const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`) || document.querySelector(`.sys-msg[data-mid="${mid}"]`);
   if (!wrapper) return;
   const target = wrapper.classList.contains('mrow') ? wrapper : (wrapper.querySelector('.mrow') || wrapper);
   target.remove();
@@ -1172,7 +1173,7 @@ function selectAllMine() {
 function localDeleteMid(mid) {
   const m = (CD.initialMessages || []).find(x => x.id === mid);
   if (m) m.deleted = true;
-  const row = document.querySelector(`#m${mid}`) || document.querySelector(`.mrow[data-mid="${mid}"]`);
+  const row = document.querySelector(`#m${mid}`) || document.querySelector(`.mrow[data-mid="${mid}"]`) || document.querySelector(`.sys-msg[data-mid="${mid}"]`);
   if (row) {
     const wrap = row.classList.contains('mrow') ? row.closest('#m' + mid) || row : row;
     wrap.remove();
@@ -2275,6 +2276,22 @@ document.addEventListener('contextmenu', e => {
     if (mem) openMemberMenu(mem, e.clientX, e.clientY);
     return;
   }
+  const sysRow = e.target.closest('.sys-msg');
+  if (sysRow) {
+    e.preventDefault();
+    const mid = +sysRow.dataset.mid;
+    const canDel = window.ME.is_admin || CD.role === 'owner' || CD.role === 'admin';
+    showCtxMenu(e.clientX, e.clientY, [
+      canDel ? { label: 'حذف پیام', icon: bi('trash'), danger: true, fn: () => {
+        localDeleteMid(mid);
+        api('/api/message/delete', { message_id: mid }).then(j => {
+          if (!j.ok) { renderAllMessages(); toast(j.error || 'حذف نشد', 'error'); }
+        });
+      } } : null,
+      { label: 'حذف برای من', icon: bi('eye-slash'), danger: true, fn: () => hideForMe(mid) },
+    ]);
+    return;
+  }
   const msgRow = e.target.closest('.mrow');
   if (msgRow && !msgRow.classList.contains('sel-selected')) {
     e.preventDefault();
@@ -2513,7 +2530,7 @@ S.on('message_edited', d => {
 S.on('message_deleted', d => {
   const m = (CD.initialMessages || []).find(x => x.id === d.message_id);
   if (m) m.deleted = true;
-  const wrapper = document.querySelector(`#m${d.message_id}`) || document.querySelector(`.mrow[data-mid="${d.message_id}"]`);
+  const wrapper = document.querySelector(`#m${d.message_id}`) || document.querySelector(`.mrow[data-mid="${d.message_id}"]`) || document.querySelector(`.sys-msg[data-mid="${d.message_id}"]`);
   if (wrapper) {
     const row = wrapper.classList.contains('mrow') ? wrapper : wrapper.querySelector('.mrow');
     const target = row ? row.closest('#m' + d.message_id) || row : wrapper;

@@ -388,14 +388,20 @@ def api_members(chat_id):
                 return jsonify(ok=False, error='دسترسی نداری')
             if chat.owner_id == target:
                 return jsonify(ok=False, error='صاحب گروه قابل اخراج نیست')
+            tuser = User.query.get(target)
+            tname = tuser.public_name if tuser else 'کاربر'
             ChatMember.query.filter_by(chat_id=chat.id, user_id=target).delete()
             db.session.commit()
+            noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+            post_system_message(chat, user, f'«{tname}» توسط «{user.public_name}» از {noun} حذف شد')
             return jsonify(ok=True)
         if action == 'leave':
             if chat.owner_id == user.id:
                 return jsonify(ok=False, error='صاحب نمی‌تونه گروه رو ترک کنه. اول مالکیت رو منتقل کن.')
             ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).delete()
             db.session.commit()
+            noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+            post_system_message(chat, user, f'«{user.public_name}» از {noun} خارج شد')
             return jsonify(ok=True)
         if action == 'promote':
             if role != 'owner':
@@ -467,12 +473,18 @@ def api_members(chat_id):
             if role not in ('owner', 'admin'):
                 return jsonify(ok=False, error='دسترسی نداری')
             if not ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first():
+                tuser = User.query.get(target)
+                tname = tuser.public_name if tuser else 'کاربر'
                 db.session.add(ChatMember(chat_id=chat.id, user_id=target, role='member'))
                 db.session.commit()
+                noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+                post_system_message(chat, user, f'«{tname}» توسط «{user.public_name}» به {noun} اضافه شد')
             return jsonify(ok=True)
         if action == 'transfer':
             if role != 'owner':
                 return jsonify(ok=False, error='فقط صاحب گروه')
+            tuser = User.query.get(target)
+            tname = tuser.public_name if tuser else 'کاربر'
             m = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
             m.role = 'admin'
             t = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
@@ -481,6 +493,8 @@ def api_members(chat_id):
             t.role = 'owner'
             chat.owner_id = target
             db.session.commit()
+            noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+            post_system_message(chat, user, f'مالکیت {noun} به «{tname}» منتقل شد')
             return jsonify(ok=True)
         return jsonify(ok=False, error='عملیات نامعتبر')
     return jsonify(members=[
@@ -680,7 +694,11 @@ def api_delete_message():
     m = Message.query.get(int(data.get('message_id') or 0))
     if not m:
         abort(404)
-    if m.sender_id != user.id and not user.is_admin:
+    allowed = m.sender_id == user.id or user.is_admin
+    if not allowed and m.msg_type == 'system':
+        schat = Chat.query.get(m.chat_id)
+        allowed = bool(schat) and (schat.owner_id == user.id or my_role_in(user, schat) == 'admin')
+    if not allowed:
         return jsonify(ok=False, error='دسترسی نداری')
     m.deleted = True
     m.content = ''
@@ -1123,6 +1141,8 @@ def api_join_chat(chat_id):
     if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
         db.session.add(ChatMember(chat_id=chat.id, user_id=user.id, role='member'))
         db.session.commit()
+        noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+        post_system_message(chat, user, f'«{user.public_name}» به {noun} پیوست')
         return jsonify(ok=True, joined=True)
     return jsonify(ok=True, joined=False)
 

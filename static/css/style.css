@@ -151,7 +151,7 @@ input, select, textarea { font-family: inherit; }
 .auth-sub { text-align: center; color: var(--muted); font-size: 13px; margin-top: 5px; }
 .auth-switch { text-align: center; margin-top: 20px; font-size: 13px; color: var(--muted); }
 
-.chat-layout { display: flex; height: 100vh; height: 100dvh; gap: 10px; padding: 10px; }
+.chat-layout { display: flex; height: 100vh; height: 100dvh; height: var(--app-h, 100dvh); gap: 10px; padding: 10px; }
 .btn-back { display: none; }
 .sidebar {
   width: 350px; flex: 0 0 auto; position: relative;
@@ -532,7 +532,7 @@ input, select, textarea { font-family: inherit; }
   animation: popIn .14s ease;
 }
 @keyframes popIn { from { opacity: 0; transform: translateY(6px) scale(.98); } }
-.ep-search { padding: 8px 8px 2px; }
+.ep-search { padding: 8px 8px 2px; flex: 0 0 auto; }
 .ep-search input {
   width: 100%; box-sizing: border-box; border: 1px solid var(--line-2); background: var(--bg-3);
   color: var(--text); border-radius: 10px; padding: 7px 11px; font: inherit; font-size: 13px; outline: none;
@@ -541,7 +541,7 @@ input, select, textarea { font-family: inherit; }
 .ep-empty { grid-column: 1 / -1; text-align: center; color: var(--dim); padding: 24px 0; font-size: 13px; }
 .ep-tabs {
   display: flex; gap: 2px; padding: 6px 6px 0; border-bottom: 1px solid var(--line);
-  background: transparent; overflow-x: auto;
+  background: transparent; overflow-x: auto; flex: 0 0 auto;
 }
 .ep-tabs button {
   border: none; background: none; font-size: 18px; padding: 7px 9px; border-radius: 10px 10px 0 0;
@@ -552,7 +552,7 @@ input, select, textarea { font-family: inherit; }
 .ep-body {
   display: grid; grid-template-columns: repeat(auto-fill, 34px);
   justify-content: space-between; gap: 4px; padding: 10px;
-  overflow-y: auto; overflow-x: hidden; flex: 1;
+  overflow-y: auto; overflow-x: hidden; flex: 1 1 auto; min-height: 0;
 }
 .ep-body button {
   border: none; background: none; font-size: 22px; width: 34px; height: 34px;
@@ -889,7 +889,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
 .report-item .grow { flex: 1; }
 .report-item p { color: var(--muted); font-size: 12.5px; }
 
-.profile-page { height: 100vh; height: 100dvh; display: grid; place-items: center; padding: 30px; overflow: auto; }
+.profile-page { height: 100vh; height: 100dvh; height: var(--app-h, 100dvh); display: grid; place-items: center; padding: 30px; overflow: auto; }
 .profile-card, .pm-wrap { margin: auto; }
 .profile-card {
   width: min(440px, 94vw); background: rgba(20, 20, 25, .85); border: 1px solid var(--line-2);
