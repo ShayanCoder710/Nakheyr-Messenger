@@ -1,7 +1,7 @@
 {% extends "base.html" %}
 {% block title %}نخیر — گپ‌ها{% endblock %}
 {% block content %}
-<div class="chat-layout">
+<div class="chat-layout{% if chat %} chatted{% endif %}">
   <aside class="sidebar">
     <div class="side-head">
       <a href="{{ url_for('home') }}" style="text-decoration:none" id="sideProfileLink">{% if me %}{{ avatar_html(me) | safe }}{% endif %}</a>
@@ -52,7 +52,7 @@
   </aside>
 
   <main class="main" id="main">
-    <div class="main-empty" id="mainEmpty">
+    <div class="main-empty" id="mainEmpty"{% if chat %} style="display:none"{% endif %}>
       <div class="empty-state">
         <div class="empty-ico">💬</div>
         <div class="me-pill">یک گپ رو انتخاب کن</div>

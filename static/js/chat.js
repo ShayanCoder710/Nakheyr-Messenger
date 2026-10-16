@@ -1790,6 +1790,7 @@ document.addEventListener('contextmenu', e => {
 
 if (CD.chat) {
   setHead();
+  document.getElementById('mainEmpty').style.display = 'none';
   renderAllMessages();
   loadPinned();
   refreshConvList();
