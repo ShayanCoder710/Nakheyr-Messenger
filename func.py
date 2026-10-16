@@ -125,6 +125,7 @@ def _ensure_columns():
         ('chats', 'username', "VARCHAR(30) NULL"),
         ('chat_members', 'muted', "BOOLEAN NOT NULL DEFAULT 0"),
         ('chat_members', 'archived', "BOOLEAN NOT NULL DEFAULT 0"),
+        ('chat_members', 'permissions', "TEXT NULL"),
         ('messages', 'fwd_from_id', "INTEGER NULL"),
         ('messages', 'fwd_from_name', "VARCHAR(60) NOT NULL DEFAULT ''"),
         ('users', 'read_receipts', "BOOLEAN NOT NULL DEFAULT 1"),
@@ -286,6 +287,50 @@ def save_upload_file(file):
 def is_blocked(a, b):
     return (Block.query.filter_by(user_id=a, blocked_user_id=b).first() is not None or
             Block.query.filter_by(user_id=b, blocked_user_id=a).first() is not None)
+
+
+PERMISSION_KEYS = [
+    'send_messages',
+    'send_media',
+    'add_members',
+    'pin_messages',
+    'delete_messages',
+    'manage_members',
+]
+
+PERMISSION_LABELS = {
+    'send_messages': 'ارسال پیام',
+    'send_media': 'ارسال عکس و فایل',
+    'add_members': 'افزودن عضو',
+    'pin_messages': 'پین کردن پیام',
+    'delete_messages': 'حذف پیام دیگران',
+    'manage_members': 'مدیریت اعضا',
+}
+
+
+def default_perms(role):
+    if role in ('owner', 'admin'):
+        return {k: True for k in PERMISSION_KEYS}
+    return {
+        'send_messages': True,
+        'send_media': True,
+        'add_members': False,
+        'pin_messages': False,
+        'delete_messages': False,
+        'manage_members': False,
+    }
+
+
+def member_perms(member):
+    if not member:
+        return default_perms('member')
+    base = default_perms(member.role)
+    if member.role == 'owner':
+        return base
+    for k, v in member.perm_dict().items():
+        if k in PERMISSION_KEYS:
+            base[k] = bool(v)
+    return base
 
 
 def get_or_create_dm(user_a, user_b):

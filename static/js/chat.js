@@ -203,7 +203,7 @@ function renderMsg(m) {
   const unameLink = (!mine && sender.username) ? ` <a class="u-link" data-u="${esc(sender.username)}" title="پیوی با ${esc(sender.display_name)}">@${esc(sender.username)}</a>` : '';
   const html = `
     <div class="mrow ${mine ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
-      ${mine ? '' : (groupTail ? avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm') : '<div class="avatar sm ghost"></div>')}
+      ${mine ? '' : (groupTail ? `<span class="av-click" data-profile-user="${esc(sender.username || '')}">${avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm')}</span>` : '<div class="avatar sm ghost"></div>')}
       <div class="bubble ${mine ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
         ${mine ? '' : (newGroup ? `<div class="sender-line">${esc(sender.display_name)}${title}</div>` : '')}
         ${fwd}${reply}${body}
@@ -892,6 +892,23 @@ function doReact(mid, emoji) {
 }
 
 document.addEventListener('click', e => {
+  const avc = e.target.closest('[data-profile-user]');
+  if (avc) {
+    const uname = avc.dataset.profileUser;
+    if (uname && uname !== (window.ME && window.ME.username)) {
+      e.preventDefault();
+      window.location.href = '/profile/' + encodeURIComponent(uname);
+      return;
+    }
+  }
+  const memItem = e.target.closest('#csMembersList .mb-item');
+  if (memItem) {
+    const mem = memberById(+memItem.dataset.mmember);
+    if (mem && mem.username && mem.id !== window.ME.id) {
+      window.location.href = '/profile/' + encodeURIComponent(mem.username);
+    }
+    return;
+  }
   const uLink = e.target.closest('.u-link[data-u]');
   if (uLink) {
     e.preventDefault();
@@ -1342,12 +1359,19 @@ async function loadMembers(chatId) {
   renderMembers(r.members);
 }
 
+const PERM_LABELS = {
+  send_messages: 'ارسال پیام',
+  send_media: 'ارسال عکس و فایل',
+  add_members: 'افزودن عضو',
+  pin_messages: 'پین کردن پیام',
+  delete_messages: 'حذف پیام دیگران',
+  manage_members: 'مدیریت اعضا',
+};
+
 function renderMembers(members) {
   CD.members = members;
   const role = myRole();
-  const canManage = role === 'owner' || role === 'admin';
-  const isOwner = role === 'owner';
-  const isDm = CD.chat && CD.chat.chat_type === 'dm';
+  const canManage = role === 'owner' || role === 'admin' || !!window.ME.is_admin;
   const head = document.getElementById('csMembersHead');
   if (head) head.textContent = 'اعضا (' + members.length + ')';
   const meta = document.getElementById('csMeta');
@@ -1363,38 +1387,21 @@ function renderMembers(members) {
     </div>` : '';
   list.innerHTML = addRow + (members.map(m => {
     const isMe = m.id === window.ME.id;
-    const canTitle = (isOwner || role === 'admin' || isMe) && !isDm;
+    const badge = m.role === 'owner'
+      ? `<span class="mb-role owner">${bi('star-fill')} مالک</span>`
+      : m.role === 'admin'
+        ? `<span class="mb-role admin">${bi('shield-fill')} مدیر</span>`
+        : '';
     return `
-    <div class="mb-item" data-mmember="${m.id}">
+    <div class="mb-item${isMe ? ' me' : ''}" data-mmember="${m.id}"${canManage && !isMe ? ' title="برای دیدن گزینه‌ها راست‌کلیک کن"' : ''}>
       <span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>
       <div class="mb-info">
-        <b>${esc(m.display_name)}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}</b>
-        <small>@${esc(m.username)}${m.role === 'owner' ? ' · ' + bi('star-fill') + ' صاحب' : m.role === 'admin' ? ' · ' + bi('star') + ' ادمین' : ''}</small>
-      </div>
-      <div class="mb-actions">
-        ${canTitle ? `<button class="btn sm ghost" data-title="${m.id}" title="ویرایش لقب">لقب</button>` : ''}
-        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">${m.role === 'admin' ? 'عضو کن' : bi('star') + ' ادمین'}</button>` : ''}
-        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm ghost" data-transfer="${m.id}" title="انتقال مالکیت">${bi('star-fill')}</button>` : ''}
-        ${canManage && !isMe && m.role !== 'owner' ? `<button class="btn sm danger" data-kick="${m.id}">اخراج</button>` : ''}
+        <b>${esc(m.display_name)}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}${isMe ? ' <span class="mb-you">شما</span>' : ''}</b>
+        <small>@${esc(m.username)}${badge ? ' · ' + badge : ''}</small>
       </div>
     </div>`;
   }).join('') || '<div class="mb-empty">عضوی نیست</div>');
 
-  list.querySelectorAll('[data-kick]').forEach(b => b.onclick = () => {
-    openConfirm('اخراج عضو', 'این عضو از گپ اخراج می‌شه و دسترسی‌اش قطع می‌شه', () => {
-      api(`/api/chat/${currentChat}/members`, { action: 'kick', user_id: +b.dataset.kick }).then(j => j.ok ? loadMembers(currentChat) : toast(j.error, 'error'));
-    }, 'اخراج');
-  });
-  list.querySelectorAll('[data-promote]').forEach(b => b.onclick = () => {
-    api(`/api/chat/${currentChat}/members`, { action: 'promote', user_id: +b.dataset.promote }).then(j => j.ok ? (toast('نقش تغییر کرد'), loadMembers(currentChat)) : toast(j.error, 'error'));
-  });
-  list.querySelectorAll('[data-transfer]').forEach(b => b.onclick = () => {
-    openConfirm('انتقال مالکیت', 'مالکیت گروه به این عضو منتقل می‌شه. تو ادمین می‌مونی', () => {
-      api(`/api/chat/${currentChat}/members`, { action: 'transfer', user_id: +b.dataset.transfer })
-        .then(j => j.ok ? (toast('مالکیت منتقل شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
-    }, 'انتقال');
-  });
-  list.querySelectorAll('[data-title]').forEach(b => b.onclick = () => openTitleGlobal(b.dataset.title));
   const addBtn = document.getElementById('mlAddBtn');
   if (addBtn) addBtn.onclick = async () => {
     const uname = document.getElementById('mlAddInput').value.trim();
@@ -1406,6 +1413,108 @@ function renderMembers(members) {
       .then(j => j.ok ? (toast(u.display_name + ' دعوت شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
   };
 }
+
+function memberById(id) {
+  return (CD.members || []).find(x => x.id === +id);
+}
+
+function isSiteAdmin() { return !!window.ME.is_admin; }
+
+function openMemberMenu(m, x, y) {
+  if (!m) return;
+  const role = myRole();
+  const isOwner = role === 'owner' || isSiteAdmin();
+  const isAdmin = role === 'admin';
+  const isMe = m.id === window.ME.id;
+  if (isMe || (!isOwner && !isAdmin)) return;
+  const canEditTarget = isOwner || (isAdmin && m.role === 'member');
+  const items = [];
+  if (canEditTarget) items.push({ label: 'ویرایش مجوزها', icon: bi('sliders'), fn: () => openMemberPerms(m) });
+  if (isOwner && m.role === 'member') items.push({ label: 'ارتقا به مدیر', icon: bi('shield-fill'), fn: () => promoteMember(m) });
+  if (isOwner && m.role === 'admin') items.push({ label: 'حذف از مدیران گروه', icon: bi('shield-slash'), fn: () => demoteMember(m) });
+  if (isOwner && m.role !== 'owner') items.push({ label: 'انتقال مالکیت', icon: bi('star-fill'), danger: true, fn: () => transferOwnership(m) });
+  if ((isOwner || isAdmin) && m.role !== 'owner') items.push({ label: 'حذف از گروه', icon: bi('trash'), danger: true, fn: () => kickMember(m) });
+  if (!items.length) return;
+  showCtxMenu(x, y, items);
+}
+
+function promoteMember(m) {
+  openConfirm('ارتقا به مدیر', `«${m.display_name}» به مدیرهای گروه اضافه می‌شه`, () => {
+    api(`/api/chat/${currentChat}/members`, { action: 'promote', user_id: m.id })
+      .then(j => j.ok ? (toast('به مدیر ارتقا یافت'), loadMembers(currentChat)) : toast(j.error, 'error'));
+  }, 'ارتقا');
+}
+
+function demoteMember(m) {
+  openConfirm('حذف از مدیران', `«${m.display_name}» دیگه مدیر گروه نیست`, () => {
+    api(`/api/chat/${currentChat}/members`, { action: 'demote', user_id: m.id })
+      .then(j => j.ok ? (toast('از مدیران حذف شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
+  }, 'حذف از مدیران');
+}
+
+function kickMember(m) {
+  openConfirm('حذف از گروه', `«${m.display_name}» از گروه حذف می‌شه و دسترسی‌اش قطع می‌شه`, () => {
+    api(`/api/chat/${currentChat}/members`, { action: 'kick', user_id: m.id })
+      .then(j => j.ok ? (toast('از گروه حذف شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
+  }, 'حذف');
+}
+
+function transferOwnership(m) {
+  openConfirm('انتقال مالکیت', `مطمئنی می‌خوای مالکیت گروه رو به «${m.display_name}» بدی؟ تو بعد از این مدیر می‌مونی.`, () => {
+    openConfirm('تأیید نهایی انتقال مالکیت', 'این تغییر مهمه؛ برای اطمینان دوباره تأیید کن.', () => {
+      api(`/api/chat/${currentChat}/members`, { action: 'transfer', user_id: m.id })
+        .then(j => {
+          if (j.ok) { toast('مالکیت منتقل شد'); loadMembers(currentChat); if (currentChat) openChat(currentChat); }
+          else toast(j.error, 'error');
+        });
+    }, 'بله، مطمئنم');
+  }, 'ادامه');
+}
+
+let _permMember = null;
+function openMemberPerms(m) {
+  _permMember = m;
+  const role = myRole();
+  const isOwner = role === 'owner' || isSiteAdmin();
+  let myPerms = null;
+  if (!isOwner) {
+    const meM = memberById(window.ME.id);
+    myPerms = (meM && meM.permissions) || {};
+  }
+  document.getElementById('mpAvatar').innerHTML = avatarInner(m.display_name, m.avatar, m.status === 'online');
+  document.getElementById('mpName').textContent = m.display_name;
+  document.getElementById('mpUsername').textContent = '@' + m.username;
+  document.getElementById('mpTitle').value = m.title || '';
+  const box = document.getElementById('mpPerms');
+  const cur = m.permissions || {};
+  const note = isOwner ? '' : '<small class="perm-note">فقط می‌تونی دسترسی‌هایی رو بدی که خودت داری</small>';
+  box.innerHTML = note + Object.keys(PERM_LABELS).map(k => {
+    const allowed = isOwner || (myPerms && myPerms[k]);
+    const on = !!cur[k];
+    return `<label class="perm-row${allowed ? '' : ' locked'}">
+      <input type="checkbox" data-perm="${k}" ${on ? 'checked' : ''}${allowed ? '' : ' disabled'}>
+      <span>${PERM_LABELS[k]}</span>${allowed ? '' : `<span class="perm-lock">${bi('lock')}</span>`}
+    </label>`;
+  }).join('');
+  document.getElementById('memberPermModal').classList.add('show');
+}
+document.getElementById('mpCancel').onclick = () => document.getElementById('memberPermModal').classList.remove('show');
+document.getElementById('mpSave').onclick = async () => {
+  if (!_permMember) return;
+  const permissions = {};
+  document.querySelectorAll('#mpPerms [data-perm]').forEach(c => {
+    if (!c.disabled) permissions[c.dataset.perm] = c.checked;
+  });
+  const title = document.getElementById('mpTitle').value.trim();
+  const r = await api('/api/chat/' + currentChat + '/members', {
+    action: 'permissions', user_id: _permMember.id, title, permissions
+  });
+  if (r.ok) {
+    document.getElementById('memberPermModal').classList.remove('show');
+    toast('مجوزها ذخیره شد');
+    loadMembers(currentChat);
+  } else toast(r.error, 'error');
+};
 
 document.getElementById('btnJoin').onclick = async () => {
   const r = await api(`/api/chat/${currentChat}/join`, {});
@@ -2126,6 +2235,13 @@ document.addEventListener('scroll', () => document.getElementById('ctxMenu').cla
 window.addEventListener('blur', () => document.getElementById('ctxMenu').classList.remove('show'));
 
 document.addEventListener('contextmenu', e => {
+  const memRow = e.target.closest('#csMembersList .mb-item');
+  if (memRow) {
+    e.preventDefault();
+    const mem = memberById(+memRow.dataset.mmember);
+    if (mem) openMemberMenu(mem, e.clientX, e.clientY);
+    return;
+  }
   const msgRow = e.target.closest('.mrow');
   if (msgRow && !msgRow.classList.contains('sel-selected')) {
     e.preventDefault();

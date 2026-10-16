@@ -17,7 +17,8 @@ from func import (
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
     username_taken, generate_chat_username, CHAT_USERNAME_RE, RESERVED_USERNAMES,
-    get_or_create_notes, delete_user_account, chat_label
+    get_or_create_notes, delete_user_account, chat_label,
+    member_perms, default_perms, PERMISSION_KEYS, PERMISSION_LABELS
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -387,22 +388,64 @@ def api_members(chat_id):
             m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
             if not m:
                 return jsonify(ok=False, error='عضو نیست')
-            m.role = 'admin' if m.role != 'admin' else 'member'
+            m.role = 'admin'
+            m.set_permissions({})
+            db.session.commit()
+            return jsonify(ok=True, role=m.role)
+        if action == 'demote':
+            if role != 'owner':
+                return jsonify(ok=False, error='فقط صاحب گروه')
+            if target == chat.owner_id:
+                return jsonify(ok=False, error='این عضو مالک گروهه')
+            m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
+            if not m or m.role != 'admin':
+                return jsonify(ok=False, error='این عضو مدیر نیست')
+            m.role = 'member'
+            m.set_permissions({})
             db.session.commit()
             return jsonify(ok=True, role=m.role)
         if action == 'title':
-            allowed = role in ('owner', 'admin') or target == user.id
-            if not allowed:
-                return jsonify(ok=False, error='فقط می‌تونی خودت یا (به‌عنوان ادمین) بقیه رو لقب بدی')
+            if role not in ('owner', 'admin'):
+                return jsonify(ok=False, error='فقط صاحب و ادمین می‌تونن لقب بذارن')
             new_title = (data.get('title') or '').strip()[:30]
-            if len(new_title) > 30:
-                return jsonify(ok=False, error='لقب حداکثر ۳۰ حرفه')
             m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
             if not m:
                 return jsonify(ok=False, error='عضو نیست')
             m.title = new_title
             db.session.commit()
             return jsonify(ok=True, title=m.title)
+        if action == 'permissions':
+            if target == user.id:
+                return jsonify(ok=False, error='مجوزهای خودت رو نمی‌تونی تغییر بدی')
+            if role not in ('owner', 'admin'):
+                return jsonify(ok=False, error='دسترسی نداری')
+            m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
+            if not m:
+                return jsonify(ok=False, error='عضو نیست')
+            if m.role == 'owner':
+                return jsonify(ok=False, error='مجوزهای مالک قابل تغییر نیست')
+            if role == 'admin' and m.role != 'member':
+                return jsonify(ok=False, error='فقط می‌تونی اعضای عادی رو مدیریت کنی')
+            if 'title' in data:
+                m.title = (data.get('title') or '').strip()[:30]
+            perms = data.get('permissions')
+            if isinstance(perms, dict):
+                if role == 'owner':
+                    allowed_keys = set(PERMISSION_KEYS)
+                else:
+                    me_member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+                    myp = member_perms(me_member)
+                    allowed_keys = {k for k in PERMISSION_KEYS if myp.get(k)}
+                cur = m.perm_dict()
+                for k, v in perms.items():
+                    if k not in PERMISSION_KEYS:
+                        continue
+                    if k not in allowed_keys:
+                        return jsonify(ok=False, error='این مجوز رو خودت نداری که بدی')
+                    cur[k] = bool(v)
+                m.set_permissions(cur)
+            db.session.commit()
+            return jsonify(ok=True, title=m.title, permissions=member_perms(m))
         if action == 'add':
             if role not in ('owner', 'admin'):
                 return jsonify(ok=False, error='دسترسی نداری')
@@ -424,7 +467,8 @@ def api_members(chat_id):
             return jsonify(ok=True)
         return jsonify(ok=False, error='عملیات نامعتبر')
     return jsonify(members=[
-        {**m.user.to_public(), 'role': m.role, 'title': m.title or ''}
+        {**m.user.to_public(), 'role': m.role, 'title': m.title or '',
+         'permissions': member_perms(m)}
         for m in chat.members if m.user
     ])
 
@@ -530,6 +574,13 @@ def api_send_message():
     msg_type = data.get('msg_type', 'text')
     if msg_type not in ('text', 'image', 'video', 'audio', 'file'):
         msg_type = 'file'
+    if chat.chat_type == 'group' and not user.is_admin:
+        member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+        if member and member.role not in ('owner', 'admin'):
+            p = member_perms(member)
+            need = 'send_media' if msg_type != 'text' else 'send_messages'
+            if not p.get(need, False):
+                return jsonify(ok=False, error='اجازهٔ ارسال پیام در این گروه رو نداری')
     content = (data.get('content') or '').strip()
     file_path = data.get('file_path') or ''
     file_name = (data.get('file_name') or '')[:160]

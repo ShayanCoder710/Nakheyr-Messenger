@@ -139,10 +139,21 @@ class ChatMember(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     role = db.Column(db.String(10), default='member')
     title = db.Column(db.String(30), default='')
+    permissions = db.Column(db.Text, default='')
     muted = db.Column(db.Boolean, default=False)
     archived = db.Column(db.Boolean, default=False)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='memberships')
+
+    def perm_dict(self):
+        try:
+            data = json.loads(self.permissions or '{}')
+            return data if isinstance(data, dict) else {}
+        except Exception:
+            return {}
+
+    def set_permissions(self, data):
+        self.permissions = json.dumps(data or {})
 
 
 class Message(db.Model):
