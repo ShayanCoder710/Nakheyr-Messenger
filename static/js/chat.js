@@ -21,19 +21,16 @@ let typingSelfTimer = null;
 
 const sideEl = document.querySelector('.sidebar');
 const sideToggleBtn = document.getElementById('sideToggle');
-const SIDE_KEY = 'nakheyr_side_collapsed';
 function setSideCollapsed(v) {
   if (!sideEl) return;
   sideEl.classList.toggle('collapsed', v);
   if (sideToggleBtn) sideToggleBtn.title = v ? 'باز کردن سایدبار' : 'جمع کردن سایدبار';
 }
 if (sideEl && sideToggleBtn) {
-  setSideCollapsed(localStorage.getItem(SIDE_KEY) === '1');
+  setSideCollapsed(false);
   sideToggleBtn.onclick = e => {
     e.stopPropagation();
-    const v = !sideEl.classList.contains('collapsed');
-    setSideCollapsed(v);
-    try { localStorage.setItem(SIDE_KEY, v ? '1' : '0'); } catch (_) {}
+    setSideCollapsed(!sideEl.classList.contains('collapsed'));
   };
 }
 const sideSearchBtn = document.getElementById('sideSearchBtn');

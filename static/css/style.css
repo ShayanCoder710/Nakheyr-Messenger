@@ -933,17 +933,45 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
 }
 
 @media (min-width: 861px) {
-  .sidebar { transition: width .2s ease; }
+  .sidebar { transition: width .34s cubic-bezier(.4, 0, .2, 1); }
+  .sidebar .side-title {
+    max-width: 400px;
+    transition: opacity .22s ease, max-width .34s cubic-bezier(.4, 0, .2, 1);
+  }
+  .sidebar .conv-section-head {
+    max-height: 44px;
+    transition: opacity .22s ease, max-height .34s cubic-bezier(.4, 0, .2, 1),
+                padding .34s cubic-bezier(.4, 0, .2, 1);
+  }
+  .sidebar .conv .body {
+    max-width: 320px;
+    transition: opacity .22s ease, max-width .34s cubic-bezier(.4, 0, .2, 1);
+  }
+  .sidebar .search-box {
+    overflow: hidden; max-height: 90px;
+    transition: opacity .22s ease, max-height .34s cubic-bezier(.4, 0, .2, 1),
+                padding .34s cubic-bezier(.4, 0, .2, 1);
+  }
+  .sidebar .side-head { transition: padding .32s ease, gap .32s ease; }
+  .sidebar .side-head .avatar { transition: width .32s ease, height .32s ease; }
+  .sidebar .conv { transition: padding .32s cubic-bezier(.4, 0, .2, 1), background .14s ease; }
+  .sidebar .conv .conv-av { transition: width .32s cubic-bezier(.4, 0, .2, 1), height .32s cubic-bezier(.4, 0, .2, 1); }
+  .sidebar .conv-sections { transition: padding .34s cubic-bezier(.4, 0, .2, 1); }
+  .sidebar #sideProfileLink,
+  .sidebar #sideAdmin {
+    overflow: hidden;
+    transition: opacity .22s ease, max-height .34s cubic-bezier(.4, 0, .2, 1), transform .34s cubic-bezier(.4, 0, .2, 1);
+  }
+  .sidebar .fab-wrap { transition: opacity .22s ease, transform .34s cubic-bezier(.4, 0, .2, 1); }
+
   .sidebar.collapsed { width: 78px; }
-  .sidebar.collapsed .side-title,
-  .sidebar.collapsed .search-box,
-  .sidebar.collapsed .conv-section-head,
-  .sidebar.collapsed .conv .body,
-  .sidebar.collapsed .conv-empty,
-  .sidebar.collapsed .fab-menu { display: none; }
+  .sidebar.collapsed .side-title { opacity: 0; max-width: 0; flex: 0 0 0; pointer-events: none; }
+  .sidebar.collapsed .search-box { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; border: none; pointer-events: none; }
+  .sidebar.collapsed .conv-section-head { opacity: 0; max-height: 0; padding-top: 0; padding-bottom: 0; overflow: hidden; pointer-events: none; }
+  .sidebar.collapsed .conv .body { opacity: 0; max-width: 0; pointer-events: none; }
   .sidebar.collapsed .side-head { flex-direction: column; gap: 8px; padding: 12px 0; }
   .sidebar.collapsed #sideToggle { order: -1; }
-  .sidebar.collapsed .side-head .avatar { width: 42px; height: 42px; }
+  .sidebar.collapsed #sideProfileLink { opacity: 0; max-height: 0; transform: scale(.5); pointer-events: none; }
   .sidebar.collapsed .side-toggle svg { transform: scaleX(-1); }
   .sidebar.collapsed .conv-sections { padding: 6px 10px 88px; }
   .sidebar.collapsed .conv { justify-content: center; padding: 8px 0; }
@@ -955,7 +983,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
     width: 12px; height: 12px; border-radius: 50%; background: var(--accent);
     border: 2px solid var(--panel); box-sizing: border-box;
   }
-  .sidebar.collapsed .fab-wrap { left: 50%; right: auto; transform: translateX(-50%); }
+  .sidebar.collapsed .fab-wrap { opacity: 0; pointer-events: none; }
 }
 
 @media (max-width: 900px) {
