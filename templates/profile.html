@@ -14,16 +14,16 @@
       <span>وضعیت: <b style="color:var(--text)">{{ 'آنلاین' if target.status == 'online' else 'آفلاین' }}</b></span>
     </div>
     <div class="p-actions">
-      <button class="btn primary" id="btnMsg">📨 پیام بده</button>
-      <button class="btn" id="btnBlock">{{ 'لغو بلاک' if target.id | string in my_blocks else '🚫 بلاک' }}</button>
-      <button class="btn danger" id="btnReport">🚨 گزارش</button>
+      <button class="btn primary" id="btnMsg">{{ bi('send') }} پیام بده</button>
+      <button class="btn" id="btnBlock">{% if target.id | string in my_blocks %}لغو بلاک{% else %}{{ bi('slash-circle') }} بلاک{% endif %}</button>
+      <button class="btn danger" id="btnReport">{{ bi('flag') }} گزارش</button>
     </div>
     <p class="blocked-note" id="blockNote">{% if target.id | string in my_blocks %}این کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونه بهت پیام بده.{% endif %}</p>
   </div>
 </div>
 <div class="report-modal" id="reportModal">
   <div class="box">
-    <h3>🚨 گزارش @{{ target.username }}</h3>
+    <h3>{{ bi('flag') }} گزارش @{{ target.username }}</h3>
     <p class="sub">دلیل گزارش رو بنویس تا ادمین‌ها بررسی کنن</p>
     <textarea class="input" id="reportReason" rows="3" placeholder="مثلاً رفتار غیرمجاز…"></textarea>
     <div class="row">

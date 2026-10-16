@@ -126,14 +126,15 @@ function copyText(text) {
 
 function fileIcon(name) {
   const ext = (name || '').split('.').pop().toLowerCase();
-  if (['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'].includes(ext)) return '🗜️';
-  if (['pdf'].includes(ext)) return '📕';
-  if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return '📘';
-  if (['xls', 'xlsx', 'ods', 'csv'].includes(ext)) return '📗';
-  if (['ppt', 'pptx', 'odp'].includes(ext)) return '📙';
-  if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return '🎧';
-  if (['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp'].includes(ext)) return '🎬';
-  if (['txt', 'md', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'toml', 'cfg', 'conf'].includes(ext)) return '📄';
+  if (['zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz'].includes(ext)) return 'file-earmark-zip';
+  if (['pdf'].includes(ext)) return 'file-earmark-pdf';
+  if (['doc', 'docx', 'odt', 'rtf'].includes(ext)) return 'file-earmark-word';
+  if (['xls', 'xlsx', 'ods', 'csv'].includes(ext)) return 'file-earmark-excel';
+  if (['ppt', 'pptx', 'odp'].includes(ext)) return 'file-earmark-ppt';
+  if (['mp3', 'wav', 'ogg', 'oga', 'm4a', 'aac', 'flac', 'opus'].includes(ext)) return 'file-earmark-music';
+  if (['mp4', 'mov', 'webm', 'mkv', 'avi', 'm4v', '3gp'].includes(ext)) return 'file-earmark-play';
+  if (['png', 'jpg', 'jpeg', 'gif', 'webp', 'bmp', 'svg', 'avif', 'heic'].includes(ext)) return 'file-earmark-image';
+  if (['txt', 'md', 'log', 'json', 'xml', 'yml', 'yaml', 'ini', 'toml', 'cfg', 'conf'].includes(ext)) return 'file-earmark-text';
   const codeExt = ['py', 'pyw', 'js', 'mjs', 'cjs', 'ts', 'jsx', 'tsx', 'html', 'htm', 'css', 'scss', 'sass',
     'less', 'sh', 'bash', 'zsh', 'bat', 'ps1', 'c', 'cc', 'cpp', 'cxx', 'h', 'hpp', 'cs', 'java', 'kt', 'kts',
     'go', 'rs', 'rb', 'php', 'pl', 'lua', 'r', 'jl', 'swift', 'm', 'mm', 'dart', 'scala', 'sql', 'graphql',
@@ -141,8 +142,8 @@ function fileIcon(name) {
     'ipynb', 'ino', 'qml', 'vala', 'hx', 'glsl', 'hlsl', 'wgsl', 'jsp', 'asp', 'aspx', 'ejs', 'hbs', 'pug',
     'jade', 'njk', 'liquid', 'twig', 'mustache', 'haml', 'slim', 'erb', 'v', 'd', 'nim', 'zig'];
   const codeNames = ['makefile', 'dockerfile', 'jenkinsfile', 'rakefile', 'gemfile', 'procfile', 'vagrantfile', 'cmakelists'];
-  if (codeExt.includes(ext) || codeNames.includes((name || '').toLowerCase())) return '💻';
-  return '📎';
+  if (codeExt.includes(ext) || codeNames.includes((name || '').toLowerCase())) return 'file-earmark-code';
+  return 'file-earmark';
 }
 
 function fmtSize(n) {
@@ -169,17 +170,17 @@ function renderMsg(m) {
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'video') {
     body = `<div class="vid-wrap"><video class="vid" src="${url}" controls preload="metadata" playsinline></video>`
-      + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">⛶</button></div>`;
+      + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'audio') {
-    body = `<div class="audio-card"><div class="fi">🎧</div><div class="ac-body"><b>${fname}</b>`
+    body = `<div class="audio-card"><div class="fi">${bi('headphones')}</div><div class="ac-body"><b>${fname}</b>`
       + `<audio class="aud" src="${url}" controls preload="metadata"></audio></div></div>`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'file') {
-    body = `<div class="file-card"><div class="fi">${fileIcon(m.file_name)}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
+    body = `<div class="file-card"><div class="fi">${bi(fileIcon(m.file_name))}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
     if (m.file_url) {
-      body += `<div class="file-actions"><a class="btn sm" href="${url}" download="${fname}">⬇ دریافت</a>`
-        + `<a class="btn sm ghost" href="${url}" target="_blank" rel="noopener">↗ باز کردن</a></div>`;
+      body += `<div class="file-actions"><a class="btn sm" href="${url}" download="${fname}">${bi('download')} دریافت</a>`
+        + `<a class="btn sm ghost" href="${url}" target="_blank" rel="noopener">${bi('box-arrow-up-right')} باز کردن</a></div>`;
     }
   } else {
     body = `<div class="txt md">${md(m.content)}</div>`;
@@ -196,8 +197,8 @@ function renderMsg(m) {
   const reply = m.reply && !m.reply.deleted
     ? `<div class="reply-ref" data-goto="${m.reply.id}"><b>${esc((getMember(m.reply.sender_id) || {}).display_name || 'کاربر')}</b> ${esc(m.reply.content || '(تصویر/فایل)')}</div>`
     : '';
-  const fwd = m.fwd_from_name ? `<div class="fwd-tag">↪ فوروارد شده از <b>${esc(m.fwd_from_name)}</b></div>` : '';
-  const pinTag = m.pinned ? '<span class="pin-tag">📌 پین شده</span>' : '';
+  const fwd = m.fwd_from_name ? `<div class="fwd-tag">${bi('share')} فوروارد شده از <b>${esc(m.fwd_from_name)}</b></div>` : '';
+  const pinTag = m.pinned ? `<span class="pin-tag">${bi('pin-angle-fill')} پین شده</span>` : '';
   const title = (!mine && sender.title) ? ` <span class="member-title" title="لقب در این گروه">${esc(sender.title)}</span>` : '';
   const unameLink = (!mine && sender.username) ? ` <a class="u-link" data-u="${esc(sender.username)}" title="پیوی با ${esc(sender.display_name)}">@${esc(sender.username)}</a>` : '';
   const html = `
@@ -255,7 +256,7 @@ function renderAllMessages() {
       body.insertAdjacentHTML('beforeend', renderMsg(m));
     });
   } else if (currentChat) {
-    body.innerHTML = '<div class="empty-msgs">اینجا جای پیام‌هاست. اولین پیام رو تو بفرست 🚀</div>';
+    body.innerHTML = '<div class="empty-msgs">اینجا جای پیام‌هاست. اولین پیام رو تو بفرست</div>';
   }
   scrollToBottom(true);
 }
@@ -383,7 +384,7 @@ function setHead() {
     if (p.id) repBtn.style.display = 'grid';
   } else {
     displayName = c.name || (c.chat_type === 'channel' ? 'کانال' : 'گروه');
-    const vis = c.is_public ? '🌐 عمومی' : '🔒 خصوصی';
+    const vis = c.is_public ? bi('globe') + ' عمومی' : bi('lock') + ' خصوصی';
     subText = (c.chat_type === 'channel' ? 'کانال' : 'گروه') + ' · ' + vis + ' · ' + ((c.members || (CD.members || [])).length) + ' عضو';
     av = c.avatar;
     const isMember = CD.role !== null && CD.role !== undefined;
@@ -449,7 +450,7 @@ document.querySelectorAll('.modal').forEach(mod => {
     x.type = 'button';
     x.className = 'modal-x';
     x.title = 'بستن';
-    x.textContent = '✕';
+    x.innerHTML = bi('x-lg');
     x.onclick = () => mod.classList.remove('show');
     box.prepend(x);
   }
@@ -609,7 +610,7 @@ window.addEventListener('popstate', () => {
 });
 
 function renderConvItem(it) {
-  const lock = (it.chat_type !== 'dm' && !it.is_notes && it.is_public === false) ? ' 🔒' : '';
+  const lock = (it.chat_type !== 'dm' && !it.is_notes && it.is_public === false) ? ' ' + bi('lock') : '';
   let av;
   if (it.is_notes) {
     av = `<div class="avatar conv-av" style="border-radius:14px"><img src="/static/icons/notes.svg" alt=""></div>`;
@@ -618,9 +619,9 @@ function renderConvItem(it) {
   } else {
     av = `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
   }
-  const muteIco = it.muted ? '<span class="conv-mute" title="بی‌صدا">🔕</span>' : '';
+  const muteIco = it.muted ? `<span class="conv-mute" title="بی‌صدا">${bi('bell-slash')}</span>` : '';
   return `
-    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}" data-unread="${it.unread || 0}">
+    <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-peer-id="${it.peer_id || ''}" data-blocked="${it.blocked ? 1 : 0}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}" data-unread="${it.unread || 0}">
       ${av}
       <div class="body">
         <div class="row1"><b>${esc(it.name)}${lock}</b><span class="conv-meta">${muteIco}<time>${fmtTime(it.last_at)}</time></span></div>
@@ -712,12 +713,26 @@ function editMessage(mid, rowEl) {
   if (!txt) return;
   const m = (CD.initialMessages || []).find(x => x.id === mid);
   const original = m ? m.content : txt.textContent;
-  const input = document.createElement('input');
+
+  const wrap = document.createElement('div');
+  wrap.className = 'edit-wrap';
+  const input = document.createElement('textarea');
   input.className = 'input edit-input';
+  input.rows = 1;
   input.value = original;
-  input.style.width = '100%';
-  txt.replaceWith(input);
+  const btn = document.createElement('button');
+  btn.type = 'button';
+  btn.className = 'btn sm primary edit-save';
+  btn.innerHTML = bi('check2') + '<span>ویرایش</span>';
+  wrap.appendChild(input);
+  wrap.appendChild(btn);
+  txt.replaceWith(wrap);
+
+  const grow = () => { input.style.height = 'auto'; input.style.height = Math.min(input.scrollHeight, 160) + 'px'; };
+  grow();
   input.focus();
+  try { input.setSelectionRange(input.value.length, input.value.length); } catch (e) {}
+
   let done = false;
   const finish = () => {
     if (done) return;
@@ -725,22 +740,21 @@ function editMessage(mid, rowEl) {
     const v = input.value.trim();
     if (v && v !== original) {
       api('/api/message/edit', { message_id: mid, content: v }).then(j => {
-        if (j.ok) {
-          if (m) m.content = v;
-          txt.innerHTML = md(v);
-        } else {
-          txt.innerHTML = md(original);
-          toast(j.error, 'error');
-        }
+        if (j.ok) { if (m) m.content = v; txt.innerHTML = md(v); }
+        else { txt.innerHTML = md(original); toast(j.error, 'error'); }
       });
-    } else if (v !== original) {
+    } else {
       txt.innerHTML = md(original);
     }
-    input.replaceWith(txt);
+    wrap.replaceWith(txt);
   };
+  const cancel = () => { if (done) return; done = true; wrap.replaceWith(txt); };
+  btn.addEventListener('mousedown', e => e.preventDefault());
+  btn.addEventListener('click', finish);
+  input.addEventListener('input', grow);
   input.onkeydown = ev => {
-    if (ev.key === 'Enter') finish();
-    if (ev.key === 'Escape') { done = true; input.replaceWith(txt); }
+    if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); finish(); }
+    else if (ev.key === 'Escape') { ev.preventDefault(); cancel(); }
   };
   input.onblur = finish;
 }
@@ -961,7 +975,7 @@ function openReply(mid) {
   const label = String(raw).replace(/\n/g, ' ').slice(0, 60);
   pendingReply = { id: mid, name: sender.display_name || 'کاربر', preview: label || 'پیام' };
   const pv = document.getElementById('replyPreview');
-  pv.innerHTML = `<span>↩ پاسخ به <b>${esc(pendingReply.name)}</b>: ${esc(pendingReply.preview)}</span><button data-cancels>✕</button>`;
+  pv.innerHTML = `<span>${bi('reply')} پاسخ به <b>${esc(pendingReply.name)}</b>: ${esc(pendingReply.preview)}</span><button data-cancels>${bi('x-lg')}</button>`;
   pv.style.display = 'flex';
   document.getElementById('msgInput').focus();
 }
@@ -1030,8 +1044,8 @@ function clearHistory(chatId) {
     refreshConvList();
   });
   showCtxMenu(window.innerWidth / 2, window.innerHeight / 2, [
-    { label: 'پاک کردن برای من', icon: '🙈', fn: () => run(false) },
-    { label: 'پاک کردن برای همه', icon: '🧹', danger: true, fn: () => openConfirm('پاک کردن تاریخچه', 'همه‌ی پیام‌های این گپ برای همه پاک می‌شه. این کار قابل بازگشت نیست', () => run(true), 'پاک کن') },
+    { label: 'پاک کردن برای من', icon: bi('eye-slash'), fn: () => run(false) },
+    { label: 'پاک کردن برای همه', icon: bi('eraser'), danger: true, fn: () => openConfirm('پاک کردن تاریخچه', 'همه‌ی پیام‌های این گپ برای همه پاک می‌شه. این کار قابل بازگشت نیست', () => run(true), 'پاک کن') },
   ]);
 }
 
@@ -1164,7 +1178,7 @@ async function loadPinned() {
   const bar = document.getElementById('pinnedBar');
   if (!j.pinned) { bar.style.display = 'none'; return; }
   const preview = j.pinned.content || (j.pinned.msg_type === 'image' ? '(تصویر)' : j.pinned.msg_type === 'file' ? '(فایل)' : '(پیام)');
-  bar.innerHTML = `<span class="pin-bar-icon">📌</span><span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b> ${esc(preview).slice(0, 80)}</span><button class="pin-unpin" data-unpin="${j.pinned.id}" title="لغو پین">✕</button>`;
+  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span><span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b> ${esc(preview).slice(0, 80)}</span><button class="pin-unpin" data-unpin="${j.pinned.id}" title="لغو پین">${bi('x-lg')}</button>`;
   bar.style.display = 'flex';
   bar.querySelector('.pin-bar-text').onclick = () => {
     const t = document.querySelector(`.mrow[data-mid="${j.pinned.id}"]`);
@@ -1213,13 +1227,13 @@ function renderAttachPreview() {
     pv.innerHTML = '';
     return;
   }
-  const icon = pendingFile.kind === 'image' ? '' : pendingFile.kind === 'video' ? '🎬'
-    : pendingFile.kind === 'audio' ? '🎧' : fileIcon(pendingFile.name);
+  const icon = pendingFile.kind === 'image' ? '' : pendingFile.kind === 'video' ? bi('camera-reels')
+    : pendingFile.kind === 'audio' ? bi('headphones') : bi(fileIcon(pendingFile.name));
   const thumb = pendingFile.kind === 'image'
     ? `<img src="${esc(pendingFile.url)}" alt="">`
     : `<span class="ap-ic">${icon}</span>`;
   const size = pendingFile.size ? `<small>${fmtSize(pendingFile.size)}</small>` : '';
-  pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span><button data-clearattach>✕</button>`;
+  pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span><button data-clearattach>${bi('x-lg')}</button>`;
   pv.classList.add('show');
 }
 
@@ -1228,7 +1242,7 @@ async function handleFiles(file) {
   if (!file || uploading) return;
   uploading = true;
   const pv = document.getElementById('attachPreview');
-  pv.innerHTML = '<span class="ap-ic">⏳</span><span class="fname">در حال آپلود…</span>';
+  pv.innerHTML = `<span class="ap-ic">${bi('hourglass-split')}</span><span class="fname">در حال آپلود…</span>`;
   pv.classList.add('show');
   const fd = new FormData();
   fd.append('file', file);
@@ -1353,12 +1367,12 @@ function renderMembers(members) {
       <span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>
       <div class="mb-info">
         <b>${esc(m.display_name)}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}</b>
-        <small>@${esc(m.username)}${m.role === 'owner' ? ' · 👑 صاحب' : m.role === 'admin' ? ' · ⭐ ادمین' : ''}</small>
+        <small>@${esc(m.username)}${m.role === 'owner' ? ' · ' + bi('star-fill') + ' صاحب' : m.role === 'admin' ? ' · ' + bi('star') + ' ادمین' : ''}</small>
       </div>
       <div class="mb-actions">
         ${canTitle ? `<button class="btn sm ghost" data-title="${m.id}" title="ویرایش لقب">لقب</button>` : ''}
-        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">${m.role === 'admin' ? 'عضو کن' : '⭐ ادمین'}</button>` : ''}
-        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm ghost" data-transfer="${m.id}" title="انتقال مالکیت">👑</button>` : ''}
+        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm" data-promote="${m.id}">${m.role === 'admin' ? 'عضو کن' : bi('star') + ' ادمین'}</button>` : ''}
+        ${isOwner && !isMe && m.role !== 'owner' ? `<button class="btn sm ghost" data-transfer="${m.id}" title="انتقال مالکیت">${bi('star-fill')}</button>` : ''}
         ${canManage && !isMe && m.role !== 'owner' ? `<button class="btn sm danger" data-kick="${m.id}">اخراج</button>` : ''}
       </div>
     </div>`;
@@ -1409,7 +1423,7 @@ function segSelect(el, val) {
 function resetAvPick(prefix) {
   const inp = document.getElementById(prefix + 'Input');
   inp.value = '';
-  document.getElementById(prefix + 'Label').textContent = '📷 انتخاب عکس…';
+  document.getElementById(prefix + 'Label').innerHTML = bi('camera') + ' انتخاب عکس…';
   const prev = document.getElementById(prefix + 'Prev');
   prev.src = '';
   prev.style.display = 'none';
@@ -1419,7 +1433,7 @@ function resetAvPick(prefix) {
   inp.addEventListener('change', () => {
     const f = inp.files[0];
     if (!f) return resetAvPick(p);
-    document.getElementById(p + 'Label').textContent = '✓ ' + f.name;
+    document.getElementById(p + 'Label').innerHTML = bi('check2') + ' ' + esc(f.name);
     const prev = document.getElementById(p + 'Prev');
     prev.src = URL.createObjectURL(f);
     prev.style.display = 'block';
@@ -1524,10 +1538,10 @@ function openDmInfo() {
   document.getElementById('dmAvatar').innerHTML = avatarInner(p.display_name, p.avatar, p.status === 'online');
   document.getElementById('dmName').textContent = p.display_name || 'کاربر';
   document.getElementById('dmUsername').textContent = p.username ? '@' + p.username : '';
-  document.getElementById('dmStatus').textContent = p.status === 'online' ? '🟢 آنلاین' : '⚪ آفلاین';
+  document.getElementById('dmStatus').innerHTML = p.status === 'online' ? bi('circle-fill') + ' آنلاین' : bi('circle') + ' آفلاین';
   document.getElementById('dmBio').textContent = p.bio || 'بیویی نداره';
   document.getElementById('dmFull').href = '/profile/' + encodeURIComponent(p.username || '');
-  document.getElementById('dmBlock').textContent = p.blocked ? '✅ لغو بلاک' : '🚫 بلاک';
+  document.getElementById('dmBlock').innerHTML = p.blocked ? bi('check-circle') + ' لغو بلاک' : bi('slash-circle') + ' بلاک';
   document.getElementById('dmBlockNote').style.display = p.blocked ? 'block' : 'none';
   document.getElementById('dmModal').classList.add('show');
 }
@@ -1541,7 +1555,8 @@ document.getElementById('dmBlock').onclick = () => {
     p.blocked = !!j.blocked;
     if (CD.chat && CD.chat.peer) CD.chat.peer.blocked = p.blocked;
     openDmInfo();
-    toast(j.blocked ? 'بلاک شد' : 'بلاک لغو شد', 'success');
+    toast(j.blocked ? 'بلاک شد' : 'لغو بلاک شد', 'success');
+    refreshConvList();
   });
 };
 document.getElementById('dmReport').onclick = () => {
@@ -1582,7 +1597,7 @@ function openSettings() {
     if (vis.querySelector('.cs-note')) vis.querySelector('.cs-note').style.display = 'none';
   }
   segSelect(vis, c.is_public ? 'public' : 'private');
-  document.getElementById('csAvLabel').textContent = c.avatar ? '🖼 آواتار فعلی — برای تغییر عکس جدید انتخاب کن' : '📷 انتخاب عکس…';
+  document.getElementById('csAvLabel').innerHTML = c.avatar ? bi('image') + ' آواتار فعلی — برای تغییر عکس جدید انتخاب کن' : bi('camera') + ' انتخاب عکس…';
   document.getElementById('csAvInput').value = '';
   const csPrev = document.getElementById('csAvPrev');
   if (csPrev) csPrev.style.display = 'none';
@@ -1681,7 +1696,7 @@ document.getElementById('csAvUpload').onclick = async () => {
     document.getElementById('csAvatar').innerHTML = r.avatar
       ? '<img src="' + r.avatar + '" alt="">'
       : document.getElementById('csName').textContent.charAt(0);
-    document.getElementById('csAvLabel').textContent = '🖼 آواتار جدید ثبت شد';
+    document.getElementById('csAvLabel').innerHTML = bi('image') + ' آواتار جدید ثبت شد';
     const prev = document.getElementById('csAvPrev');
     if (prev) { prev.src = URL.createObjectURL(f); prev.style.display = 'block'; }
     document.getElementById('csAvClear').style.display = r.avatar ? 'inline-flex' : 'none';
@@ -1706,7 +1721,7 @@ document.getElementById('csAvClear').onclick = async () => {
     toast('آواتار گپ حذف شد');
     CD.chat.avatar = '';
     document.getElementById('csAvatar').innerHTML = document.getElementById('csName').textContent.charAt(0);
-    document.getElementById('csAvLabel').textContent = '📷 انتخاب عکس…';
+    document.getElementById('csAvLabel').innerHTML = bi('camera') + ' انتخاب عکس…';
     const prev = document.getElementById('csAvPrev');
     if (prev) { prev.style.display = 'none'; prev.src = ''; }
     document.getElementById('csAvInput').value = '';
@@ -1981,7 +1996,7 @@ document.getElementById('pmChangePass').onclick = async () => {
     document.getElementById('pmCurPass').value = '';
     document.getElementById('pmNewPass').value = '';
     document.getElementById('pmNewPass2').value = '';
-    toast('رمز عبور تغییر کرد ✅');
+    toast('رمز عبور تغییر کرد');
   } else toast(r.error, 'error');
 };
 
@@ -2034,7 +2049,7 @@ searchInput.oninput = () => {
         <div class="sr-item" data-chat="${c.id}">
           <span class="type-icon"><img src="/static/icons/${c.chat_type === 'channel' ? 'channel' : 'group'}.svg" alt=""></span>
           <div style="flex:1; min-width:0"><b>${esc(c.name)}</b>
-          <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'}${c.username ? ` · @${esc(c.username)}` : ''} ${c.is_public ? '· 🌐 عمومی' : '· 🔒 خصوصی'}${c.is_member ? ' · ✅ عضو هستی' : ''}</small></div>
+          <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'}${c.username ? ` · @${esc(c.username)}` : ''} ${c.is_public ? '· ' + bi('globe') + ' عمومی' : '· ' + bi('lock') + ' خصوصی'}${c.is_member ? ' · ' + bi('check-circle') + ' عضو هستی' : ''}</small></div>
           ${c.is_member ? '' : `<button class="btn sm sr-join" data-join="${c.id}">پیوستن</button>`}
         </div>`).join('');
     }
@@ -2116,38 +2131,38 @@ document.addEventListener('contextmenu', e => {
     const m = (CD.initialMessages || []).find(x => x.id === mid) || {};
     const mine = m.sender_id === window.ME.id;
     showCtxMenu(e.clientX, e.clientY, [
-      { label: 'واکنش بده', icon: '🙂', fn: () => openEmojiPicker(mid, e.clientX, e.clientY) },
-      { label: 'پاسخ', icon: '↩', fn: () => openReply(mid) },
-      { label: 'فوروارد', icon: '↪', fn: () => openForward(mid) },
-      { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: '🔖', fn: () => {
+      { label: 'واکنش بده', icon: bi('emoji-smile'), fn: () => openEmojiPicker(mid, e.clientX, e.clientY) },
+      { label: 'پاسخ', icon: bi('reply'), fn: () => openReply(mid) },
+      { label: 'فوروارد', icon: bi('share'), fn: () => openForward(mid) },
+      { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: bi('bookmark'), fn: () => {
         api('/api/message/save', { message_id: mid }).then(j => {
           if (j.ok) toast('در پیام‌های ذخیره‌شده ذخیره شد');
           else toast(j.error, 'error');
         });
       } },
-      m.content ? { label: 'کپی متن', icon: '📋', fn: () => {
+      m.content ? { label: 'کپی متن', icon: bi('clipboard'), fn: () => {
         copyText(m.content).then(() => toast('کپی شد')).catch(() => toast('کپی نشد', 'error'));
       } } : null,
-      canPinMsg(m) ? { label: m.pinned ? 'لغو پین' : 'پین کردن', icon: m.pinned ? '📌' : '📍', fn: () => {
+      canPinMsg(m) ? { label: m.pinned ? 'لغو پین' : 'پین کردن', icon: bi(m.pinned ? 'pin-angle-fill' : 'pin-angle'), fn: () => {
         const next = !m.pinned;
         localSetPin(mid, next);
         api('/api/message/pin', { message_id: mid }).then(j => {
           if (!j.ok) { localSetPin(mid, !next); toast(j.error || 'پین نشد', 'error'); }
         });
       } } : null,
-      { label: selecting ? 'خروج از حالت انتخاب' : 'انتخاب و حذف گروهی', icon: '☑', fn: () => (selecting ? cancelSelect() : enterSelect(mid)) },
-      (mine && m.msg_type === 'text') ? { label: 'ویرایش', icon: '✎', fn: () => {
+      { label: selecting ? 'خروج از حالت انتخاب' : 'انتخاب و حذف گروهی', icon: bi('ui-checks'), fn: () => (selecting ? cancelSelect() : enterSelect(mid)) },
+      (mine && m.msg_type === 'text') ? { label: 'ویرایش', icon: bi('pencil'), fn: () => {
         const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
         if (row) editMessage(mid, row);
       } } : null,
-      { label: 'حذف برای من', icon: '🙈', danger: true, fn: () => hideForMe(mid) },
-      (mine || window.ME.is_admin) ? { label: 'حذف پیام', icon: '🗑', danger: true, fn: () => {
+      { label: 'حذف برای من', icon: bi('eye-slash'), danger: true, fn: () => hideForMe(mid) },
+      (mine || window.ME.is_admin) ? { label: 'حذف پیام', icon: bi('trash'), danger: true, fn: () => {
         localDeleteMid(mid);
         api('/api/message/delete', { message_id: mid }).then(j => {
           if (!j.ok) { renderAllMessages(); toast(j.error || 'حذف نشد', 'error'); }
         });
       } } : null,
-      (!mine && m.sender_id) ? { label: 'گزارش فرستنده', icon: '🚨', danger: true, fn: () => {
+      (!mine && m.sender_id) ? { label: 'گزارش فرستنده', icon: bi('flag'), danger: true, fn: () => {
         openReport({ id: m.sender_id, display_name: (getMember(m.sender_id) || {}).display_name }, m.id);
       } } : null,
     ]);
@@ -2161,30 +2176,32 @@ document.addEventListener('contextmenu', e => {
     const type = conv.dataset.type;
     const isDm = type === 'dm';
     const peerName = conv.dataset.peer || '';
+    const peerId = +conv.dataset.peerId || null;
+    const isBlocked = conv.dataset.blocked === '1';
     const isMuted = conv.dataset.muted === '1';
     const isArchived = conv.dataset.archived === '1';
     showCtxMenu(e.clientX, e.clientY, [
-      { label: 'باز کردن', icon: '💬', fn: () => openChat(chatId) },
-      { label: 'خواندن نشانه‌گذاری', icon: '✓', fn: () => api('/api/mark-read', { chat_id: chatId }).then(() => {
+      { label: 'باز کردن', icon: bi('chat-dots'), fn: () => openChat(chatId) },
+      { label: 'خواندن نشانه‌گذاری', icon: bi('check2'), fn: () => api('/api/mark-read', { chat_id: chatId }).then(() => {
         clearUnread(chatId);
         refreshConvList();
       }) },
-      { label: isMuted ? 'باصدا کردن' : 'بی‌صدا کردن', icon: isMuted ? '🔔' : '🔕', fn: () => {
+      { label: isMuted ? 'باصدا کردن' : 'بی‌صدا کردن', icon: bi(isMuted ? 'bell' : 'bell-slash'), fn: () => {
         api('/api/chat/' + chatId + '/prefs', { muted: !isMuted }).then(j => {
           if (j.ok) { toast(j.muted ? 'بی‌صدا شد' : 'باصدا شد'); refreshConvList(); }
           else toast(j.error, 'error');
         });
       } },
-      { label: isArchived ? 'خروج از آرشیو' : 'آرشیو کردن', icon: '📦', fn: () => {
+      { label: isArchived ? 'خروج از آرشیو' : 'آرشیو کردن', icon: bi('archive'), fn: () => {
         api('/api/chat/' + chatId + '/prefs', { archived: !isArchived }).then(j => {
           if (j.ok) { toast(j.archived ? 'آرشیو شد' : 'از آرشیو درآمد'); refreshConvList(); }
           else toast(j.error, 'error');
         });
       } },
-      { label: 'پاک کردن تاریخچه', icon: '🧹', danger: true, fn: () => clearHistory(chatId, isDm) },
-      !isDm ? { label: 'تنظیمات گپ', icon: '⚙', fn: () => openChat(chatId).then(openSettings) } : null,
+      { label: 'پاک کردن تاریخچه', icon: bi('eraser'), danger: true, fn: () => clearHistory(chatId, isDm) },
+      !isDm ? { label: 'تنظیمات گپ', icon: bi('gear'), fn: () => openChat(chatId).then(openSettings) } : null,
       !isDm && CD.chat && +CD.chat.id === chatId && CD.role && CD.role !== 'owner' ? {
-        label: 'ترک گروه / کانال', icon: '🚪', danger: true, fn: () => {
+        label: 'ترک گروه / کانال', icon: bi('box-arrow-right'), danger: true, fn: () => {
           openConfirm('ترک گپ', 'از این گپ خارج می‌شی. برای بازگشت دوباره باید عضویت بگیری', () => {
             api('/api/chat/' + chatId + '/members', { action: 'leave' }).then(j => {
               if (j.ok) {
@@ -2198,16 +2215,20 @@ document.addEventListener('contextmenu', e => {
           }, 'خروج');
         }
       } : null,
-      isDm && peerName ? { label: 'پروفایل ' + peerName, icon: '👤', fn: () => openChat(chatId).then(openDmInfo) } : null,
-      isDm && peerName ? { label: 'گزارش کاربر', icon: '🚨', danger: true, fn: () => openChat(chatId).then(() => {
+      isDm && peerName ? { label: 'پروفایل ' + peerName, icon: bi('person'), fn: () => openChat(chatId).then(openDmInfo) } : null,
+      isDm && peerName ? { label: 'گزارش کاربر', icon: bi('flag'), danger: true, fn: () => openChat(chatId).then(() => {
         if (CD.chat && CD.chat.peer) openReport(CD.chat.peer);
       }) } : null,
-      isDm && peerName ? { label: 'بلاک کردن', icon: '🚫', danger: true, fn: () => openChat(chatId).then(() => {
-        const p = CD.chat && CD.chat.peer;
-        if (!p) return;
-        api('/api/block', { user_id: p.id }).then(j => toast(j.blocked ? 'بلاک شد' : 'بلاک لغو شد', 'success'));
-      }) } : null,
-      !isDm ? { label: 'حذف گروه / کانال', icon: '🗑', danger: true, fn: () => {
+      isDm && peerName ? { label: isBlocked ? 'لغو بلاک' : 'بلاک کردن', icon: bi(isBlocked ? 'check-circle' : 'slash-circle'), danger: !isBlocked, fn: () => {
+        const uid = peerId || (CD.chat && CD.chat.peer && +CD.chat.id === chatId ? CD.chat.peer.id : null);
+        if (!uid) return;
+        api('/api/block', { user_id: uid }).then(j => {
+          toast(j.blocked ? 'بلاک شد' : 'لغو بلاک شد', 'success');
+          if (CD.chat && CD.chat.peer && CD.chat.peer.id === uid) CD.chat.peer.blocked = !!j.blocked;
+          refreshConvList();
+        });
+      } } : null,
+      !isDm ? { label: 'حذف گروه / کانال', icon: bi('trash'), danger: true, fn: () => {
         if (conv.dataset.owner !== String(window.ME.id) && !window.ME.is_admin) {
           toast('فقط صاحب گپ یا ادمین سایت می‌تونه حذف کنه', 'error');
           return;
@@ -2223,7 +2244,7 @@ document.addEventListener('contextmenu', e => {
           });
         }, 'حذف');
       } } : null,
-      isDm ? { label: 'حذف گپ', icon: '🗑', danger: true, fn: () => {
+      isDm ? { label: 'حذف گپ', icon: bi('trash'), danger: true, fn: () => {
         openConfirm('حذف گپ', `«${peerName || 'گپ'}» کامل حذف می‌شه؛ برای تو و طرف مقابل پیام‌ها می‌ره. این کار قابل بازگشت نیست`, () => {
           api('/api/chat/' + chatId + '/delete').then(j => {
             if (j.ok) {

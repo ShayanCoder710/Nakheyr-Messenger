@@ -26,7 +26,7 @@
     <div class="conv-sections" id="convSections">
       <div class="conv-section" id="archiveSection" style="display:none">
         <div class="conv-section-head" data-cat="archive">
-          <span>📦 آرشیو</span>
+          <span>{{ bi('archive') }} آرشیو</span>
         </div>
         <div class="conv-list" id="convListArchive"></div>
       </div>
@@ -57,9 +57,9 @@
     </div>
     <div class="fab-wrap">
       <div class="fab-menu" id="fabMenu">
-        <button data-do="group">👥 گروه جدید</button>
-        <button data-do="channel">📢 کانال جدید</button>
-        <button data-do="message">✉️ پیام جدید</button>
+        <button data-do="group">{{ bi('people') }} گروه جدید</button>
+        <button data-do="channel">{{ bi('megaphone') }} کانال جدید</button>
+        <button data-do="message">{{ bi('envelope') }} پیام جدید</button>
       </div>
       <button class="fab" id="fabNew" title="گپ جدید" aria-label="گپ جدید">
         <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 17.25V21h3.75L17.81 9.94l-3.75-3.75L3 17.25M20.71 7.04a1 1 0 0 0 0-1.41l-2.34-2.34a1 1 0 0 0-1.41 0l-1.83 1.83 3.75 3.75 1.83-1.83z"/></svg>
@@ -70,7 +70,7 @@
   <main class="main" id="main">
     <div class="main-empty" id="mainEmpty"{% if chat %} style="display:none"{% endif %}>
       <div class="empty-state">
-        <div class="empty-ico">💬</div>
+        <div class="empty-ico">{{ bi('chat-dots') }}</div>
         <div class="me-pill">یک گپ رو انتخاب کن</div>
         <p>یه گفتگو انتخاب کن تا پیام‌ها اینجا بیان</p>
       </div>
@@ -104,9 +104,9 @@
       <div class="chat-search" id="chatSearch" style="display:none">
         <input class="input" id="chatSearchInput" placeholder="جستجو در پیام‌های این گپ…">
         <span class="cs-count" id="chatSearchCount"></span>
-        <button class="icon-btn" id="chatSearchPrev" title="قبلی">↑</button>
-        <button class="icon-btn" id="chatSearchNext" title="بعدی">↓</button>
-        <button class="icon-btn" id="chatSearchClose" title="بستن">✕</button>
+        <button class="icon-btn" id="chatSearchPrev" title="قبلی">{{ bi('chevron-up') }}</button>
+        <button class="icon-btn" id="chatSearchNext" title="بعدی">{{ bi('chevron-down') }}</button>
+        <button class="icon-btn" id="chatSearchClose" title="بستن">{{ bi('x-lg') }}</button>
       </div>
       <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
       <div class="msgs" id="msgs">
@@ -116,13 +116,13 @@
         <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 9l6 6 6-6"/></svg>
       </button>
       <div class="typing-bar" id="typingBar"></div>
-      <div class="channel-hint" id="channelHint" style="display:none"><span>🔒 در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
+      <div class="channel-hint" id="channelHint" style="display:none"><span>{{ bi('lock') }} در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
-        <button class="btn sm ghost" id="bulkCancel" title="بستن">✕</button>
+        <button class="btn sm ghost" id="bulkCancel" title="بستن">{{ bi('x-lg') }}</button>
         <span id="bulkCount"></span>
         <button class="btn sm" id="bulkAllMine">همه‌ی من</button>
         <button class="btn sm" id="bulkCopy">کپی</button>
-        <button class="btn sm danger" id="bulkDelete">🗑 حذف</button>
+        <button class="btn sm danger" id="bulkDelete">{{ bi('trash') }} حذف</button>
       </div>
       <div class="composer">
         <div class="reply-preview" id="replyPreview" style="display:none"></div>
@@ -153,14 +153,14 @@
     <div class="av-picker">
       <label class="av-drop">
         <input type="file" id="groupAvInput" accept="image/*" hidden>
-        <span id="groupAvLabel">📷 انتخاب عکس…</span>
+        <span id="groupAvLabel">{{ bi('camera') }} انتخاب عکس…</span>
         <img id="groupAvPrev" alt="" style="display:none">
       </label>
     </div>
     <label class="label">نوع گروه</label>
     <div class="seg" id="groupVis">
-      <button type="button" data-val="public" class="on">🌐 عمومی</button>
-      <button type="button" data-val="private">🔒 خصوصی</button>
+      <button type="button" data-val="public" class="on">{{ bi('globe') }} عمومی</button>
+      <button type="button" data-val="private">{{ bi('lock') }} خصوصی</button>
     </div>
     <label class="label">اعضا</label>
     <div class="pick-grid" id="groupMemberPick"></div>
@@ -181,14 +181,14 @@
     <div class="av-picker">
       <label class="av-drop">
         <input type="file" id="channelAvInput" accept="image/*" hidden>
-        <span id="channelAvLabel">📷 انتخاب عکس…</span>
+        <span id="channelAvLabel">{{ bi('camera') }} انتخاب عکس…</span>
         <img id="channelAvPrev" alt="" style="display:none">
       </label>
     </div>
     <label class="label">نوع کانال</label>
     <div class="seg" id="channelVis">
-      <button type="button" data-val="public" class="on">🌐 عمومی</button>
-      <button type="button" data-val="private">🔒 خصوصی</button>
+      <button type="button" data-val="public" class="on">{{ bi('globe') }} عمومی</button>
+      <button type="button" data-val="private">{{ bi('lock') }} خصوصی</button>
     </div>
     <div class="row">
       <button class="btn ghost" id="channelCancel">انصراف</button>
@@ -215,14 +215,14 @@
     <input class="input" id="csUsernameInput" maxlength="30" placeholder="مثلاً my_group" dir="ltr" style="direction:ltr;text-align:left">
     <label class="label">نوع گپ</label>
     <div class="seg" id="csVis">
-      <button type="button" data-val="public">🌐 عمومی (هرکسی می‌تونه وارد بشه)</button>
-      <button type="button" data-val="private">🔒 خصوصی (فقط دعوت‌شده‌ها)</button>
+      <button type="button" data-val="public">{{ bi('globe') }} عمومی (هرکسی می‌تونه وارد بشه)</button>
+      <button type="button" data-val="private">{{ bi('lock') }} خصوصی (فقط دعوت‌شده‌ها)</button>
     </div>
     <label class="label">آواتار گپ</label>
     <div class="av-picker" id="csAvPick">
       <label class="av-drop">
         <input type="file" id="csAvInput" accept="image/*" hidden>
-        <span id="csAvLabel">📷 انتخاب عکس…</span>
+        <span id="csAvLabel">{{ bi('camera') }} انتخاب عکس…</span>
         <img id="csAvPrev" alt="" style="display:none">
       </label>
       <button class="btn sm" id="csAvUpload">آپلود</button>
@@ -258,9 +258,9 @@
     <p class="sub" id="dmStatus"></p>
     <p class="bio" id="dmBio"></p>
     <div class="p-actions">
-      <a class="btn" id="dmFull" href="#">👤 پروفایل کامل</a>
-      <button class="btn" id="dmBlock">🚫 بلاک</button>
-      <button class="btn danger" id="dmReport">🚨 گزارش</button>
+      <a class="btn" id="dmFull" href="#">{{ bi('person') }} پروفایل کامل</a>
+      <button class="btn" id="dmBlock">{{ bi('slash-circle') }} بلاک</button>
+      <button class="btn danger" id="dmReport">{{ bi('flag') }} گزارش</button>
     </div>
     <p class="blocked-note" id="dmBlockNote" style="display:none">این کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونه بهت پیام بده.</p>
     <div class="row">
@@ -287,7 +287,7 @@
 
 <div class="modal" id="reportModal">
   <div class="box">
-    <h3 id="reportTitle">🚨 گزارش کاربر</h3>
+    <h3 id="reportTitle">{{ bi('flag') }} گزارش کاربر</h3>
     <p class="sub">دلیل گزارش رو بنویس تا ادمین‌ها بررسی کنن</p>
     <textarea class="input" id="reportReason" rows="3" placeholder="مثلاً رفتار غیرمجاز…"></textarea>
     <div class="row">
@@ -326,7 +326,7 @@
     <div class="av-picker" id="pmAvPick">
       <label class="av-drop" id="pmAvDrop">
         <input type="file" id="pmAvatarInput" accept="image/*" hidden>
-        <span>📷 عکس انتخاب کن یا بکش و رها کن</span>
+        <span>{{ bi('camera') }} عکس انتخاب کن یا بکش و رها کن</span>
         <img id="pmAvPrev" alt="" style="display:none">
       </label>
       <div class="av-actions">
@@ -346,11 +346,11 @@
     <div class="danger-zone">
       <b>حذف حساب کاربری</b>
       <p>حسابت و همه‌ی پیام‌ها و گپ‌هات برای همیشه پاک می‌شه. این کار برگشت‌پذیر نیست.</p>
-      <button class="btn danger" id="pmDeleteAccount">🗑 حذف حساب</button>
+      <button class="btn danger" id="pmDeleteAccount">{{ bi('trash') }} حذف حساب</button>
     </div>
     <div class="pm-actions">
       <button class="btn primary" id="pmSave">ذخیره</button>
-      <a class="btn" id="pmAdmin" href="{{ url_for('admin_panel') }}" style="display:none">🛠 پنل ادمین</a>
+      <a class="btn" id="pmAdmin" href="{{ url_for('admin_panel') }}" style="display:none">{{ bi('gear') }} پنل ادمین</a>
       <button class="btn danger" id="pmLogout">خروج</button>
       <button class="btn ghost" id="pmBack">برگشت</button>
     </div>
@@ -393,9 +393,9 @@
   <div class="mv-bar">
     <span class="mv-name" id="mvName"></span>
     <div class="mv-tools">
-      <a class="mv-btn" id="mvOpen" href="#" target="_blank" rel="noopener" title="باز کردن در تب جدید">↗</a>
-      <a class="mv-btn" id="mvDownload" href="#" download title="دریافت">⬇</a>
-      <button class="mv-btn" id="mvClose" title="بستن">✕</button>
+      <a class="mv-btn" id="mvOpen" href="#" target="_blank" rel="noopener" title="باز کردن در تب جدید">{{ bi('box-arrow-up-right') }}</a>
+      <a class="mv-btn" id="mvDownload" href="#" download title="دریافت">{{ bi('download') }}</a>
+      <button class="mv-btn" id="mvClose" title="بستن">{{ bi('x-lg') }}</button>
     </div>
   </div>
   <div class="mv-stage" id="mvStage"></div>

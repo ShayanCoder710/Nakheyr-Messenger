@@ -471,18 +471,29 @@ def unread_counts(user):
         last_text = ''
         if last:
             sender = next((m.user for m in members if m.user_id == last.sender_id), None)
-            prefix = (f'{sender.public_name} · ' if sender and chat.chat_type != 'dm' else '')
+            if last.sender_id == uid:
+                prefix = 'شما · ' if chat.chat_type != 'dm' else ''
+            elif sender and chat.chat_type != 'dm':
+                prefix = f'{sender.public_name} · '
+            else:
+                prefix = ''
             last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
+        peer_id = None
+        blocked = False
         is_notes = chat.chat_type == 'dm' and all(m.user_id == uid for m in members)
         if chat.chat_type == 'dm' and not is_notes:
             other = next((m.user for m in members if m.user_id != uid), None)
             peer_username = other.username if other else ''
+            peer_id = other.id if other else None
+            blocked = bool(other and is_blocked(uid, other.id))
         out.append({
             'chat_id': chat.id,
             'chat_type': chat.chat_type,
             'name': chat_display_name(chat, user, members),
             'peer_username': peer_username,
+            'peer_id': peer_id,
+            'blocked': blocked,
             'is_notes': is_notes,
             'avatar': chat.avatar_url,
             'is_public': bool(chat.is_public),

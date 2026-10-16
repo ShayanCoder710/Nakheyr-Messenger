@@ -698,7 +698,10 @@ input, select, textarea { font-family: inherit; }
 .edit-input {
   width: 100%; min-width: 200px; max-width: 420px; padding: 6px 10px; font-size: 13.5px;
   border-radius: 10px; background: var(--panel-2); border: 1px solid var(--accent); color: var(--text);
+  resize: none; font-family: inherit; line-height: 1.5;
 }
+.edit-wrap { display: flex; gap: 6px; align-items: flex-end; width: 100%; }
+.edit-save { display: inline-flex; align-items: center; gap: 4px; white-space: nowrap; }
 
 .bio-resize { resize: vertical; min-height: 84px; line-height: 1.6; }
 
@@ -1120,3 +1123,8 @@ body.dragging::after {
 .attach-preview .ap-ic { font-size: 22px; }
 
 .attach-preview .fname small { margin-right: 6px; opacity: .7; }
+
+/* ===== Bootstrap Icons (inline SVG sprite) ===== */
+.bi-ic { display: inline-block; width: 1em; height: 1em; fill: currentColor; vertical-align: -0.125em; flex: 0 0 auto; }
+.bi-ic.lg { width: 1.35em; height: 1.35em; }
+.ctx-ico .bi-ic { width: 1.05em; height: 1.05em; }

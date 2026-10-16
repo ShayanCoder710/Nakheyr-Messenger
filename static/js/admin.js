@@ -4,14 +4,14 @@ function buildUserActions(tr, uid, s) {
   const defs = [
     ['ban', s.is_banned ? 'رفع مسدود' : 'مسدودسازی', s.is_banned ? 'primary' : 'danger'],
     ['admin', s.is_admin ? 'سلب ادمین' : 'ادمین کردن', ''],
-    ['messages', '💬 پیام‌ها', ''],
-    ['delete', '🗑 حذف اکانت', 'danger'],
+    ['messages', bi('chat-dots') + ' پیام‌ها', ''],
+    ['delete', bi('trash') + ' حذف اکانت', 'danger'],
   ];
   defs.forEach(([a, label, cls]) => {
     const b = document.createElement('button');
     b.className = 'btn sm ' + cls;
     b.dataset.act = a;
-    b.textContent = label;
+    b.innerHTML = label;
     b.onclick = () => handleUserAction(b);
     actions.appendChild(b);
   });
@@ -71,7 +71,7 @@ function renderMsgs(list, showSender) {
         <span class="mi-chat">${esc(m.chat || '')}</span>
         <span class="mi-time">${esc(m.created_at || '')}</span>
       </div>
-      <div class="mi-body">${m.msg_type === 'text' ? esc(m.content || '') : '📎 ' + esc(m.file_name || m.msg_type)}</div>
+      <div class="mi-body">${m.msg_type === 'text' ? esc(m.content || '') : bi('paperclip') + ' ' + esc(m.file_name || m.msg_type)}</div>
     </div>`).join('');
   box.scrollTop = 0;
 }
@@ -105,7 +105,7 @@ function openReportConversation(rid) {
     .then(j => {
       if (!j.ok) return toast(j.error, 'error');
       document.getElementById('msgSub').textContent =
-        (j.reporter || '') + ' ↔ ' + (j.reported || '') + ' · ' + j.messages.length + ' پیام';
+        (j.reporter || '') + ' ' + bi('arrow-left-right') + ' ' + (j.reported || '') + ' · ' + j.messages.length + ' پیام';
       renderMsgs(j.messages, true);
     })
     .catch(() => toast('خطا', 'error'));

@@ -1323,6 +1323,14 @@ app.jinja_env.filters['fmt_time'] = _to_fa_time
 app.jinja_env.filters['fmt_day'] = _to_fa_day
 
 
+def _bi_icon(name, cls=''):
+    from markupsafe import Markup
+    return Markup(f'<svg class="bi-ic {cls}" aria-hidden="true" focusable="false"><use href="#{name}"></use></svg>')
+
+
+app.jinja_env.globals['bi'] = _bi_icon
+
+
 if __name__ == '__main__':
     socketio.run(app, host='0.0.0.0', port=5000, debug=False,
                  allow_unsafe_werkzeug=True)
