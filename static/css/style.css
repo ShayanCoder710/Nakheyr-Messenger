@@ -954,7 +954,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
   }
   .sidebar .side-head { transition: padding .32s ease, gap .32s ease; }
   .sidebar .side-head .avatar { transition: width .32s ease, height .32s ease; }
-  .sidebar .conv { transition: padding .32s cubic-bezier(.4, 0, .2, 1), background .14s ease; }
+  .sidebar .conv { transition: padding .32s cubic-bezier(.4, 0, .2, 1), gap .32s cubic-bezier(.4, 0, .2, 1), background .14s ease; }
   .sidebar .conv .conv-av { transition: width .32s cubic-bezier(.4, 0, .2, 1), height .32s cubic-bezier(.4, 0, .2, 1); }
   .sidebar .conv-sections { transition: padding .34s cubic-bezier(.4, 0, .2, 1); }
   .sidebar #sideProfileLink,
@@ -974,7 +974,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
   .sidebar.collapsed #sideProfileLink { opacity: 0; max-height: 0; transform: scale(.5); pointer-events: none; }
   .sidebar.collapsed .side-toggle svg { transform: scaleX(-1); }
   .sidebar.collapsed .conv-sections { padding: 6px 10px 88px; }
-  .sidebar.collapsed .conv { justify-content: center; padding: 8px 0; }
+  .sidebar.collapsed .conv { justify-content: center; gap: 0; padding: 8px 0; }
   .sidebar.collapsed .conv .conv-av { width: 44px; height: 44px; font-size: 16px; }
   .sidebar.collapsed .conv + .conv::before { display: none; }
   .sidebar.collapsed .conv.active { box-shadow: inset 0 0 0 2px rgba(229, 57, 59, .5); }
