@@ -1567,7 +1567,7 @@ searchInput.oninput = () => {
     if (r.chats.length) {
       html += '<h4>گروه‌ها و کانال‌های عمومی</h4>' + r.chats.map(c => `
         <div class="sr-item" data-chat="${c.id}">
-          <span class="type-icon">${c.chat_type === 'channel' ? '📢' : '👥'}</span>
+          <span class="type-icon"><img src="/static/icons/${c.chat_type === 'channel' ? 'channel' : 'group'}.svg" alt=""></span>
           <div style="flex:1; min-width:0"><b>${esc(c.name)}</b>
           <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'}${c.username ? ` · @${esc(c.username)}` : ''} ${c.is_public ? '· 🌐 عمومی' : '· 🔒 خصوصی'}${c.is_member ? ' · ✅ عضو هستی' : ''}</small></div>
           ${c.is_member ? '' : `<button class="btn sm sr-join" data-join="${c.id}">پیوستن</button>`}
