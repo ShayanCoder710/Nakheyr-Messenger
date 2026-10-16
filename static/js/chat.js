@@ -361,7 +361,7 @@ function setHead() {
   const joinBtn = document.getElementById('btnJoin');
   const peerBtn = document.getElementById('btnPeerProfile');
   if (!CD.chat) return;
-  let displayName, subText, av = '';
+  let displayName, subText, av = '', subHtml = false;
   const c = CD.chat;
   joinBtn.style.display = 'none';
   repBtn.style.display = 'none';
@@ -386,6 +386,7 @@ function setHead() {
     displayName = c.name || (c.chat_type === 'channel' ? 'کانال' : 'گروه');
     const vis = c.is_public ? bi('globe') + ' عمومی' : bi('lock') + ' خصوصی';
     subText = (c.chat_type === 'channel' ? 'کانال' : 'گروه') + ' · ' + vis + ' · ' + ((c.members || (CD.members || [])).length) + ' عضو';
+    subHtml = true;
     av = c.avatar;
     const isMember = CD.role !== null && CD.role !== undefined;
     if (!isMember && !window.ME.is_admin) {
@@ -395,7 +396,8 @@ function setHead() {
   }
   headAv.innerHTML = (av ? '<img src="' + av + '" alt="">' : (displayName || '؟').charAt(0));
   name.textContent = displayName;
-  sub.textContent = subText;
+  if (subHtml) sub.innerHTML = subText;
+  else sub.textContent = subText;
   const pane = document.getElementById('msgsPane');
   if (pane) pane.classList.toggle('not-joined', !CD.joined && c.chat_type !== 'dm');
   if (isPeer()) {
