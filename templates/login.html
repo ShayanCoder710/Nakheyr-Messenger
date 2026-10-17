@@ -8,6 +8,7 @@
     <p class="auth-sub">پیامرسان مدرن، سریع و امن</p>
     <form method="post">
       <input type="hidden" name="next" value="{{ next or '' }}">
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <label class="label" for="username">نام کاربری</label>
       <input class="input" id="username" name="username" required autofocus placeholder="username">
       <label class="label" for="password">پسورد</label>

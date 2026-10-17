@@ -998,7 +998,8 @@ async function sendText() {
   sending = true;
   const body = { chat_id: currentChat, content: text };
   if (pendingFile) {
-    body.msg_type = pendingFile.kind;
+    // User can force-send images/videos as a plain downloadable file.
+    body.msg_type = pendingFile.asFile ? 'file' : pendingFile.kind;
     body.file_path = pendingFile.path;
     body.file_name = pendingFile.name;
   } else {
@@ -1290,7 +1291,11 @@ function renderAttachPreview() {
     ? `<img src="${esc(pendingFile.url)}" alt="">`
     : `<span class="ap-ic">${icon}</span>`;
   const size = pendingFile.size ? `<small>${fmtSize(pendingFile.size)}</small>` : '';
-  pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span><button data-clearattach>${bi('x-lg')}</button>`;
+  // For images/videos the user can choose to send it as a plain downloadable file.
+  const asFileBtn = (pendingFile.kind === 'image' || pendingFile.kind === 'video')
+    ? `<button class="${pendingFile.asFile ? 'on' : ''}" data-asfile title="ارسال به‌عنوان فایل (دانلود)">${bi('download')} فایل</button>`
+    : '';
+  pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span>${asFileBtn}<button data-clearattach>${bi('x-lg')}</button>`;
   pv.classList.add('show');
 }
 
@@ -1306,7 +1311,7 @@ async function handleFiles(file) {
   try {
     const r = await fetch('/api/upload', { method: 'POST', body: fd }).then(x => x.json());
     if (!r.ok) { toast(r.error, 'error'); uploading = false; renderAttachPreview(); return; }
-    pendingFile = { path: r.file_path, name: r.file_name, kind: r.kind, url: r.file_url, size: file.size };
+    pendingFile = { path: r.file_path, name: r.file_name, kind: r.kind, url: r.file_url, size: file.size, asFile: false };
     renderAttachPreview();
     document.getElementById('msgInput').focus();
   } catch (err) {
@@ -1326,6 +1331,10 @@ document.addEventListener('click', e => {
   if (e.target.closest('[data-clearattach]')) {
     pendingFile = null;
     renderAttachPreview();
+  }
+  if (e.target.closest('[data-asfile]') && pendingFile) {
+    pendingFile.asFile = !pendingFile.asFile;
+    e.target.closest('[data-asfile]').classList.toggle('on');
   }
 });
 

@@ -1,5 +1,7 @@
 import os
 import re
+import hmac
+import secrets
 from datetime import datetime
 
 from flask import (
@@ -33,12 +35,60 @@ app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['UPLOAD_DIR'] = UPLOAD_DIR
 app.config['AVATAR_DIR'] = AVATAR_DIR
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+# HTTP cache: static assets served with a 1-week public cache;
+# uploaded files keep the 1-year cache set in the /files routes.
+app.config['SEND_FILE_MAX_AGE'] = 7 * 24 * 3600
+app.config['SEND_FILE_MAX_AGE_SECONDS'] = 7 * 24 * 3600
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins='*')
 
 with app.app_context():
     init_db()
+
+
+# ── CSRF protection ─────────────────────────────────────────────
+def ensure_csrf_token():
+    """Generate the per-session CSRF token and expose it to templates."""
+    if '_csrf' not in session:
+        session['_csrf'] = secrets.token_urlsafe(32)
+    return session['_csrf']
+
+
+@app.before_request
+def csrf_guard():
+    ensure_csrf_token()  # make sure a token exists for this session
+    if request.method != 'POST':
+        return
+    ep = request.endpoint or ''
+    if ep.startswith('socketio') or request.path.startswith('/socket.io'):
+        return  # socket.io polling uses its own session handshake
+    token = request.headers.get('X-CSRF-Token')
+    if token is None:
+        token = request.form.get('csrf_token')
+    if token is None:
+        try:
+            token = (request.get_json(silent=True) or {}).get('csrf_token')
+        except Exception:
+            token = None
+    if not hmac.compare_digest(token or '', session.get('_csrf') or ''):
+        if (ep or '').startswith('api_') or (ep or '').startswith('admin_'):
+            return jsonify(ok=False, error='توکن CSRF نامعتبره. صفحه رو رفرش کن'), 403
+        abort(403)
+
+
+@app.context_processor
+def inject_csrf():
+    return {'csrf_token': ensure_csrf_token()}
+
+
+@app.after_request
+def add_cache_headers(resp):
+    if request.endpoint == 'static':
+        resp.headers['Cache-Control'] = 'public, max-age=%d' % app.config['SEND_FILE_MAX_AGE_SECONDS']
+    elif request.path.startswith('/files/'):
+        resp.headers['Cache-Control'] = 'public, max-age=31536000'
+    return resp
 
 
 @app.before_request

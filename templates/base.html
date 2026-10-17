@@ -20,6 +20,24 @@
 <script src="{{ url_for('static', filename='vendor/socket.io.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/marked.min.js') }}"></script>
 <script src="{{ url_for('static', filename='vendor/purify.min.js') }}"></script>
+<script>window.CSRF_TOKEN = "{{ csrf_token }}";</script>
+<script>
+// CSRF: automatically attach the session token to every same-site POST.
+(function () {
+  if (!window.CSRF_TOKEN) return;
+  const orig = window.fetch;
+  window.fetch = function (input, init) {
+    init = init || {};
+    const method = (init.method || (typeof input === 'object' && input.method) || 'GET').toUpperCase();
+    if (method === 'POST' && !(init.headers instanceof Headers && init.headers.has('X-CSRF-Token'))) {
+      const h = new Headers(init.headers);
+      if (!h.has('X-CSRF-Token')) h.set('X-CSRF-Token', window.CSRF_TOKEN);
+      init.headers = h;
+    }
+    return orig.apply(window, arguments);
+  };
+})();
+</script>
 <script>
 window.md = function(src) {
   if (!src) return '';

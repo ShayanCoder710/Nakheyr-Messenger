@@ -8,6 +8,7 @@
     <p class="auth-sub">یکدقیقه‌ای زمان می‌بره، بعدش وارد نخیر شدی</p>
     <form method="post">
       <label class="label" for="username">نام کاربری (انگلیسی)</label>
+      <input type="hidden" name="csrf_token" value="{{ csrf_token }}">
       <input class="input" id="username" name="username" required placeholder="shayan_123" pattern="[a-zA-Z0-9_]{3,30}" autocomplete="off">
       <label class="label" for="display_name">نام کاربر</label>
       <input class="input" id="display_name" name="display_name" required placeholder="شایان سیدی" minlength="2">
