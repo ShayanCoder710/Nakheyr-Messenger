@@ -322,6 +322,8 @@ class Poll(db.Model):
     def to_dict(self, viewer_id=None):
         counts = self.counts()
         total = sum(counts.values())
+        # Number of unique people who voted (not total selections)
+        voter_ids = {v.user_id for v in self.votes}
         my = sorted(v.option_index for v in self.votes if v.user_id == viewer_id) if viewer_id else []
         return {
             'id': self.id,
@@ -334,9 +336,27 @@ class Poll(db.Model):
             'expires_at': self.expires_at.isoformat() if self.expires_at else None,
             'counts': counts,
             'total': total,
+            'voters': len(voter_ids),
             'my_votes': my,
             'created_by': self.created_by,
         }
+
+    def voter_details(self):
+        """List of {user, picks} for each user who voted (for group view)."""
+        from collections import defaultdict
+        picks = defaultdict(list)
+        for v in self.votes:
+            picks[v.user_id].append(v.option_index)
+        out = []
+        for uid, opts in picks.items():
+            u = User.query.get(uid)
+            if not u:
+                continue
+            out.append({
+                'user': u.to_public(),
+                'picks': sorted(opts),
+            })
+        return out
 
 
 class PollVote(db.Model):

@@ -763,6 +763,8 @@ def api_delete_message():
 
 
 def _emit_new_message(m):
+    # m.sender_id is an int; to_dict handles an int viewer fine, and
+    # _attach_polls_to_messages also accepts a bare user id.
     payload = m.to_dict(m.sender_id)
     _attach_polls_to_messages([payload], m.sender_id)
     socketio.emit('new_message', payload, room=f'user:{m.sender_id}')
@@ -813,6 +815,17 @@ def api_forward_message():
                 content=src.content, file_name=src.file_name, file_path=src.file_path,
                 fwd_from_id=src.sender_id, fwd_from_name=(sender.public_name if sender else ''))
     db.session.add(m)
+    db.session.flush()
+    # If the source message carries a poll, duplicate it onto the new message
+    # so the forwarded copy is votable in the target chat.
+    src_poll = _find_poll_for_message(src.chat_id, src.id)
+    if src_poll:
+        new_poll = Poll(chat_id=target.id, message_id=m.id, question=src_poll.question,
+                        options=src_poll.options_list(), multi=bool(src_poll.multi),
+                        closed=bool(src_poll.closed), created_by=user.id,
+                        expires_at=src_poll.expires_at)
+        new_poll.set_options(src_poll.options_list())
+        db.session.add(new_poll)
     db.session.commit()
     payload = _emit_new_message(m)
     return jsonify(ok=True, message=payload, chat_id=target.id)
@@ -1189,9 +1202,11 @@ def _find_poll_for_message(chat_id, message_id):
 
 def _attach_polls_to_messages(messages, user):
     """For each message in a chat, look up any attached poll and embed it
-    as `poll` so the client can render it inline."""
+    as `poll` so the client can render it inline.
+    `user` may be a User object or a bare user id int."""
     if not messages:
         return
+    viewer_id = getattr(user, 'id', user)  # works for both User and int
     ids = [m['id'] for m in messages]
     polls = Poll.query.filter(
         Poll.chat_id.in_([messages[0]['chat_id']]),
@@ -1199,24 +1214,25 @@ def _attach_polls_to_messages(messages, user):
     ).all()
     by_msg = {}
     for p in polls:
-        by_msg[p.message_id] = p.to_dict(user.id)
+        by_msg[p.message_id] = p.to_dict(viewer_id)
     for m in messages:
         m['poll'] = by_msg.get(m['id'])
 
 
 def _poll_vote_payload(poll, voter_id):
-    counts = poll.counts()
-    total = sum(counts.values())
-    my = sorted(v.option_index for v in poll.votes if v.user_id == voter_id)
+    d = poll.to_dict(voter_id)
     return {
         'poll_id': poll.id,
         'chat_id': poll.chat_id,
         'message_id': poll.message_id,
-        'multi': bool(poll.multi),
-        'closed': bool(poll.closed),
-        'counts': counts,
-        'total': total,
-        'my_votes': my,
+        'question': d['question'],
+        'options': d['options'],
+        'multi': d['multi'],
+        'closed': d['closed'],
+        'counts': d['counts'],
+        'total': d['total'],
+        'voters': d['voters'],
+        'my_votes': d['my_votes'],
     }
 
 
@@ -1228,10 +1244,10 @@ def api_poll_create():
     chat = Chat.query.get(int(data.get('chat_id') or 0))
     if not chat or not can_view_chat(user, chat):
         return jsonify(ok=False, error='دسترسی نداری')
-    # In a DM, you must be a member (admins can view any chat but posting
-    # a poll to a DM you're not in is not meaningful)
-    if chat.chat_type == 'dm' and not user.is_admin and not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
-        return jsonify(ok=False, error='دسترسی نداری')
+    # Polls cannot be posted directly in a DM (only via forward). Channels and
+    # groups are fine (channels admin-only, groups per send permission).
+    if chat.chat_type == 'dm':
+        return jsonify(ok=False, error='نظرسنجی در پیوی نمی‌شه بفرستی. اول بفرست یه گپ یا گروه، بعد فوروارد کن')
     # In a group, only members with send permission can post a poll
     if chat.chat_type == 'group' and not user.is_admin:
         member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
@@ -1359,6 +1375,25 @@ def api_poll_close(poll_id):
     for mid in chat_member_ids(poll.chat_id):
         socketio.emit('poll_state', payload, room=f'user:{mid}')
     return jsonify(ok=True, **payload)
+
+
+@app.route('/api/poll/<int:poll_id>/voters')
+@require_auth
+def api_poll_voters(poll_id):
+    """List who voted on each option. Groups only (channels hide the voters
+    feature; DMs can't host polls at all)."""
+    user = current_user()
+    poll = Poll.query.get(poll_id)
+    if not poll:
+        return jsonify(ok=False, error='نظرسنجی پیدا نشد')
+    chat = Chat.query.get(poll.chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    # The "who voted" list is only exposed for groups
+    if chat.chat_type != 'group':
+        return jsonify(ok=False, error='نمایش رأی‌دهندگان فقط برای گروه‌هاست')
+    voters = poll.voter_details()
+    return jsonify(ok=True, poll_id=poll.id, voters=voters)
 
 
 @app.route('/api/chat/<int:chat_id>/join', methods=['POST'])

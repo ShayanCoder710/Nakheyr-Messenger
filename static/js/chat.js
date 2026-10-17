@@ -162,6 +162,7 @@ function tickIcon(seen) {
 
 function pollHtml(p) {
   const total = p.total || 0;
+  const voters = (p.voters !== undefined && p.voters !== null) ? p.voters : 0;
   const multi = !!p.multi;
   const closed = !!p.closed;
   const myVotes = p.my_votes || [];
@@ -179,17 +180,39 @@ function pollHtml(p) {
       ${closed ? `<span class="opt-count"><b>${c}</b> · ${pct}%</span>` : ''}
     </label>`;
   }).join('');
+  const isGroup = CD.chat && CD.chat.chat_type === 'group';
+  const canSeeVoters = closed && isGroup && (window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
   const canClose = !closed && (p.created_by === window.ME.id || window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
   const expTag = closed ? (p.expires_at ? `<span class="poll-tag exp">${bi('hourglass-split')} انقضاشده</span>` : `<span class="poll-tag">${bi('lock')} بسته</span>`) : '';
   const foot = `<div class="poll-foot">
-    <span class="poll-total">${bi('people')} ${total} رأی${multi ? ' · چندگزینه‌ای' : ''}</span>
-    ${canClose ? `<button class="poll-close-btn" data-pollclose="${p.id}" title="${closed ? 'باز کردن' : 'بستن'}">${closed ? bi('unlock') : bi('lock')}</button>` : ''}
+    <span class="poll-total">${bi('people')} ${voters} نفر شرکت${multi ? ' · چندگزینه‌ای' : ''}</span>
+    <span class="poll-foot-acts">
+      ${canSeeVoters ? `<button class="poll-close-btn" data-pollvoters="${p.id}" title="مشاهده رأی‌دهندگان">${bi('eye')}</button>` : ''}
+      ${canClose ? `<button class="poll-close-btn" data-pollclose="${p.id}" title="بستن">${bi('lock')}</button>` : ''}
+    </span>
   </div>`;
   return `<div class="poll-card ${closed ? 'poll-locked' : ''}" data-pollid="${p.id}">
     <div class="poll-head"><span class="poll-head-ic">${bi('bar-chart')}</span><b>نظرسنجی</b>${expTag}</div>
     <div class="poll-q">${esc(p.question)}</div>
-    <div class="poll-opts">${opts}</div>${foot}
+    <div class="poll-opts">${opts}</div>
+    ${pollResultsBar(p)}
+    ${foot}
   </div>`;
+}
+
+/* Pretty percentage result bars shown when the poll is closed */
+function pollResultsBar(p) {
+  if (!p.closed || !p.total) return '';
+  const total = p.total;
+  return `<div class="poll-results-strip">${(p.options || []).map((label, i) => {
+    const c = (p.counts && p.counts[i]) || 0;
+    const pct = total ? Math.round(c / total * 100) : 0;
+    return `<div class="res-col" title="${esc(label)}">
+      <div class="res-val">${pct}%</div>
+      <div class="res-bar"><span style="width:${pct}%"></span></div>
+      <div class="res-label">${esc(label)}</div>
+    </div>`;
+  }).join('')}</div>`;
 }
 
 function renderMsg(m) {
@@ -639,7 +662,15 @@ function openPollModal() {
   modal.classList.add('show');
   document.getElementById('pollQuestion').focus();
 }
-document.getElementById('btnPoll').onclick = openPollModal;
+document.getElementById('btnPoll').onclick = () => {
+  // In a DM (private chat), a poll cannot be created — it can only be
+  // forwarded into the DM. Show a hint instead of opening the modal.
+  if (CD.chat && CD.chat.chat_type === 'dm') {
+    toast('نظرسنجی تو پیوی نمی‌شه بفرستی. اول تو یه گروه یا کانال بساز، بعد فوروارد کن', 'error');
+    return;
+  }
+  openPollModal();
+};
 document.getElementById('pollCancel').onclick = () => document.getElementById('pollModal').classList.remove('show');
 document.getElementById('pollAddOpt').onclick = () => _addPollOption('');
 document.getElementById('pollOptions').addEventListener('click', e => {
@@ -683,6 +714,40 @@ document.addEventListener('click', e => {
       if (!j.ok) toast(j.error || 'انجام نشد', 'error');
     });
     return;
+  }
+  const votersBtn = e.target.closest('[data-pollvoters]');
+  if (votersBtn) {
+    e.preventDefault();
+    openPollVotersModal(+votersBtn.dataset.pollvoters);
+    return;
+  }
+});
+
+/* Poll voters modal (groups only, closed polls, admins/owner/creator) */
+function openPollVotersModal(pid) {
+  api('/api/poll/' + pid + '/voters').then(j => {
+    if (!j.ok) { toast(j.error || 'امکان نمایش رأی‌دهندگان نیست', 'error'); return; }
+    const modal = document.getElementById('pollVotersModal');
+    const list = document.getElementById('pollVotersList');
+    const voters = j.voters || [];
+    if (!voters.length) {
+      list.innerHTML = '<p style="color:var(--dim); font-size:13px; text-align:center; padding:16px">هنوز کسی رای نداده</p>';
+    } else {
+      list.innerHTML = voters.map(v => {
+        const u = v.user || {};
+        const picks = (v.picks || []).join('، ');
+        return `<div class="pv-row">
+          <span class="avatar sm">${u.avatar ? '<img src="' + esc(u.avatar) + '" alt="">' : esc((u.display_name || '?').charAt(0))}</span>
+          <div class="pv-id"><b>${esc(u.display_name || 'کاربر')}</b><small>${esc(picks || '—')}</small></div>
+        </div>`;
+      }).join('');
+    }
+    modal.classList.add('show');
+  });
+}
+document.getElementById('pollVotersModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget || e.target.closest('#pollVotersClose')) {
+    document.getElementById('pollVotersModal').classList.remove('show');
   }
 });
 document.addEventListener('change', e => {
@@ -2473,7 +2538,7 @@ document.addEventListener('contextmenu', e => {
         });
       } } : null,
       { label: selecting ? 'خروج از حالت انتخاب' : 'انتخاب و حذف گروهی', icon: bi('ui-checks'), fn: () => (selecting ? cancelSelect() : enterSelect(mid)) },
-      (mine && m.msg_type === 'text') ? { label: 'ویرایش', icon: bi('pencil'), fn: () => {
+      (mine && m.msg_type === 'text' && !m.poll) ? { label: 'ویرایش', icon: bi('pencil'), fn: () => {
         const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
         if (row) editMessage(mid, row);
       } } : null,
@@ -2764,6 +2829,7 @@ S.on('poll_vote', d => {
     m.poll = {
       ...m.poll,
       counts: d.counts, total: d.total,
+      voters: d.voters,
       my_votes: d.my_votes, multi: d.multi, closed: d.closed,
       question: m.poll.question, options: m.poll.options,
       expires_at: m.poll.expires_at, created_by: m.poll.created_by,
@@ -2777,7 +2843,7 @@ S.on('poll_state', d => {
   const card = document.querySelector(`.poll-card[data-pollid="${d.poll_id}"]`);
   if (!card) return;
   const m = (CD.initialMessages || []).find(x => x.poll && x.poll.id === d.poll_id);
-  if (m) m.poll = { ...m.poll, closed: d.closed };
+  if (m) m.poll = { ...m.poll, closed: d.closed, voters: d.voters, counts: d.counts, total: d.total };
   if (m && m.poll) card.outerHTML = pollHtml(m.poll);
 });
 
