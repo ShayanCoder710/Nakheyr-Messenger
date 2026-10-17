@@ -12,7 +12,9 @@ from flask_socketio import SocketIO, emit, join_room
 from sqlalchemy.orm import joinedload
 
 from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
-from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
+from models.models import (
+    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote
+)
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
     kind_for, INLINE_UNSAFE_EXT,
@@ -219,6 +221,7 @@ def chat_page(chat_id):
     msgs = []
     for m in Message.query.filter_by(chat_id=chat.id, deleted=False).order_by(Message.id.desc()).limit(50).all()[::-1]:
         msgs.append(m.to_dict(user.id))
+    _attach_polls_to_messages(msgs, user)
     members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
     return render_template('chat.html', chat=chat, user=user, messages=msgs,
                            members=members, role=my_role_in(user, chat))
@@ -684,6 +687,7 @@ def api_send_message():
     db.session.add(m)
     db.session.commit()
     payload = m.to_dict(user.id)
+    _attach_polls_to_messages([payload], user)
     socketio.emit('new_message', payload, room=f'user:{user.id}')
     for mid in chat_member_ids(chat.id):
         if mid != user.id:
@@ -760,6 +764,7 @@ def api_delete_message():
 
 def _emit_new_message(m):
     payload = m.to_dict(m.sender_id)
+    _attach_polls_to_messages([payload], m.sender_id)
     socketio.emit('new_message', payload, room=f'user:{m.sender_id}')
     for mid in chat_member_ids(m.chat_id):
         if mid != m.sender_id:
@@ -1177,6 +1182,177 @@ def api_pinned(chat_id):
     return jsonify(pinned=m.to_dict(user.id), sender=(sender.to_public() if sender else None))
 
 
+# ── Polls ────────────────────────────────────────────────────────
+def _find_poll_for_message(chat_id, message_id):
+    return Poll.query.filter_by(chat_id=chat_id, message_id=message_id).first()
+
+
+def _attach_polls_to_messages(messages, user):
+    """For each message in a chat, look up any attached poll and embed it
+    as `poll` so the client can render it inline."""
+    if not messages:
+        return
+    ids = [m['id'] for m in messages]
+    polls = Poll.query.filter(
+        Poll.chat_id.in_([messages[0]['chat_id']]),
+        Poll.message_id.in_(ids),
+    ).all()
+    by_msg = {}
+    for p in polls:
+        by_msg[p.message_id] = p.to_dict(user.id)
+    for m in messages:
+        m['poll'] = by_msg.get(m['id'])
+
+
+def _poll_vote_payload(poll, voter_id):
+    counts = poll.counts()
+    total = sum(counts.values())
+    my = sorted(v.option_index for v in poll.votes if v.user_id == voter_id)
+    return {
+        'poll_id': poll.id,
+        'chat_id': poll.chat_id,
+        'message_id': poll.message_id,
+        'multi': bool(poll.multi),
+        'closed': bool(poll.closed),
+        'counts': counts,
+        'total': total,
+        'my_votes': my,
+    }
+
+
+@app.route('/api/poll/create', methods=['POST'])
+@require_auth
+def api_poll_create():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    # In a DM, you must be a member (admins can view any chat but posting
+    # a poll to a DM you're not in is not meaningful)
+    if chat.chat_type == 'dm' and not user.is_admin and not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+        return jsonify(ok=False, error='دسترسی نداری')
+    # In a group, only members with send permission can post a poll
+    if chat.chat_type == 'group' and not user.is_admin:
+        member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+        if member and member.role not in ('owner', 'admin'):
+            p = member_perms(member)
+            if not p.get('send_messages', False):
+                return jsonify(ok=False, error='اجازهٔ ارسال پیام در این گروه رو نداری')
+    if chat.chat_type == 'channel':
+        role = my_role_in(user, chat)
+        if chat.owner_id != user.id and role != 'admin':
+            return jsonify(ok=False, error='در کانال فقط ادمین‌ها می‌تونن نظرسنجی بسازن')
+
+    question = (data.get('question') or '').strip()
+    if len(question) < 2:
+        return jsonify(ok=False, error='سوال حداقل ۲ حرف')
+    raw_opts = data.get('options') or []
+    opts = []
+    for o in raw_opts:
+        o = str(o or '').strip()
+        if o and o not in opts:
+            opts.append(o[:80])
+    if len(opts) < 2 or len(opts) > 6:
+        return jsonify(ok=False, error='بین ۲ تا ۶ گزینه لازم داری')
+    multi = bool(data.get('multi'))
+
+    # Create the poll message (text content carries the question)
+    m = Message(chat_id=chat.id, sender_id=user.id, msg_type='text', content='📊 ' + question)
+    db.session.add(m)
+    db.session.commit()
+
+    poll = Poll(chat_id=chat.id, message_id=m.id, question=question,
+                options=opts, multi=multi, created_by=user.id)
+    poll.set_options(opts)
+    db.session.add(poll)
+    db.session.commit()
+
+    payload = m.to_dict(user.id)
+    payload['poll'] = poll.to_dict(user.id)
+    socketio.emit('new_message', payload, room=f'user:{user.id}')
+    for mid in chat_member_ids(chat.id):
+        if mid != user.id:
+            socketio.emit('new_message', payload, room=f'user:{mid}')
+    return jsonify(ok=True, message=payload, poll=poll.to_dict(user.id))
+
+
+@app.route('/api/poll/<int:poll_id>/vote', methods=['POST'])
+@require_auth
+def api_poll_vote(poll_id):
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    poll = Poll.query.get(poll_id)
+    if not poll:
+        return jsonify(ok=False, error='نظرسنجی پیدا نشد')
+    if poll.closed:
+        return jsonify(ok=False, error='این نظرسنجی بسته شده')
+    # Must be a member of the chat (admins can vote in any chat they can view)
+    chat = Chat.query.get(poll.chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    if not user.is_admin and not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+        return jsonify(ok=False, error='عضو این گپ نیستی')
+
+    opts = poll.options_list()
+    incoming = data.get('options')
+    # Accept both a list [0,1] and a bare int "0"
+    if isinstance(incoming, (int, str)):
+        incoming = [incoming]
+    if not isinstance(incoming, list):
+        return jsonify(ok=False, error='گزینهٔ معتبر نیست')
+    try:
+        picks = [int(x) for x in incoming]
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error='گزینهٔ معتبر نیست')
+    picks = sorted(set(p for p in picks if 0 <= p < len(opts)))
+    if not picks:
+        return jsonify(ok=False, error='گزینهٔ معتبر نیست')
+    if not poll.multi:
+        picks = picks[:1]
+
+    existing = {v.option_index for v in PollVote.query.filter_by(poll_id=poll.id, user_id=user.id).all()}
+    if poll.multi:
+        for idx in picks:
+            if idx not in existing:
+                db.session.add(PollVote(poll_id=poll.id, user_id=user.id, option_index=idx))
+        # Remove unselected picks
+        for v in list(PollVote.query.filter_by(poll_id=poll.id, user_id=user.id).all()):
+            if v.option_index not in picks:
+                db.session.delete(v)
+    else:
+        pick = picks[0]
+        PollVote.query.filter_by(poll_id=poll.id, user_id=user.id).delete()
+        db.session.add(PollVote(poll_id=poll.id, user_id=user.id, option_index=pick))
+    db.session.commit()
+
+    payload = _poll_vote_payload(poll, user.id)
+    payload['voter'] = user.to_public()
+    for mid in chat_member_ids(poll.chat_id):
+        socketio.emit('poll_vote', payload, room=f'user:{mid}')
+    return jsonify(ok=True, **payload)
+
+
+@app.route('/api/poll/<int:poll_id>/close', methods=['POST'])
+@require_auth
+def api_poll_close(poll_id):
+    user = current_user()
+    poll = Poll.query.get(poll_id)
+    if not poll:
+        return jsonify(ok=False, error='نظرسنجی پیدا نشد')
+    chat = Chat.query.get(poll.chat_id)
+    role = my_role_in(user, chat)
+    allowed = user.is_admin or role in ('owner', 'admin') or poll.created_by == user.id
+    if not allowed:
+        return jsonify(ok=False, error='دسترسی نداری')
+    poll.closed = not poll.closed
+    db.session.commit()
+    payload = _poll_vote_payload(poll, user.id)
+    for mid in chat_member_ids(poll.chat_id):
+        socketio.emit('poll_state', payload, room=f'user:{mid}')
+    return jsonify(ok=True, **payload)
+
+
 @app.route('/api/chat/<int:chat_id>/join', methods=['POST'])
 @require_auth
 def api_join_chat(chat_id):
@@ -1236,8 +1412,10 @@ def api_messages(chat_id):
     msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]
     members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
     joined = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first() is not None or user.is_admin
+    out_msgs = [m.to_dict(user.id) for m in msgs]
+    _attach_polls_to_messages(out_msgs, user)
     return jsonify(
-        messages=[m.to_dict(user.id) for m in msgs],
+        messages=out_msgs,
         chat=chat.to_public(user),
         role=my_role_in(user, chat),
         members=members,

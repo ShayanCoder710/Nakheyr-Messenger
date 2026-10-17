@@ -160,6 +160,33 @@ function tickIcon(seen) {
   return `<svg width="14" height="14" viewBox="0 0 18 18" role="img" aria-label="${label}" style="--bi-color: var(--chat-icon-color);"><use href="#${id}"></use></svg>`;
 }
 
+function pollHtml(p) {
+  const total = p.total || 0;
+  const multi = !!p.multi;
+  const closed = !!p.closed;
+  const myVotes = p.my_votes || [];
+  const opts = (p.options || []).map((label, i) => {
+    const c = (p.counts && p.counts[i]) || 0;
+    const pct = total ? Math.round(c / total * 100) : 0;
+    const sel = myVotes.includes(i);
+    const input = closed
+      ? `<input type="${multi ? 'checkbox' : 'radio'}" disabled>`
+      : `<input type="${multi ? 'checkbox' : 'radio'}" data-pollvote="${p.id}" value="${i}" ${sel ? 'checked' : ''} name="pv${p.id}">`;
+    return `<label class="poll-opt ${sel ? 'selected' : ''} ${closed ? 'poll-locked' : ''}">
+      <span class="opt-pct" style="width:${pct}%"></span>
+      ${input}<span class="opt-label">${esc(label)}</span><span class="opt-count">${c} (${pct}%)</span>
+    </label>`;
+  }).join('');
+  const canClose = !closed && (p.created_by === window.ME.id || window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
+  const foot = `<div class="poll-foot"><span>${total} رأی</span>
+    ${canClose ? `<button data-pollclose="${p.id}">${closed ? bi('unlock') : bi('lock')} ${closed ? 'باز کردن' : 'بستن'}</button>` : ''}
+  </div>`;
+  return `<div class="poll-card ${closed ? 'poll-locked' : ''}" data-pollid="${p.id}">
+    <div class="poll-q">${esc(p.question)}${closed ? '<span class="poll-closed-tag">بسته</span>' : ''}</div>
+    <div class="poll-opts">${opts}</div>${foot}
+  </div>`;
+}
+
 function renderMsg(m) {
   if (m.deleted) return '';
   if (m.msg_type === 'system') {
@@ -186,7 +213,12 @@ function renderMsg(m) {
         + `<a class="btn sm ghost" href="${url}" target="_blank" rel="noopener">${bi('box-arrow-up-right')} باز کردن</a></div>`;
     }
   } else {
-    body = `<div class="txt md">${md(m.content)}</div>`;
+    // A poll message: show the question as text + the interactive card
+    if (m.poll) {
+      body = `${pollHtml(m.poll)}`;
+    } else {
+      body = `<div class="txt md">${md(m.content)}</div>`;
+    }
   }
 
   const sender = m.sender_id ? getMember(m.sender_id) : { display_name: 'سیستم', avatar: '' };
@@ -560,6 +592,87 @@ document.getElementById('delConfirm').onclick = () => {
 };
 document.getElementById('deleteModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) { document.getElementById('deleteModal').classList.remove('show'); _delAction = null; }
+});
+
+/* ── Polls ────────────────────────────────────────────────────── */
+function openPollModal() {
+  const modal = document.getElementById('pollModal');
+  const q = document.getElementById('pollQuestion');
+  q.value = '';
+  const opts = document.getElementById('pollOptions');
+  opts.innerHTML = `
+    <div class="poll-opt-row"><input class="input poll-opt" maxlength="80" placeholder="گزینه ۱"><button type="button" data-rmopt title="حذف">${bi('x-lg')}</button></div>
+    <div class="poll-opt-row"><input class="input poll-opt" maxlength="80" placeholder="گزینه ۲"><button type="button" data-rmopt title="حذف">${bi('x-lg')}</button></div>`;
+  document.getElementById('pollMulti').checked = false;
+  modal.classList.add('show');
+  q.focus();
+}
+document.getElementById('btnPoll').onclick = openPollModal;
+document.getElementById('pollCancel').onclick = () => document.getElementById('pollModal').classList.remove('show');
+document.getElementById('pollAddOpt').onclick = () => {
+  const box = document.getElementById('pollOptions');
+  if (box.querySelectorAll('.poll-opt-row').length >= 6) { toast('حداکثر ۶ گزینه', 'error'); return; }
+  const n = box.querySelectorAll('.poll-opt-row').length + 1;
+  const row = document.createElement('div');
+  row.className = 'poll-opt-row';
+  row.innerHTML = `<input class="input poll-opt" maxlength="80" placeholder="گزینه ${n}"><button type="button" data-rmopt title="حذف">${bi('x-lg')}</button>`;
+  box.appendChild(row);
+  row.querySelector('input').focus();
+};
+document.getElementById('pollOptions').addEventListener('click', e => {
+  const rm = e.target.closest('[data-rmopt]');
+  if (!rm) return;
+  const box = rm.closest('.poll-opt-row');
+  if (box.parentElement.querySelectorAll('.poll-opt-row').length <= 2) { toast('حداقل ۲ گزینه لازم داری', 'error'); return; }
+  box.remove();
+});
+document.getElementById('pollCreate').onclick = async () => {
+  if (!currentChat) { toast('اول یه گپ باز کن', 'error'); return; }
+  const question = document.getElementById('pollQuestion').value.trim();
+  const opts = [...document.querySelectorAll('#pollOptions .poll-opt')].map(x => x.value.trim()).filter(Boolean);
+  if (opts.length < 2) { toast('حداقل ۲ گزینه با متن لازم داری', 'error'); return; }
+  const multi = document.getElementById('pollMulti').checked;
+  const r = await api('/api/poll/create', { chat_id: currentChat, question, options: opts, multi });
+  document.getElementById('pollModal').classList.remove('show');
+  if (r.ok && r.message) {
+    appendMsg(r.message);
+    scrollToBottom(true);
+    refreshConvList();
+  } else if (r.error) toast(r.error, 'error');
+};
+
+/* Poll vote / close clicks (event delegation) */
+document.addEventListener('click', e => {
+  const closeBtn = e.target.closest('[data-pollclose]');
+  if (closeBtn) {
+    e.preventDefault();
+    const pid = +closeBtn.dataset.pollclose;
+    api('/api/poll/' + pid + '/close', {}).then(j => {
+      if (!j.ok) toast(j.error || 'انجام نشد', 'error');
+    });
+    return;
+  }
+});
+document.addEventListener('change', e => {
+  const inp = e.target.closest('[data-pollvote]');
+  if (!inp) return;
+  const pid = +inp.dataset.pollvote;
+  const card = inp.closest('.poll-card');
+  const multi = inp.type === 'checkbox';
+  let pick;
+  if (multi) {
+    pick = [...card.querySelectorAll('[data-pollvote]:checked')].map(x => +x.value);
+  } else {
+    pick = +inp.value;
+  }
+  api('/api/poll/' + pid + '/vote', { options: multi ? pick : [pick] }).then(j => {
+    if (!j.ok) { toast(j.error || 'رای ثبت نشد', 'error'); inp.checked = false; }
+  });
+});
+
+// Poll modal: ESC to close
+document.getElementById('pollModal').addEventListener('click', e => {
+  if (e.target === e.currentTarget) e.target.classList.remove('show');
 });
 
 document.getElementById('btnSendReport').onclick = async () => {
@@ -2607,6 +2720,32 @@ S.on('chat_meta', d => {
     setHead();
   }
   refreshConvList();
+});
+
+S.on('poll_vote', d => {
+  if (d.chat_id !== currentChat) return;
+  const card = document.querySelector(`.poll-card[data-pollid="${d.poll_id}"]`);
+  if (!card) return;
+  // Re-render the poll card from the fresh data
+  const m = (CD.initialMessages || []).find(x => x.poll && x.poll.id === d.poll_id);
+  if (m) {
+    m.poll = {
+      ...m.poll,
+      counts: d.counts, total: d.total,
+      my_votes: d.my_votes, multi: d.multi, closed: d.closed,
+      question: m.poll.question, options: m.poll.options,
+    };
+  }
+  card.outerHTML = (m && m.poll) ? pollHtml(m.poll) : '';
+});
+
+S.on('poll_state', d => {
+  if (d.chat_id !== currentChat) return;
+  const card = document.querySelector(`.poll-card[data-pollid="${d.poll_id}"]`);
+  if (!card) return;
+  const m = (CD.initialMessages || []).find(x => x.poll && x.poll.id === d.poll_id);
+  if (m) m.poll = { ...m.poll, closed: d.closed };
+  if (m && m.poll) card.outerHTML = pollHtml(m.poll);
 });
 
 S.on('chat_deleted', d => {

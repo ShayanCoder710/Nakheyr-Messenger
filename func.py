@@ -79,6 +79,7 @@ def init_db():
     _ensure_columns()
     _ensure_chat_usernames()
     _migrate_accent_colors()
+    _ensure_poll_tables()
     admin = User.query.filter_by(username=ADMIN_USERNAME).first()
     if not admin:
         admin = User(
@@ -205,6 +206,39 @@ def _migrate_accent_colors():
             "UPDATE users SET accent = '#e5393b' "
             "WHERE LOWER(accent) IN ('#e11d48', '#e5193b', '#f43f5e')"
         ))
+
+
+def _ensure_poll_tables():
+    """Create poll tables if they do not exist (manual DDL mirror of the ORM)."""
+    from sqlalchemy import text
+    with db.engine.begin() as conn:
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS polls (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              chat_id INT NOT NULL,
+              message_id INT NOT NULL,
+              question VARCHAR(300) NOT NULL DEFAULT '',
+              options TEXT NOT NULL,
+              multi BOOLEAN NOT NULL DEFAULT 0,
+              closed BOOLEAN NOT NULL DEFAULT 0,
+              created_by INT NULL,
+              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              INDEX ix_polls_chat_id (chat_id),
+              INDEX ix_polls_message_id (message_id)
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+        """))
+        conn.execute(text("""
+            CREATE TABLE IF NOT EXISTS poll_votes (
+              id INT AUTO_INCREMENT PRIMARY KEY,
+              poll_id INT NOT NULL,
+              user_id INT NOT NULL,
+              option_index INT NOT NULL,
+              created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+              UNIQUE KEY uq_poll_vote (poll_id, user_id, option_index),
+              INDEX ix_poll_votes_poll_id (poll_id),
+              INDEX ix_poll_votes_user_id (user_id)
+            ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
+        """))
 
 
 def current_user():

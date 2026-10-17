@@ -277,3 +277,74 @@ class Report(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reporter = db.relationship('User', foreign_keys=[reporter_id])
     reported = db.relationship('User', foreign_keys=[reported_id])
+
+
+class Poll(db.Model):
+    """A poll attached to a message. The poll is a separate row so that
+    votes can be tallied and re-voted without touching the message row."""
+    __tablename__ = 'polls'
+    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
+    message_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=False, index=True)
+    question = db.Column(db.String(300), default='')
+    options = db.Column(db.Text, default='[]')   # JSON: ["label1", "label2", ...]
+    multi = db.Column(db.Boolean, default=False)  # allow multiple answers
+    closed = db.Column(db.Boolean, default=False)
+    created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    chat = db.relationship('Chat')
+    message = db.relationship('Message')
+    votes = db.relationship('PollVote', backref='poll', cascade='all, delete-orphan', lazy=True)
+
+    def options_list(self):
+        try:
+            data = json.loads(self.options or '[]')
+            return data if isinstance(data, list) else []
+        except Exception:
+            return []
+
+    def set_options(self, data):
+        self.options = json.dumps(data or [])
+
+    def counts(self):
+        """Return {option_index: vote_count} for every option."""
+        from collections import Counter
+        c = Counter(v.option_index for v in self.votes)
+        return {i: c.get(i, 0) for i in range(len(self.options_list()))}
+
+    def to_dict(self, viewer_id=None):
+        counts = self.counts()
+        total = sum(counts.values())
+        my = sorted(v.option_index for v in self.votes if v.user_id == viewer_id) if viewer_id else []
+        return {
+            'id': self.id,
+            'chat_id': self.chat_id,
+            'message_id': self.message_id,
+            'question': self.question,
+            'options': self.options_list(),
+            'multi': bool(self.multi),
+            'closed': bool(self.closed),
+            'counts': counts,
+            'total': total,
+            'my_votes': my,
+            'created_by': self.created_by,
+        }
+
+
+class PollVote(db.Model):
+    __tablename__ = 'poll_votes'
+    __table_args__ = (
+        db.UniqueConstraint('poll_id', 'user_id', 'option_index', name='uq_poll_vote'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    poll_id = db.Column(db.Integer, db.ForeignKey('polls.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    option_index = db.Column(db.Integer, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    user = db.relationship('User')
