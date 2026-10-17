@@ -1257,13 +1257,21 @@ def api_poll_create():
         return jsonify(ok=False, error='بین ۲ تا ۶ گزینه لازم داری')
     multi = bool(data.get('multi'))
 
+    # Auto-close after a chosen period
+    expires = data.get('expires')
+    expires_at = None
+    if expires in ('1d', '3d', '1w'):
+        from datetime import timedelta
+        days = {'1d': 1, '3d': 3, '1w': 7}[expires]
+        expires_at = datetime.utcnow() + timedelta(days=days)
+
     # Create the poll message (text content carries the question)
-    m = Message(chat_id=chat.id, sender_id=user.id, msg_type='text', content='📊 ' + question)
+    m = Message(chat_id=chat.id, sender_id=user.id, msg_type='text', content=question)
     db.session.add(m)
     db.session.commit()
 
     poll = Poll(chat_id=chat.id, message_id=m.id, question=question,
-                options=opts, multi=multi, created_by=user.id)
+                options=opts, multi=multi, created_by=user.id, expires_at=expires_at)
     poll.set_options(opts)
     db.session.add(poll)
     db.session.commit()
@@ -1285,7 +1293,7 @@ def api_poll_vote(poll_id):
     poll = Poll.query.get(poll_id)
     if not poll:
         return jsonify(ok=False, error='نظرسنجی پیدا نشد')
-    if poll.closed:
+    if poll.closed or poll.is_expired():
         return jsonify(ok=False, error='این نظرسنجی بسته شده')
     # Must be a member of the chat (admins can vote in any chat they can view)
     chat = Chat.query.get(poll.chat_id)

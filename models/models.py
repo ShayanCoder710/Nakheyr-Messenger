@@ -292,6 +292,7 @@ class Poll(db.Model):
     options = db.Column(db.Text, default='[]')   # JSON: ["label1", "label2", ...]
     multi = db.Column(db.Boolean, default=False)  # allow multiple answers
     closed = db.Column(db.Boolean, default=False)
+    expires_at = db.Column(db.DateTime, nullable=True)  # auto-close at this time (None = never)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -315,6 +316,9 @@ class Poll(db.Model):
         c = Counter(v.option_index for v in self.votes)
         return {i: c.get(i, 0) for i in range(len(self.options_list()))}
 
+    def is_expired(self):
+        return bool(self.expires_at and datetime.utcnow() > self.expires_at)
+
     def to_dict(self, viewer_id=None):
         counts = self.counts()
         total = sum(counts.values())
@@ -326,7 +330,8 @@ class Poll(db.Model):
             'question': self.question,
             'options': self.options_list(),
             'multi': bool(self.multi),
-            'closed': bool(self.closed),
+            'closed': bool(self.closed or self.is_expired()),
+            'expires_at': self.expires_at.isoformat() if self.expires_at else None,
             'counts': counts,
             'total': total,
             'my_votes': my,

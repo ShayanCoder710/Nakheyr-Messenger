@@ -239,6 +239,15 @@ def _ensure_poll_tables():
               INDEX ix_poll_votes_user_id (user_id)
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
         """))
+        # Column added after initial deploy: auto-close time
+        has_col = conn.execute(text(
+            "SELECT COUNT(*) FROM information_schema.columns "
+            "WHERE table_schema = DATABASE() AND table_name = 'polls' AND column_name = 'expires_at'"
+        )).scalar()
+        if not has_col:
+            conn.execute(text(
+                "ALTER TABLE polls ADD COLUMN expires_at DATETIME NULL AFTER closed"
+            ))
 
 
 def current_user():

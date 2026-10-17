@@ -131,7 +131,7 @@
           <div class="composer-tools">
             <button class="icon-btn" id="btnEmoji" title="ایموجی"><img class="ico-img" src="{{ url_for('static', filename='icons/emoji.svg') }}" alt="ایموجی"></button>
             <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل"><img class="ico-img" src="{{ url_for('static', filename='icons/clip.svg') }}" alt="پیوست"></button>
-            <button class="poll-composer-btn" id="btnPoll" title="نظرسنجی" aria-label="نظرسنجی" type="button">{{ bi('bar-chart') }}</button>
+            <button class="icon-btn" id="btnPoll" title="نظرسنجی" aria-label="نظرسنجی" type="button">{{ bi('bar-chart') }}</button>
           </div>
           <input type="file" id="fileInput" hidden>
           <textarea class="composer-input" id="msgInput" rows="1" placeholder="پیام…"></textarea>
@@ -402,25 +402,33 @@
 
 <div class="modal" id="pollModal">
   <div class="box">
-    <h3>{{ bi('bar-chart') }} نظرسنجی جدید</h3>
-    <p class="sub">سوال و گزینه‌ها رو بنویس، بعدش بفرست</p>
+    <div class="poll-modal-head">
+      <span class="poll-modal-ic">{{ bi('bar-chart') }}</span>
+      <div><h3>نظرسنجی جدید</h3><p class="sub">سوال و گزینه‌ها رو بنویس، بعدش بفرست</p></div>
+    </div>
     <label class="label">سوال</label>
-    <input class="input" id="pollQuestion" maxlength="150" placeholder="مثلاً شام چی می‌خوایم؟">
+    <input class="input" id="pollQuestion" maxlength="150" placeholder="مثلاً: شام چی می‌خوایم؟">
     <label class="label">گزینه‌ها</label>
-    <div id="pollOptions">
-      <input class="input poll-opt" maxlength="80" placeholder="گزینه ۱">
-      <input class="input poll-opt" maxlength="80" placeholder="گزینه ۲">
+    <div id="pollOptions"></div>
+    <button class="poll-add-btn" id="pollAddOpt" type="button">{{ bi('plus') }} اضافه کردن گزینه</button>
+    <div class="poll-modal-opts">
+      <label class="switch-row">
+        <span>چندگزینه‌ای<small>ممنونه چند تا گزینه رو انتخاب کنن</small></span>
+        <input type="checkbox" id="pollMulti">
+      </label>
+      <div>
+        <label class="label" style="margin-top:4px">انقضای خودکار</label>
+        <div class="exp-seg" id="pollExpiry">
+          <button type="button" data-exp="" class="on">بدون انقضا</button>
+          <button type="button" data-exp="1d">۱ روز</button>
+          <button type="button" data-exp="3d">۳ روز</button>
+          <button type="button" data-exp="1w">۱ هفته</button>
+        </div>
+      </div>
     </div>
-    <div class="row" style="margin-top:8px">
-      <button class="btn sm ghost" id="pollAddOpt" type="button">+ گزینه اضافه کن</button>
-    </div>
-    <label class="switch-row" style="margin-top:12px">
-      <span>چندگزینه‌ای<small>ممنونه چند تا گزینه رو انتخاب کنن</small></span>
-      <input type="checkbox" id="pollMulti">
-    </label>
     <div class="row">
       <button class="btn ghost" id="pollCancel">انصراف</button>
-      <button class="btn primary" id="pollCreate">ایجاد نظرسنجی</button>
+      <button class="btn primary" id="pollCreate">{{ bi('bar-chart') }} ایجاد نظرسنجی</button>
     </div>
   </div>
 </div>

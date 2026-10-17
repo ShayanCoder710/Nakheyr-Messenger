@@ -172,17 +172,22 @@ function pollHtml(p) {
     const input = closed
       ? `<input type="${multi ? 'checkbox' : 'radio'}" disabled>`
       : `<input type="${multi ? 'checkbox' : 'radio'}" data-pollvote="${p.id}" value="${i}" ${sel ? 'checked' : ''} name="pv${p.id}">`;
-    return `<label class="poll-opt ${sel ? 'selected' : ''} ${closed ? 'poll-locked' : ''}">
-      <span class="opt-pct" style="width:${pct}%"></span>
-      ${input}<span class="opt-label">${esc(label)}</span><span class="opt-count">${c} (${pct}%)</span>
+    return `<label class="poll-opt ${sel ? 'selected' : ''}">
+      <span class="opt-bar" style="width:${closed ? pct : 0}%"></span>
+      ${input}<span class="opt-ic">${sel ? bi('check-circle-fill') : (multi ? bi('collection') : bi('circle'))}</span>
+      <span class="opt-label">${esc(label)}</span>
+      ${closed ? `<span class="opt-count"><b>${c}</b> · ${pct}%</span>` : ''}
     </label>`;
   }).join('');
   const canClose = !closed && (p.created_by === window.ME.id || window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
-  const foot = `<div class="poll-foot"><span>${total} رأی</span>
-    ${canClose ? `<button data-pollclose="${p.id}">${closed ? bi('unlock') : bi('lock')} ${closed ? 'باز کردن' : 'بستن'}</button>` : ''}
+  const expTag = closed ? (p.expires_at ? `<span class="poll-tag exp">${bi('hourglass-split')} انقضاشده</span>` : `<span class="poll-tag">${bi('lock')} بسته</span>`) : '';
+  const foot = `<div class="poll-foot">
+    <span class="poll-total">${bi('people')} ${total} رأی${multi ? ' · چندگزینه‌ای' : ''}</span>
+    ${canClose ? `<button class="poll-close-btn" data-pollclose="${p.id}" title="${closed ? 'باز کردن' : 'بستن'}">${closed ? bi('unlock') : bi('lock')}</button>` : ''}
   </div>`;
   return `<div class="poll-card ${closed ? 'poll-locked' : ''}" data-pollid="${p.id}">
-    <div class="poll-q">${esc(p.question)}${closed ? '<span class="poll-closed-tag">بسته</span>' : ''}</div>
+    <div class="poll-head"><span class="poll-head-ic">${bi('bar-chart')}</span><b>نظرسنجی</b>${expTag}</div>
+    <div class="poll-q">${esc(p.question)}</div>
     <div class="poll-opts">${opts}</div>${foot}
   </div>`;
 }
@@ -595,44 +600,71 @@ document.getElementById('deleteModal').addEventListener('click', e => {
 });
 
 /* ── Polls ────────────────────────────────────────────────────── */
-function openPollModal() {
-  const modal = document.getElementById('pollModal');
-  const q = document.getElementById('pollQuestion');
-  q.value = '';
-  const opts = document.getElementById('pollOptions');
-  opts.innerHTML = `
-    <div class="poll-opt-row"><input class="input poll-opt" maxlength="80" placeholder="گزینه ۱"><button type="button" data-rmopt title="حذف">${bi('x-lg')}</button></div>
-    <div class="poll-opt-row"><input class="input poll-opt" maxlength="80" placeholder="گزینه ۲"><button type="button" data-rmopt title="حذف">${bi('x-lg')}</button></div>`;
-  document.getElementById('pollMulti').checked = false;
-  modal.classList.add('show');
-  q.focus();
+function _pollRowNum(n) {
+  const fa = ['۱','۲','۳','۴','۵','۶'];
+  return fa[n - 1] || n;
 }
-document.getElementById('btnPoll').onclick = openPollModal;
-document.getElementById('pollCancel').onclick = () => document.getElementById('pollModal').classList.remove('show');
-document.getElementById('pollAddOpt').onclick = () => {
+function _addPollOption(value) {
   const box = document.getElementById('pollOptions');
   if (box.querySelectorAll('.poll-opt-row').length >= 6) { toast('حداکثر ۶ گزینه', 'error'); return; }
   const n = box.querySelectorAll('.poll-opt-row').length + 1;
   const row = document.createElement('div');
   row.className = 'poll-opt-row';
-  row.innerHTML = `<input class="input poll-opt" maxlength="80" placeholder="گزینه ${n}"><button type="button" data-rmopt title="حذف">${bi('x-lg')}</button>`;
+  row.innerHTML = `
+    <span class="poll-row-num">${_pollRowNum(n)}</span>
+    <input class="input poll-opt" maxlength="80" placeholder="گزینه ${_pollRowNum(n)}" value="${esc(value || '')}">
+    <button type="button" class="poll-rm" data-rmopt title="حذف گزینه">${bi('x-lg')}</button>`;
   box.appendChild(row);
   row.querySelector('input').focus();
-};
+  _renumberPollRows();
+}
+function _renumberPollRows() {
+  document.querySelectorAll('#pollOptions .poll-opt-row').forEach((row, i) => {
+    const num = row.querySelector('.poll-row-num');
+    if (num) num.textContent = _pollRowNum(i + 1);
+    const inp = row.querySelector('input');
+    if (inp && !inp.value.trim()) inp.placeholder = 'گزینه ' + _pollRowNum(i + 1);
+  });
+}
+function openPollModal() {
+  const modal = document.getElementById('pollModal');
+  document.getElementById('pollQuestion').value = '';
+  const box = document.getElementById('pollOptions');
+  box.innerHTML = '';
+  _addPollOption('');
+  _addPollOption('');
+  document.getElementById('pollMulti').checked = false;
+  const seg = document.getElementById('pollExpiry');
+  seg.querySelectorAll('button').forEach(b => b.classList.toggle('on', b.dataset.exp === ''));
+  modal.classList.add('show');
+  document.getElementById('pollQuestion').focus();
+}
+document.getElementById('btnPoll').onclick = openPollModal;
+document.getElementById('pollCancel').onclick = () => document.getElementById('pollModal').classList.remove('show');
+document.getElementById('pollAddOpt').onclick = () => _addPollOption('');
 document.getElementById('pollOptions').addEventListener('click', e => {
   const rm = e.target.closest('[data-rmopt]');
   if (!rm) return;
   const box = rm.closest('.poll-opt-row');
   if (box.parentElement.querySelectorAll('.poll-opt-row').length <= 2) { toast('حداقل ۲ گزینه لازم داری', 'error'); return; }
   box.remove();
+  _renumberPollRows();
+});
+// auto-expiry segmented control
+document.getElementById('pollExpiry').addEventListener('click', e => {
+  const b = e.target.closest('button[data-exp]');
+  if (!b) return;
+  e.target.closest('#pollExpiry').querySelectorAll('button').forEach(x => x.classList.toggle('on', x === b));
 });
 document.getElementById('pollCreate').onclick = async () => {
   if (!currentChat) { toast('اول یه گپ باز کن', 'error'); return; }
   const question = document.getElementById('pollQuestion').value.trim();
+  if (question.length < 2) { toast('سوال رو کامل بنویس', 'error'); return; }
   const opts = [...document.querySelectorAll('#pollOptions .poll-opt')].map(x => x.value.trim()).filter(Boolean);
   if (opts.length < 2) { toast('حداقل ۲ گزینه با متن لازم داری', 'error'); return; }
   const multi = document.getElementById('pollMulti').checked;
-  const r = await api('/api/poll/create', { chat_id: currentChat, question, options: opts, multi });
+  const exp = (document.querySelector('#pollExpiry .on') || {}).dataset.exp || '';
+  const r = await api('/api/poll/create', { chat_id: currentChat, question, options: opts, multi, expires: exp });
   document.getElementById('pollModal').classList.remove('show');
   if (r.ok && r.message) {
     appendMsg(r.message);
@@ -2734,6 +2766,7 @@ S.on('poll_vote', d => {
       counts: d.counts, total: d.total,
       my_votes: d.my_votes, multi: d.multi, closed: d.closed,
       question: m.poll.question, options: m.poll.options,
+      expires_at: m.poll.expires_at, created_by: m.poll.created_by,
     };
   }
   card.outerHTML = (m && m.poll) ? pollHtml(m.poll) : '';
