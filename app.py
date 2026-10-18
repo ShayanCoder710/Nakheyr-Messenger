@@ -37,10 +37,6 @@ app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['UPLOAD_DIR'] = UPLOAD_DIR
 app.config['AVATAR_DIR'] = AVATAR_DIR
 app.config['TEMPLATES_AUTO_RELOAD'] = True
-# HTTP cache: static assets served with a 1-week public cache;
-# uploaded files keep the 1-year cache set in the /files routes.
-app.config['SEND_FILE_MAX_AGE'] = 7 * 24 * 3600
-app.config['SEND_FILE_MAX_AGE_SECONDS'] = 7 * 24 * 3600
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins='*')
@@ -82,15 +78,6 @@ def csrf_guard():
 @app.context_processor
 def inject_csrf():
     return {'csrf_token': ensure_csrf_token()}
-
-
-@app.after_request
-def add_cache_headers(resp):
-    if request.endpoint == 'static':
-        resp.headers['Cache-Control'] = 'public, max-age=%d' % app.config['SEND_FILE_MAX_AGE_SECONDS']
-    elif request.path.startswith('/files/'):
-        resp.headers['Cache-Control'] = 'public, max-age=31536000'
-    return resp
 
 
 @app.before_request
@@ -1109,7 +1096,7 @@ def api_avatar():
 
 @app.route('/files/avatar/<path:fname>')
 def static_avatar(fname):
-    return send_from_directory(app.config['AVATAR_DIR'], fname, max_age=31536000)
+    return send_from_directory(app.config['AVATAR_DIR'], fname, max_age=0)
 
 
 @app.route('/files/<path:fname>')
@@ -1128,10 +1115,12 @@ def static_files(fname):
         allowed = bool(msg and can_view_chat(user, msg.chat))
     if not allowed:
         abort(403)
-    resp = send_from_directory(app.config['UPLOAD_DIR'], fname, max_age=31536000)
+    resp = send_from_directory(app.config['UPLOAD_DIR'], fname, max_age=0)
     resp.headers['X-Content-Type-Options'] = 'nosniff'
     resp.cache_control.public = False
     resp.cache_control.private = True
+    resp.cache_control.max_age = 0
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
     ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
     if ext in INLINE_UNSAFE_EXT:
         resp.headers['Content-Disposition'] = 'attachment'
