@@ -1387,10 +1387,16 @@ body.dragging::after {
 .am-item[data-attach="media"] .am-ico { background: rgba(78, 192, 110, .15); color: var(--green); border-color: rgba(78, 192, 110, .3); }
 .am-item[data-attach="camera"] .am-ico { background: rgba(240, 179, 76, .15); color: var(--gold); border-color: rgba(240, 179, 76, .3); }
 .am-item[data-attach="doc"] .am-ico { background: var(--accent-soft); color: var(--accent-2); border-color: rgba(229, 57, 59, .28); }
+.am-item[data-attach="poll"] .am-ico { background: rgba(66, 165, 245, .15); color: #42a5f5; border-color: rgba(66, 165, 245, .3); }
+.am-item-narrow { display: none; } /* poll option appears in the menu only on narrow screens */
 .am-txt { min-width: 0; }
 .am-txt small { display: block; color: var(--dim); font-size: 11px; font-weight: 500; margin-top: 1px; }
 @media (max-width: 860px) {
   .attach-menu { left: 50%; transform: translateX(-50%); right: auto; min-width: min(300px, 88vw); }
+}
+@media (max-width: 480px) {
+  .am-item-narrow { display: flex; }
+  #btnPoll { display: none; }
 }
 
 /* pinned-bar media thumbnail */

@@ -1191,7 +1191,6 @@ document.addEventListener('click', e => {
   }
 
   if (selecting) {
-    if (_lpJustEntered) { _lpJustEntered = false; return; }
     const row = e.target.closest('.mrow');
     if (row && !e.target.closest('a, .reply-ref, .reactions, [data-media], video, audio')) {
       e.preventDefault();
@@ -1230,6 +1229,11 @@ async function sendText() {
       document.getElementById('attachPreview').innerHTML = '';
       document.getElementById('replyPreview').style.display = 'none';
       refreshConvList();
+      // Keep the composer focused so the mobile keyboard stays up between
+      // messages (Telegram behavior). Refocusing right after a user gesture
+      // is within the activation window, so iOS/Android keep it open.
+      input.focus({ preventScroll: true });
+      try { input.setSelectionRange(0, 0); } catch (_) {}
     } else toast(r.error, 'error');
   } finally {
     sending = false;
@@ -1358,16 +1362,17 @@ function cancelSelect() {
 }
 
 let _lpTimer = null;
-let _lpJustEntered = false;
 document.getElementById('msgs').addEventListener('touchstart', e => {
   const row = e.target.closest('.mrow');
   if (!row || selecting) return;
   const mid = +row.dataset.mid;
   _lpTimer = setTimeout(() => {
     _lpTimer = null;
-    _lpJustEntered = true;
     if (navigator.vibrate) navigator.vibrate(15);
-    enterSelect(mid);
+    const r = row.getBoundingClientRect();
+    const px = Math.max(8, Math.min(r.right - 8, window.innerWidth - 230));
+    const py = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - 320));
+    openMsgActions(mid, px, py);
   }, 420);
 }, { passive: true });
 ['touchend', 'touchmove', 'touchcancel'].forEach(ev =>
@@ -1381,6 +1386,28 @@ function selectAllMine() {
     if (!m.deleted && m.sender_id === window.ME.id && m.msg_type !== 'system') selectedIds.add(m.id);
   });
   syncSelection();
+}
+
+/* Long-press on a conversation item (mobile) → same menu as right-click. */
+let _convLpTimer = null;
+const convSections = document.getElementById('convSections');
+if (convSections) {
+  convSections.addEventListener('touchstart', e => {
+    const conv = e.target.closest('.conv');
+    if (!conv || conv.id === 'newNotesBtn') return;
+    _convLpTimer = setTimeout(() => {
+      _convLpTimer = null;
+      if (navigator.vibrate) navigator.vibrate(15);
+      const r = conv.getBoundingClientRect();
+      const px = Math.max(8, Math.min(r.left, window.innerWidth - 240));
+      const py = Math.max(8, Math.min(r.bottom + 8, window.innerHeight - 320));
+      openConvActions(conv, px, py);
+    }, 480);
+  }, { passive: true });
+  ['touchend', 'touchmove', 'touchcancel'].forEach(ev =>
+    convSections.addEventListener(ev, () => {
+      if (_convLpTimer) { clearTimeout(_convLpTimer); _convLpTimer = null; }
+    }, { passive: true }));
 }
 
 function localDeleteMid(mid) {
@@ -1533,12 +1560,16 @@ document.addEventListener('click', e => {
 attachMenu.querySelectorAll('[data-attach]').forEach(it => {
   it.addEventListener('click', () => {
     const kind = it.dataset.attach;
+    closeAttachMenu();
+    if (kind === 'poll') {
+      document.getElementById('btnPoll').onclick();
+      return;
+    }
     const input = document.getElementById('fileInput');
     input.removeAttribute('capture');
     if (kind === 'media') input.accept = 'image/*,video/*';
     else if (kind === 'camera') { input.accept = 'image/*'; input.setAttribute('capture', 'environment'); }
     else input.accept = '';
-    closeAttachMenu();
     input.click();
   });
 });
@@ -2542,6 +2573,139 @@ document.addEventListener('click', e => {
 document.addEventListener('scroll', () => document.getElementById('ctxMenu').classList.remove('show'), true);
 window.addEventListener('blur', () => document.getElementById('ctxMenu').classList.remove('show'));
 
+/* Telegram-style single-message action menu (shared by right-click and
+   long-press). Multi-select is a deliberate item inside the menu. */
+function openMsgActions(mid, x, y) {
+  const m = (CD.initialMessages || []).find(x => x.id === mid) || {};
+  const mine = m.sender_id === window.ME.id;
+  const items = [
+    { label: 'واکنش بده', icon: bi('emoji-smile'), fn: () => openEmojiPicker(mid, x, y) },
+    { label: 'پاسخ', icon: bi('reply'), fn: () => openReply(mid) },
+    { label: 'فوروارد', icon: bi('share'), fn: () => openForward(mid) },
+    m.content ? { label: 'کپی متن', icon: bi('clipboard'), fn: () => {
+      copyText(m.content).then(() => toast('کپی شد')).catch(() => toast('کپی نشد', 'error'));
+    } } : null,
+    canPinMsg(m) ? { label: m.pinned ? 'لغو پین' : 'پین کردن', icon: bi(m.pinned ? 'pin-angle-fill' : 'pin-angle'), fn: () => {
+      const next = !m.pinned;
+      localSetPin(mid, next);
+      api('/api/message/pin', { message_id: mid }).then(j => {
+        if (!j.ok) { localSetPin(mid, !next); toast(j.error || 'پین نشد', 'error'); }
+      });
+    } } : null,
+    { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: bi('bookmark'), fn: () => {
+      api('/api/message/save', { message_id: mid }).then(j => {
+        if (j.ok) toast('در پیام‌های ذخیره‌شده ذخیره شد');
+        else toast(j.error, 'error');
+      });
+    } },
+    { label: 'چند پیام انتخاب کن', icon: bi('ui-checks'), fn: () => enterSelect(mid) },
+    (mine && m.msg_type === 'text' && !m.poll) ? { label: 'ویرایش', icon: bi('pencil'), fn: () => {
+      const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
+      if (row) editMessage(mid, row);
+    } } : null,
+    { label: 'حذف برای من', icon: bi('eye-slash'), danger: true, fn: () => hideForMe(mid) },
+    (mine || window.ME.is_admin) ? { label: 'حذف پیام', icon: bi('trash'), danger: true, fn: () => {
+      localDeleteMid(mid);
+      api('/api/message/delete', { message_id: mid }).then(j => {
+        if (!j.ok) { renderAllMessages(); toast(j.error || 'حذف نشد', 'error'); }
+      });
+    } } : null,
+    (!mine && m.sender_id) ? { label: 'گزارش فرستنده', icon: bi('flag'), danger: true, fn: () => {
+      openReport({ id: m.sender_id, display_name: (getMember(m.sender_id) || {}).display_name }, m.id);
+    } } : null,
+  ];
+  showCtxMenu(x, y, items);
+}
+
+/* Chat-list context menu (shared by right-click and long-press on mobile).
+   Extracted so touch users get the exact same actions as mouse users. */
+function openConvActions(conv, x, y) {
+  const chatId = +conv.dataset.chatId;
+  const type = conv.dataset.type;
+  const isDm = type === 'dm';
+  const peerName = conv.dataset.peer || '';
+  const peerId = +conv.dataset.peerId || null;
+  const isBlocked = conv.dataset.blocked === '1';
+  const isMuted = conv.dataset.muted === '1';
+  const isArchived = conv.dataset.archived === '1';
+  showCtxMenu(x, y, [
+    { label: 'باز کردن', icon: bi('chat-dots'), fn: () => openChat(chatId) },
+    { label: 'خواندن نشانه‌گذاری', icon: bi('check2'), fn: () => api('/api/mark-read', { chat_id: chatId }).then(() => {
+      clearUnread(chatId);
+      refreshConvList();
+    }) },
+    { label: isMuted ? 'باصدا کردن' : 'بی‌صدا کردن', icon: bi(isMuted ? 'bell' : 'bell-slash'), fn: () => {
+      api('/api/chat/' + chatId + '/prefs', { muted: !isMuted }).then(j => {
+        if (j.ok) { toast(j.muted ? 'بی‌صدا شد' : 'باصدا شد'); refreshConvList(); }
+        else toast(j.error, 'error');
+      });
+    } },
+    { label: isArchived ? 'خروج از آرشیو' : 'آرشیو کردن', icon: bi('archive'), fn: () => {
+      api('/api/chat/' + chatId + '/prefs', { archived: !isArchived }).then(j => {
+        if (j.ok) { toast(j.archived ? 'آرشیو شد' : 'از آرشیو درآمد'); refreshConvList(); }
+        else toast(j.error, 'error');
+      });
+    } },
+    { label: 'پاک کردن تاریخچه', icon: bi('eraser'), danger: true, fn: () => clearHistory(chatId, isDm) },
+    !isDm ? { label: 'تنظیمات گپ', icon: bi('gear'), fn: () => openChat(chatId).then(openSettings) } : null,
+    !isDm && CD.chat && +CD.chat.id === chatId && CD.role && CD.role !== 'owner' ? {
+      label: 'ترک گروه / کانال', icon: bi('box-arrow-right'), danger: true, fn: () => {
+        openConfirm('ترک گپ', 'از این گپ خارج می‌شی. برای بازگشت دوباره باید عضویت بگیری', () => {
+          api('/api/chat/' + chatId + '/members', { action: 'leave' }).then(j => {
+            if (j.ok) {
+              toast('خارج شدی');
+              if (currentChat === chatId) {
+                closeChatPane();
+              }
+              refreshConvList();
+            } else toast(j.error, 'error');
+          });
+        }, 'خروج');
+      }
+    } : null,
+    isDm && peerName ? { label: 'پروفایل ' + peerName, icon: bi('person'), fn: () => openChat(chatId).then(openDmInfo) } : null,
+    isDm && peerName ? { label: 'گزارش کاربر', icon: bi('flag'), danger: true, fn: () => openChat(chatId).then(() => {
+      if (CD.chat && CD.chat.peer) openReport(CD.chat.peer);
+    }) } : null,
+    isDm && peerName ? { label: isBlocked ? 'لغو بلاک' : 'بلاک کردن', icon: bi(isBlocked ? 'check-circle' : 'slash-circle'), danger: !isBlocked, fn: () => {
+      const uid = peerId || (CD.chat && CD.chat.peer && +CD.chat.id === chatId ? CD.chat.peer.id : null);
+      if (!uid) return;
+      api('/api/block', { user_id: uid }).then(j => {
+        toast(j.blocked ? 'بلاک شد' : 'لغو بلاک شد', 'success');
+        if (CD.chat && CD.chat.peer && CD.chat.peer.id === uid) CD.chat.peer.blocked = !!j.blocked;
+        refreshConvList();
+      });
+    } } : null,
+    !isDm ? { label: 'حذف گروه / کانال', icon: bi('trash'), danger: true, fn: () => {
+      if (conv.dataset.owner !== String(window.ME.id) && !window.ME.is_admin) {
+        toast('فقط صاحب گپ یا ادمین سایت می‌تونه حذف کنه', 'error');
+        return;
+      }
+      const nm = conv.dataset.name || 'گپ';
+      openConfirm('حذف گپ', `«${nm}» کامل حذف می‌شه؛ همه‌ی پیام‌ها و عکسا برای همه‌ی اعضا می‌ره. این کار قابل بازگشت نیست`, () => {
+        api('/api/chat/' + chatId + '/delete').then(j => {
+          if (j.ok) {
+            toast('گپ حذف شد');
+            if (currentChat === chatId) closeChatPane();
+            refreshConvList();
+          } else toast(j.error || 'حذف نشد', 'error');
+        });
+      }, 'حذف');
+    } } : null,
+    isDm ? { label: 'حذف گپ', icon: bi('trash'), danger: true, fn: () => {
+      openConfirm('حذف گپ', `«${peerName || 'گپ'}» کامل حذف می‌شه؛ برای تو و طرف مقابل پیام‌ها می‌ره. این کار قابل بازگشت نیست`, () => {
+        api('/api/chat/' + chatId + '/delete').then(j => {
+          if (j.ok) {
+            toast('گپ حذف شد');
+            if (currentChat === chatId) closeChatPane();
+            refreshConvList();
+          } else toast(j.error || 'حذف نشد', 'error');
+        });
+      }, 'حذف');
+    } } : null,
+  ]);
+}
+
 document.addEventListener('contextmenu', e => {
   const memRow = e.target.closest('#csMembersList .mb-item');
   if (memRow) {
@@ -2569,135 +2733,15 @@ document.addEventListener('contextmenu', e => {
   const msgRow = e.target.closest('.mrow');
   if (msgRow && !msgRow.classList.contains('sel-selected')) {
     e.preventDefault();
-    const mid = +msgRow.dataset.mid;
-    const m = (CD.initialMessages || []).find(x => x.id === mid) || {};
-    const mine = m.sender_id === window.ME.id;
-    showCtxMenu(e.clientX, e.clientY, [
-      { label: 'واکنش بده', icon: bi('emoji-smile'), fn: () => openEmojiPicker(mid, e.clientX, e.clientY) },
-      { label: 'پاسخ', icon: bi('reply'), fn: () => openReply(mid) },
-      { label: 'فوروارد', icon: bi('share'), fn: () => openForward(mid) },
-      { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: bi('bookmark'), fn: () => {
-        api('/api/message/save', { message_id: mid }).then(j => {
-          if (j.ok) toast('در پیام‌های ذخیره‌شده ذخیره شد');
-          else toast(j.error, 'error');
-        });
-      } },
-      m.content ? { label: 'کپی متن', icon: bi('clipboard'), fn: () => {
-        copyText(m.content).then(() => toast('کپی شد')).catch(() => toast('کپی نشد', 'error'));
-      } } : null,
-      canPinMsg(m) ? { label: m.pinned ? 'لغو پین' : 'پین کردن', icon: bi(m.pinned ? 'pin-angle-fill' : 'pin-angle'), fn: () => {
-        const next = !m.pinned;
-        localSetPin(mid, next);
-        api('/api/message/pin', { message_id: mid }).then(j => {
-          if (!j.ok) { localSetPin(mid, !next); toast(j.error || 'پین نشد', 'error'); }
-        });
-      } } : null,
-      { label: selecting ? 'خروج از حالت انتخاب' : 'انتخاب و حذف گروهی', icon: bi('ui-checks'), fn: () => (selecting ? cancelSelect() : enterSelect(mid)) },
-      (mine && m.msg_type === 'text' && !m.poll) ? { label: 'ویرایش', icon: bi('pencil'), fn: () => {
-        const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
-        if (row) editMessage(mid, row);
-      } } : null,
-      { label: 'حذف برای من', icon: bi('eye-slash'), danger: true, fn: () => hideForMe(mid) },
-      (mine || window.ME.is_admin) ? { label: 'حذف پیام', icon: bi('trash'), danger: true, fn: () => {
-        localDeleteMid(mid);
-        api('/api/message/delete', { message_id: mid }).then(j => {
-          if (!j.ok) { renderAllMessages(); toast(j.error || 'حذف نشد', 'error'); }
-        });
-      } } : null,
-      (!mine && m.sender_id) ? { label: 'گزارش فرستنده', icon: bi('flag'), danger: true, fn: () => {
-        openReport({ id: m.sender_id, display_name: (getMember(m.sender_id) || {}).display_name }, m.id);
-      } } : null,
-    ]);
+    openMsgActions(+msgRow.dataset.mid, e.clientX, e.clientY);
     return;
   }
 
   const conv = e.target.closest('.conv');
   if (conv) {
     e.preventDefault();
-    const chatId = +conv.dataset.chatId;
-    const type = conv.dataset.type;
-    const isDm = type === 'dm';
-    const peerName = conv.dataset.peer || '';
-    const peerId = +conv.dataset.peerId || null;
-    const isBlocked = conv.dataset.blocked === '1';
-    const isMuted = conv.dataset.muted === '1';
-    const isArchived = conv.dataset.archived === '1';
-    showCtxMenu(e.clientX, e.clientY, [
-      { label: 'باز کردن', icon: bi('chat-dots'), fn: () => openChat(chatId) },
-      { label: 'خواندن نشانه‌گذاری', icon: bi('check2'), fn: () => api('/api/mark-read', { chat_id: chatId }).then(() => {
-        clearUnread(chatId);
-        refreshConvList();
-      }) },
-      { label: isMuted ? 'باصدا کردن' : 'بی‌صدا کردن', icon: bi(isMuted ? 'bell' : 'bell-slash'), fn: () => {
-        api('/api/chat/' + chatId + '/prefs', { muted: !isMuted }).then(j => {
-          if (j.ok) { toast(j.muted ? 'بی‌صدا شد' : 'باصدا شد'); refreshConvList(); }
-          else toast(j.error, 'error');
-        });
-      } },
-      { label: isArchived ? 'خروج از آرشیو' : 'آرشیو کردن', icon: bi('archive'), fn: () => {
-        api('/api/chat/' + chatId + '/prefs', { archived: !isArchived }).then(j => {
-          if (j.ok) { toast(j.archived ? 'آرشیو شد' : 'از آرشیو درآمد'); refreshConvList(); }
-          else toast(j.error, 'error');
-        });
-      } },
-      { label: 'پاک کردن تاریخچه', icon: bi('eraser'), danger: true, fn: () => clearHistory(chatId, isDm) },
-      !isDm ? { label: 'تنظیمات گپ', icon: bi('gear'), fn: () => openChat(chatId).then(openSettings) } : null,
-      !isDm && CD.chat && +CD.chat.id === chatId && CD.role && CD.role !== 'owner' ? {
-        label: 'ترک گروه / کانال', icon: bi('box-arrow-right'), danger: true, fn: () => {
-          openConfirm('ترک گپ', 'از این گپ خارج می‌شی. برای بازگشت دوباره باید عضویت بگیری', () => {
-            api('/api/chat/' + chatId + '/members', { action: 'leave' }).then(j => {
-              if (j.ok) {
-                toast('خارج شدی');
-                if (currentChat === chatId) {
-                  closeChatPane();
-                }
-                refreshConvList();
-              } else toast(j.error, 'error');
-            });
-          }, 'خروج');
-        }
-      } : null,
-      isDm && peerName ? { label: 'پروفایل ' + peerName, icon: bi('person'), fn: () => openChat(chatId).then(openDmInfo) } : null,
-      isDm && peerName ? { label: 'گزارش کاربر', icon: bi('flag'), danger: true, fn: () => openChat(chatId).then(() => {
-        if (CD.chat && CD.chat.peer) openReport(CD.chat.peer);
-      }) } : null,
-      isDm && peerName ? { label: isBlocked ? 'لغو بلاک' : 'بلاک کردن', icon: bi(isBlocked ? 'check-circle' : 'slash-circle'), danger: !isBlocked, fn: () => {
-        const uid = peerId || (CD.chat && CD.chat.peer && +CD.chat.id === chatId ? CD.chat.peer.id : null);
-        if (!uid) return;
-        api('/api/block', { user_id: uid }).then(j => {
-          toast(j.blocked ? 'بلاک شد' : 'لغو بلاک شد', 'success');
-          if (CD.chat && CD.chat.peer && CD.chat.peer.id === uid) CD.chat.peer.blocked = !!j.blocked;
-          refreshConvList();
-        });
-      } } : null,
-      !isDm ? { label: 'حذف گروه / کانال', icon: bi('trash'), danger: true, fn: () => {
-        if (conv.dataset.owner !== String(window.ME.id) && !window.ME.is_admin) {
-          toast('فقط صاحب گپ یا ادمین سایت می‌تونه حذف کنه', 'error');
-          return;
-        }
-        const nm = conv.dataset.name || 'گپ';
-        openConfirm('حذف گپ', `«${nm}» کامل حذف می‌شه؛ همه‌ی پیام‌ها و عکسا برای همه‌ی اعضا می‌ره. این کار قابل بازگشت نیست`, () => {
-          api('/api/chat/' + chatId + '/delete').then(j => {
-            if (j.ok) {
-              toast('گپ حذف شد');
-              if (currentChat === chatId) closeChatPane();
-              refreshConvList();
-            } else toast(j.error || 'حذف نشد', 'error');
-          });
-        }, 'حذف');
-      } } : null,
-      isDm ? { label: 'حذف گپ', icon: bi('trash'), danger: true, fn: () => {
-        openConfirm('حذف گپ', `«${peerName || 'گپ'}» کامل حذف می‌شه؛ برای تو و طرف مقابل پیام‌ها می‌ره. این کار قابل بازگشت نیست`, () => {
-          api('/api/chat/' + chatId + '/delete').then(j => {
-            if (j.ok) {
-              toast('گپ حذف شد');
-              if (currentChat === chatId) closeChatPane();
-              refreshConvList();
-            } else toast(j.error || 'حذف نشد', 'error');
-          });
-        }, 'حذف');
-      } } : null,
-    ]);
+    openConvActions(conv, e.clientX, e.clientY);
+    return;
   }
 });
 
