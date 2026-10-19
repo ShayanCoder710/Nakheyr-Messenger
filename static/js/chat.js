@@ -1447,11 +1447,24 @@ async function loadPinned() {
   const j = await r.json();
   const bar = document.getElementById('pinnedBar');
   if (!j.pinned) { bar.style.display = 'none'; return; }
-  const preview = j.pinned.content || (j.pinned.msg_type === 'image' ? '(تصویر)' : j.pinned.msg_type === 'file' ? '(فایل)' : '(پیام)');
-  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span><span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b> ${esc(preview).slice(0, 80)}</span><button class="pin-unpin" data-unpin="${j.pinned.id}" title="لغو پین">${bi('x-lg')}</button>`;
+  const p = j.pinned;
+  let thumb = '';
+  let label = p.content || 'پیام';
+  if (p.msg_type === 'image' && p.file_url) {
+    thumb = `<img class="pin-thumb" src="${p.file_url}" alt="">`;
+    label = p.content || 'تصویر';
+  } else if (p.msg_type === 'video' && p.file_url) {
+    thumb = `<span class="pin-vid">${bi('camera-reels')}</span>`;
+    label = p.content || 'ویدیو';
+  } else if (p.msg_type === 'audio') {
+    label = p.content || 'پیام صوتی';
+  } else if (p.msg_type === 'file') {
+    label = p.file_name || 'فایل';
+  }
+  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${thumb}<span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b><span>${esc(label)}</span></span><button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
   bar.style.display = 'flex';
   bar.querySelector('.pin-bar-text').onclick = () => {
-    const t = document.querySelector(`.mrow[data-mid="${j.pinned.id}"]`);
+    const t = document.querySelector(`.mrow[data-mid="${p.id}"]`);
     if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' });
   };
   bar.querySelector('[data-unpin]').onclick = () => {
@@ -1488,7 +1501,47 @@ document.getElementById('msgInput').addEventListener('input', function () {
   }, 3000);
 });
 
-document.getElementById('btnAttach').onclick = () => document.getElementById('fileInput').click();
+document.getElementById('btnAttach').onclick = e => { e.stopPropagation(); toggleAttachMenu(); };
+
+const attachMenu = document.getElementById('attachMenu');
+const attachBtn = document.getElementById('btnAttach');
+function openAttachMenu() {
+  attachMenu.classList.add('show');
+  const r = attachBtn.getBoundingClientRect();
+  const mh = attachMenu.offsetHeight;
+  const isMobile = window.matchMedia('(max-width: 860px)').matches;
+  if (isMobile) {
+    // CSS centers it (left:50% + translateX); we only pick the vertical spot
+    attachMenu.style.top = Math.max(12, r.top - mh - 12) + 'px';
+    return;
+  }
+  const mw = attachMenu.offsetWidth;
+  let left = r.left + r.width / 2 - mw / 2;
+  left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
+  let top = r.top - mh - 10;
+  if (top < 8) top = r.bottom + 10;
+  attachMenu.style.left = left + 'px';
+  attachMenu.style.top = top + 'px';
+}
+function closeAttachMenu() { attachMenu.classList.remove('show'); }
+function toggleAttachMenu() {
+  attachMenu.classList.contains('show') ? closeAttachMenu() : openAttachMenu();
+}
+document.addEventListener('click', e => {
+  if (!e.target.closest('#attachMenu') && !e.target.closest('#btnAttach')) closeAttachMenu();
+});
+attachMenu.querySelectorAll('[data-attach]').forEach(it => {
+  it.addEventListener('click', () => {
+    const kind = it.dataset.attach;
+    const input = document.getElementById('fileInput');
+    input.removeAttribute('capture');
+    if (kind === 'media') input.accept = 'image/*,video/*';
+    else if (kind === 'camera') { input.accept = 'image/*'; input.setAttribute('capture', 'environment'); }
+    else input.accept = '';
+    closeAttachMenu();
+    input.click();
+  });
+});
 
 function renderAttachPreview() {
   const pv = document.getElementById('attachPreview');
@@ -2164,7 +2217,7 @@ document.getElementById('sideProfileLink').addEventListener('click', e => {
 
 function openProfilePage() {
   document.querySelector('.chat-layout').style.display = 'none';
-  document.getElementById('myProfilePage').style.display = 'grid';
+  document.getElementById('myProfilePage').style.display = 'flex';
   const av = document.getElementById('pmAvatar');
   av.innerHTML = avatarInner(window.ME.display_name, window.ME.avatar);
   document.getElementById('pmName').textContent = window.ME.display_name;
