@@ -144,7 +144,7 @@ def login():
             flash('نام کاربری یا پسورد اشتباهه.', 'error')
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         if user.is_banned:
-            flash('حساب شما مسدود شده. با ادمین تماس بگیر.', 'error')
+            flash('اکانت شما توسط ادمین مسدود شده است.', 'error')
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         session['user_id'] = user.id
         bump_online(user)
@@ -1491,6 +1491,8 @@ def admin_action(uid, action):
     else:
         return jsonify(ok=False, error='غیرمجاز')
     db.session.commit()
+    if target.is_banned:
+        socketio.emit('banned', {'reason': 'ادمین'}, room=f'user:{uid}')
     socketio.emit('profile_updated', target.to_public(), room=f'user:{uid}')
     return jsonify(ok=True, user=target.to_public(),
                    state={'is_admin': bool(target.is_admin),
@@ -1572,6 +1574,7 @@ def admin_report(rid, action):
         target.is_banned = True
         target.status = 'offline'
         db.session.commit()
+        socketio.emit('banned', {'reason': 'گزارش'}, room=f'user:{target.id}')
         return jsonify(ok=True)
     abort(404)
 

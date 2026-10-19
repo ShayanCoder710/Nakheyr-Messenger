@@ -2867,3 +2867,8 @@ S.on('account_deleted', () => {
   toast('این اکانت توسط مدیریت حذف شد', 'error');
   setTimeout(() => location.href = '/logout', 1200);
 });
+
+S.on('banned', d => {
+  toast('اکانت شما توسط ' + ((d && d.reason) || 'ادمین') + ' مسدود شد', 'error');
+  setTimeout(() => location.replace('/logout'), 1200);
+});
