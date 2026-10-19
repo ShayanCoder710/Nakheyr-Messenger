@@ -1491,8 +1491,8 @@ def admin_action(uid, action):
     else:
         return jsonify(ok=False, error='غیرمجاز')
     db.session.commit()
-    if target.is_banned:
-        socketio.emit('banned', {'reason': 'ادمین'}, room=f'user:{uid}')
+    if action == 'ban':
+        socketio.emit('banned', {'reason': 'ادمین', 'banned': bool(target.is_banned)}, room=f'user:{uid}')
     socketio.emit('profile_updated', target.to_public(), room=f'user:{uid}')
     return jsonify(ok=True, user=target.to_public(),
                    state={'is_admin': bool(target.is_admin),
@@ -1571,10 +1571,13 @@ def admin_report(rid, action):
     if action == 'resolve':
         r.status = 'resolved'
         target = User.query.get(r.reported_id)
-        target.is_banned = True
-        target.status = 'offline'
-        db.session.commit()
-        socketio.emit('banned', {'reason': 'گزارش'}, room=f'user:{target.id}')
+        if target:
+            target.is_banned = True
+            target.status = 'offline'
+            db.session.commit()
+            socketio.emit('banned', {'reason': 'گزارش', 'banned': True}, room=f'user:{target.id}')
+        else:
+            db.session.commit()
         return jsonify(ok=True)
     abort(404)
 

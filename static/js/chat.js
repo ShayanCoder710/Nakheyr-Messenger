@@ -918,7 +918,9 @@ function loadConvList() {
       const head = document.querySelector(`.conv-section-head[data-cat="${cat}"] span`);
       if (head && cat !== 'notes') {
         if (!head.dataset.base) head.dataset.base = head.textContent;
+        const icon = head.querySelector('svg');
         head.textContent = head.dataset.base.replace(/\s*\(\d+\)$/, '') + ' (' + byCat[cat].length + ')';
+        if (icon) head.insertBefore(icon, head.firstChild);
       }
     }
     const nn = document.getElementById('newNotesBtn');
@@ -2869,6 +2871,10 @@ S.on('account_deleted', () => {
 });
 
 S.on('banned', d => {
+  if (d && d.banned === false) {
+    toast('مسدودیت شما رفع شد. دوباره وارد شو', 'success');
+    return;
+  }
   toast('اکانت شما توسط ' + ((d && d.reason) || 'ادمین') + ' مسدود شد', 'error');
   setTimeout(() => location.replace('/logout'), 1200);
 });
