@@ -42,7 +42,12 @@
   font-family: Vazirmatn, system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
 }
 html { color-scheme: dark; }
-* { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+* { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; user-select: none; -webkit-user-select: none; }
+/* Re-enable text selection only on content meant to be read/copied */
+input, textarea, code, pre,
+.bubble .txt, .bubble .md, .sys-msg span, .m-meta,
+.msg-item .mi-body, .report-item p, .search-results,
+.conv-empty, .perm-note, .fwd-list, .pv-list { user-select: text; -webkit-user-select: text; }
 html, body { height: 100%; }
 body {
   background: var(--grad) fixed;
@@ -378,11 +383,11 @@ input, select, textarea { font-family: inherit; }
 }
 .mrow.mine-row .bubble { border-bottom-right-radius: 6px; border-bottom-left-radius: 18px; }
 .mrow.mine-row .bubble.me {
-  background: linear-gradient(165deg, #e5393b 0%, #c62828 55%, #a31818 100%);
-  border-color: rgba(255, 90, 90, .28);
-  box-shadow: 0 6px 18px -6px var(--accent-glow);
+  background: #1b1b21;
+  border-color: rgba(255, 255, 255, .06);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, .35);
 }
-.mrow.mine-row .bubble.me .m-meta { color: rgba(255, 255, 255, .8); }
+.mrow.mine-row .bubble.me .m-meta { color: var(--dim); }
 .bubble:hover { box-shadow: 0 5px 16px rgba(0, 0, 0, .45); }
 .bubble .txt { word-break: break-word; white-space: pre-wrap; }
 .bubble .img { max-width: min(340px, 100%); max-height: 300px; border-radius: 12px; display: block; }
@@ -897,6 +902,7 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
 .profile-page {
   height: 100vh; height: 100dvh; height: var(--app-h, 100dvh);
   display: flex; padding: 30px; overflow: auto;
+  overscroll-behavior: contain; -webkit-overflow-scrolling: touch;
 }
 .profile-card, .pm-wrap { margin: auto; }
 .profile-card {
@@ -1126,12 +1132,13 @@ table.data tr:hover td { background: rgba(255, 255, 255, .03); }
   .pm-actions { flex-wrap: wrap; }
   .pm-actions .btn.primary { flex-basis: 100%; }
   .pm-actions .btn:not(.primary) { flex: 1; }
-  .profile-page { padding: 12px; }
-  .pm-wrap { padding: 20px; border-radius: 22px; }
-  .pm-head .avatar { width: 68px; height: 68px; font-size: 26px; }
-  .pm-head h1 { font-size: 19px; }
+  .profile-page { padding: 12px; min-height: auto; }
+  .pm-wrap { padding: 18px; border-radius: 20px; }
+  .pm-head .avatar { width: 64px; height: 64px; font-size: 24px; }
+  .pm-head h1 { font-size: 18px; }
   .pass-fields { grid-template-columns: 1fr; }
   .pm-av-actions { flex-direction: row; }
+  .switch-row { flex-wrap: wrap; }
 }
 
 /* ===== media viewer (lightbox) ===== */
