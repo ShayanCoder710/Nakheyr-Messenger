@@ -947,6 +947,9 @@ function initConvHeads() {
 document.addEventListener('click', e => {
   const conv = e.target.closest('.conv');
   if (conv) {
+    conv.classList.remove('pulsing');
+    void conv.offsetWidth; // restart animation
+    conv.classList.add('pulsing');
     openChat(conv.dataset.chatId);
     e.stopPropagation();
     return;
@@ -1326,9 +1329,18 @@ function clearHistory(chatId) {
 document.getElementById('fwdCancel').onclick = () => document.getElementById('fwdModal').classList.remove('show');
 
 function toggleSelect(mid) {
+  const nowOn = !selectedIds.has(mid);
   if (selectedIds.has(mid)) selectedIds.delete(mid);
   else selectedIds.add(mid);
   syncSelection();
+  if (nowOn) {
+    const row = document.querySelector(`.mrow[data-mid="${mid}"]`);
+    if (row) {
+      row.classList.remove('pulsing');
+      void row.offsetWidth;
+      row.classList.add('pulsing');
+    }
+  }
 }
 
 function syncSelection() {

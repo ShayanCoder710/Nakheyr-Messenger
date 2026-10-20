@@ -65,6 +65,11 @@ a:hover { text-decoration: underline; }
 button { font-family: inherit; cursor: pointer; }
 input, select, textarea { font-family: inherit; }
 ::selection { background: var(--accent-glow); }
+/* click/selection pulse animations */
+@keyframes convPulse { 0% { transform: scale(1); } 40% { transform: scale(.97); } 100% { transform: scale(1); } }
+@keyframes selPulse { 0% { transform: scale(1); } 45% { transform: scale(1.015); } 100% { transform: scale(1); } }
+.conv.pulsing { animation: convPulse .26s cubic-bezier(.4,0,.2,1); }
+.mrow.pulsing { animation: selPulse .26s cubic-bezier(.4,0,.2,1); }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14); border-radius: 999px; }
