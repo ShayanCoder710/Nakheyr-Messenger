@@ -1,9 +1,16 @@
 @font-face {
   font-family: 'Vazirmatn';
   font-style: normal;
-  font-weight: 400 800;
+  font-weight: 400 700;
   font-display: swap;
   src: url('/static/fonts/Vazirmatn-Medium.ttf') format('truetype');
+}
+@font-face {
+  font-family: 'Vazirmatn';
+  font-style: normal;
+  font-weight: 800;
+  font-display: swap;
+  src: url('/static/fonts/Vazirmatn-ExtraBold.woff2') format('woff2');
 }
 @font-face {
   font-family: 'JetBrains Mono';
@@ -71,6 +78,8 @@ a { color: var(--accent-2); text-decoration: none; }
 a:hover { text-decoration: underline; }
 button { font-family: inherit; cursor: pointer; }
 input, select, textarea { font-family: inherit; }
+/* All bold text uses Vazirmatn ExtraBold (weight 800) */
+b, strong { font-weight: 800; }
 ::selection { background: var(--accent-glow); }
 /* click/selection pulse animations */
 @keyframes convPulse { 0% { transform: scale(1); } 40% { transform: scale(.97); } 100% { transform: scale(1); } }
@@ -509,6 +518,8 @@ input, select, textarea { font-family: inherit; }
   color: var(--muted);
 }
 .bubble .md ul, .bubble .md ol { padding-right: 20px; margin: 4px 0; }
+/* Markdown bold uses Vazirmatn ExtraBold (weight 800) */
+.bubble .md strong, .bubble .md b { font-weight: 800; }
 .bubble .md a { color: var(--accent-2); }
 .bubble .md img { max-width: 100%; border-radius: 10px; }
 .bubble .md table { border-collapse: collapse; margin: 6px 0; }
