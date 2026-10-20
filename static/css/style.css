@@ -56,12 +56,20 @@
   font-family: Vazirmatn, system-ui, -apple-system, "Segoe UI", Tahoma, sans-serif;
 }
 html { color-scheme: dark; }
-* { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; user-select: none; -webkit-user-select: none; }
-/* Re-enable text selection only on content meant to be read/copied */
+* { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: thin; scrollbar-color: rgba(255, 255, 255, .18) transparent; }
+/* Only UI controls lose text selection; message content stays selectable */
+button, a, label, .icon-btn, .btn, .fab, .conv, .ctx-item,
+.am-item, .am-item-narrow,
+.side-head, .side-title, .conv-section-head, .stat-card,
+.mv-btn, .mv-tools, .report-item, .tbl-actions, .admin-side a,
+.ep-tabs button, .ep-body button, .poll-close-btn, .poll-add-btn,
+.seg button, .exp-seg button, .switch-row,
+.nav, .chip, .day-sep span, .m-meta span { user-select: none; -webkit-user-select: none; }
+/* Re-enable text selection on content meant to be read/copied */
 input, textarea, code, pre,
-.bubble .txt, .bubble .md, .sys-msg span, .m-meta,
+.bubble .txt, .bubble .md, .bubble .md *, .bubble .file-card, .bubble .file-card *,
 .msg-item .mi-body, .report-item p, .search-results,
-.conv-empty, .perm-note, .fwd-list, .pv-list { user-select: text; -webkit-user-select: text; }
+.conv .body, .conv .row1, .conv .row2 { user-select: text; -webkit-user-select: text; }
 html, body { height: 100%; }
 body {
   background: var(--grad) fixed;
