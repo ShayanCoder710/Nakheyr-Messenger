@@ -5,6 +5,13 @@
   font-display: swap;
   src: url('/static/fonts/Vazirmatn-Medium.ttf') format('truetype');
 }
+@font-face {
+  font-family: 'JetBrains Mono';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('/static/fonts/JetBrainsMono-Bold.ttf') format('truetype');
+}
 
 :root {
   --bg: #0a0a0c;
@@ -70,6 +77,16 @@ input, select, textarea { font-family: inherit; }
 @keyframes selPulse { 0% { transform: scale(1); } 45% { transform: scale(1.015); } 100% { transform: scale(1); } }
 .conv.pulsing { animation: convPulse .26s cubic-bezier(.4,0,.2,1); }
 .mrow.pulsing { animation: selPulse .26s cubic-bezier(.4,0,.2,1); }
+/* message deletion animation: fade + slide down, then collapse height */
+@keyframes msgFadeOut { 0% { opacity: 1; } 100% { opacity: 0; } }
+.mrow.removing {
+  animation: msgFadeOut .24s ease forwards;
+  max-height: 200px; overflow: hidden;
+}
+.mrow.removing-done {
+  height: 0; max-height: 0; margin: 0; padding: 0; overflow: hidden;
+  transition: .18s ease; opacity: 0;
+}
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: rgba(255, 255, 255, .14); border-radius: 999px; }

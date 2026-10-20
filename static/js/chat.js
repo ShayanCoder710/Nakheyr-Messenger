@@ -1294,11 +1294,22 @@ async function doForward(chatId) {
   } else toast(r.error, 'error');
 }
 
-function removeMsgRow(mid) {
-  const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`) || document.querySelector(`.sys-msg[data-mid="${mid}"]`);
+function deleteRow(mid) {
+  // Animate out (fade + collapse) then remove from DOM.
+  const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`);
   if (!wrapper) return;
-  const target = wrapper.classList.contains('mrow') ? wrapper : (wrapper.querySelector('.mrow') || wrapper);
-  target.remove();
+  const row = wrapper.classList.contains('mrow') ? wrapper : wrapper.querySelector('.mrow');
+  const el = row ? row : wrapper;
+  el.classList.add('removing');
+  setTimeout(() => {
+    el.classList.remove('removing');
+    el.classList.add('removing-done');
+    setTimeout(() => el.remove(), 200);
+  }, 220);
+}
+
+function removeMsgRow(mid) {
+  deleteRow(mid);
 }
 
 function hideForMe(mid) {

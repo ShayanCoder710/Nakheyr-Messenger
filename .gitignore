@@ -4,3 +4,5 @@ __pycache__/
 uploads/
 instance/
 .DS_Store
+# local scratch / test artifacts
+static/_preview*.html

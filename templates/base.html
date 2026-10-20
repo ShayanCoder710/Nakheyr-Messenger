@@ -43,7 +43,14 @@ window.md = function(src) {
   if (!src) return '';
   if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
     try {
-      const raw = marked.parse(src, { breaks: true, gfm: true });
+      // Telegram-style: *text* = bold, _text_ = italic, `code` / ```block``` = monospace.
+      // marked renders *text* as <em> by default, so convert single asterisks
+      // to double ones first (bold), leaving underscore italics untouched.
+      const pre = String(src).replace(
+        /(^|[^*])\*(?!\*)([^*\n]+)\*(?!\*)/g,
+        '$1**$2**'
+      );
+      const raw = marked.parse(pre, { breaks: true, gfm: true });
       return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'form'] });
     } catch (e) {
       return window.esc(src).replace(/\n/g, '<br>');
