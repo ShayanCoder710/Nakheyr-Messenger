@@ -1238,13 +1238,13 @@ body.dragging::after {
    ═══════════════════════════════════════════════════════════════ */
 .poll-card {
   margin-top: 4px; min-width: 250px; max-width: 340px;
-  background: linear-gradient(180deg, rgba(255,255,255,.045), rgba(255,255,255,.015));
+  background: var(--panel-2);
   border: 1px solid var(--line-2); border-radius: 16px;
   padding: 0; overflow: hidden;
 }
 .mrow.mine-row .poll-card {
-  border-color: rgba(229, 57, 59, .35);
-  background: linear-gradient(180deg, rgba(229,57,59,.14), rgba(229,57,59,.04));
+  border-color: var(--line-2);
+  background: var(--panel-2);
 }
 .poll-head {
   display: flex; align-items: center; gap: 8px;
@@ -1271,7 +1271,7 @@ body.dragging::after {
   padding: 10px 13px 4px; font-size: 13.5px; font-weight: 800; line-height: 1.6;
   color: var(--text);
 }
-.mrow.mine-row .poll-q { color: #fff; }
+.mrow.mine-row .poll-q { color: var(--text); }
 .poll-opts { display: flex; flex-direction: column; gap: 5px; padding: 6px 10px 10px; }
 .poll-opt {
   position: relative; display: flex; align-items: center; gap: 8px;
@@ -1303,7 +1303,7 @@ body.dragging::after {
   border-radius: 10px;
 }
 .mrow.mine-row .poll-opt .opt-bar {
-  background: linear-gradient(90deg, rgba(255,255,255,.5), rgba(255,255,255,.15));
+  background: linear-gradient(90deg, rgba(229,57,59,.35), rgba(229,57,59,.12));
 }
 .poll-foot {
   display: flex; justify-content: space-between; align-items: center;
