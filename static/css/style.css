@@ -507,10 +507,12 @@ b, strong { font-weight: 800; }
   background: rgba(0, 0, 0, .32); border: 1px solid var(--line); border-radius: 10px;
   padding: 8px 10px; overflow-x: auto; direction: ltr; text-align: left;
   font-size: 12px; margin: 6px 0;
+  font-family: 'JetBrains Mono', monospace;
 }
 .bubble .md code {
   background: rgba(0, 0, 0, .32); border: 1px solid var(--line); border-radius: 6px;
   padding: 1px 5px; font-size: .9em; direction: ltr; display: inline-block;
+  font-family: 'JetBrains Mono', monospace;
 }
 .bubble .md pre code { background: none; border: none; padding: 0; }
 .bubble .md blockquote {
@@ -627,7 +629,7 @@ b, strong { font-weight: 800; }
   border-radius: 12px; padding: 0 12px; color: var(--muted); overflow: hidden; min-height: var(--ctl-h);
   display: flex; align-items: center;
   text-overflow: ellipsis; white-space: nowrap; direction: ltr; text-align: left;
-  font-family: monospace;
+  font-family: 'JetBrains Mono', monospace;
 }
 .inv-row .btn { min-height: var(--ctl-h); }
 
