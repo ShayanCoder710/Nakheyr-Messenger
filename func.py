@@ -49,6 +49,7 @@ CODE_NAMES = {'makefile', 'dockerfile', 'jenkinsfile', 'rakefile', 'gemfile', 'p
 ALLOWED_EXT = IMAGE_EXT | VIDEO_EXT | AUDIO_EXT | DOC_EXT | ARCHIVE_EXT | CODE_EXT
 # فرمت‌هایی که نباید مستقیم (same-origin) اجرا شوند → به‌صورت دانلود فرستاده می‌شوند
 INLINE_UNSAFE_EXT = {'html', 'htm', 'xhtml', 'svg', 'js', 'mjs', 'cjs', 'xml'}
+AVATAR_EXT = IMAGE_EXT - {'svg'}
 MAX_FILE_MB = 50
 
 
@@ -127,6 +128,9 @@ def _ensure_columns():
         ('chat_members', 'muted', "BOOLEAN NOT NULL DEFAULT 0"),
         ('chat_members', 'archived', "BOOLEAN NOT NULL DEFAULT 0"),
         ('chat_members', 'permissions', "TEXT NULL"),
+        ('chat_members', 'draft', "TEXT NULL"),
+        ('chat_members', 'slow_mode_last', "DATETIME NULL"),
+        ('chats', 'slow_mode', "INTEGER NOT NULL DEFAULT 0"),
         ('messages', 'fwd_from_id', "INTEGER NULL"),
         ('messages', 'fwd_from_name', "VARCHAR(60) NOT NULL DEFAULT ''"),
         ('users', 'read_receipts', "BOOLEAN NOT NULL DEFAULT 1"),
@@ -289,7 +293,9 @@ def require_admin(fn):
 
 def save_avatar(filename):
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext not in IMAGE_EXT:
+    # SVG is allowed as a chat file, but never as an avatar: it is served
+    # from our origin and can carry script when opened directly.
+    if ext not in AVATAR_EXT:
         return ''
     user = current_user()
     fname = f'{user.id}_{secrets.token_hex(4)}.{ext}'
@@ -425,7 +431,7 @@ def create_channel(owner, name, description, is_public=True):
 
 def save_chat_avatar(owner, filename):
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    if ext not in IMAGE_EXT:
+    if ext not in AVATAR_EXT:
         return ''
     fname = f'chat_{owner.id}_{secrets.token_hex(4)}.{ext}'
     target = current_app.config['AVATAR_DIR']
@@ -617,13 +623,14 @@ def bump_online(user):
 
 
 def avatar_html(user, size=''):
+    from markupsafe import escape
     cls = f'avatar {size}'.strip()
     if isinstance(user, dict):
         av = user.get('avatar', '')
-        initial = (user.get('display_name') or '?').strip()[:1]
-        inner = f'<img src="{av}" alt="">' if av else initial
+        initial = escape((user.get('display_name') or '?').strip()[:1])
+        inner = f'<img src="{escape(av)}" alt="">' if av else initial
         return f'<div class="{cls}">{inner}</div>'
-    inner = f'<img src="{user.avatar_url}" alt="">' if user.avatar else (user.public_name or '?').strip()[:1]
+    inner = f'<img src="{escape(user.avatar_url)}" alt="">' if user.avatar else escape((user.public_name or '?').strip()[:1])
     return f'<div class="{cls}">{inner}</div>'
 
 

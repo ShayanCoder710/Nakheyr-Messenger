@@ -928,6 +928,12 @@ table.data td { padding: 12px 14px; border-bottom: 1px solid var(--line); font-s
   padding: 8px 16px; font-size: 12px; color: var(--muted);
   background: var(--bg-2); border-bottom: 1px solid var(--line); text-align: center;
 }
+.slow-hint {
+  display: flex; align-items: center; justify-content: center; gap: 6px;
+  color: var(--gold); background: rgba(240, 179, 76, .08);
+  border-bottom-color: rgba(240, 179, 76, .22);
+}
+.slow-hint .bi-ic { width: 14px; height: 14px; }
 table.data tr:last-child td { border: none; }
 table.data tr:hover td { background: rgba(255, 255, 255, .03); }
 .tbl-actions { display: flex; gap: 6px; flex-wrap: wrap; }

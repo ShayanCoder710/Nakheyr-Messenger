@@ -51,14 +51,12 @@ window.md = function(src) {
         '$1**$2**'
       );
       const raw = marked.parse(pre, { breaks: true, gfm: true });
-      // Strip <br> that appear between block elements (list items, code blocks,
-      // paragraphs) so a single newline doesn't add a doubled visual gap.
+      // With breaks:true a single newline becomes <br> (Telegram-like), but
+      // marked can also add one right before a closing block tag. Remove only
+      // those edge cases so normal line breaks inside messages survive.
       const cleaned = raw
-        .replace(/<br\s*\/>\s*(<\/li>\s*)/g, '$1')        // br before </li>
-        .replace(/(<li>)\s*<br\s*\/>/g, '$1')              // br right after <li>
-        .replace(/(<br\s*\/>)\s*(<\/(p|ul|ol|pre|blockquote)>)/g, '$1$2') // br before closing block
-        .replace(/(<\/(p|ul|ol|pre|blockquote)>)\s*<br\s*\/>/g, '$1')    // br after block
-        .replace(/(<\/li>)\s*<br\s*\/>/g, '$1');            // br after </li>
+        .replace(/<br\s*\/?>\s*(?=<\/(?:p|li|ul|ol|pre|blockquote|h[1-6])>)/gi, '')
+        .replace(/(<(?:p|li|ul|ol|pre|blockquote|h[1-6])(?:\s[^>]*)?>)\s*<br\s*\/?>/gi, '$1');
       return DOMPurify.sanitize(cleaned, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'form'] });
     } catch (e) {
       return window.esc(src).replace(/\n/g, '<br>');
@@ -105,7 +103,7 @@ window.avatarHtml = function(name, avatar, online, size) {
   return '<div class="' + cls + '">' + (avatar ? '<img src="' + avatar + '" alt="">' : initial) + dot + '</div>';
 };
 window.avatarInner = function(name, avatar, online) {
-  const initial = (name || '?').trim().charAt(0);
+  const initial = esc((name || '?').trim().charAt(0));
   const dot = avatar ? '' : (online === undefined ? '' : '<i class="dot ' + (online ? 'on' : 'off') + '"></i>');
   return (avatar ? '<img src="' + avatar + '" alt="">' : initial) + dot;
 };

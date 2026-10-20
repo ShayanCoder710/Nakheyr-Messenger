@@ -90,6 +90,7 @@ class Chat(db.Model):
     avatar = db.Column(db.String(120), default='')
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     is_public = db.Column(db.Boolean, default=True)
+    slow_mode = db.Column(db.Integer, default=0)  # seconds between messages (0 = off)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     members = db.relationship('ChatMember', backref='chat', lazy=True, cascade='all, delete-orphan')
     messages = db.relationship('Message', backref='chat', lazy=True, cascade='all, delete-orphan')
@@ -111,6 +112,7 @@ class Chat(db.Model):
             'avatar': self.avatar_url,
             'owner_id': self.owner_id,
             'is_public': bool(self.is_public),
+            'slow_mode': int(self.slow_mode or 0),
         }
         if current_user:
             data['is_notes'] = bool(self.chat_type == 'dm' and self.members and all(m.user_id == getattr(current_user, 'id', 0) for m in self.members))
@@ -142,6 +144,8 @@ class ChatMember(db.Model):
     permissions = db.Column(db.Text, default='')
     muted = db.Column(db.Boolean, default=False)
     archived = db.Column(db.Boolean, default=False)
+    draft = db.Column(db.Text, default='')
+    slow_mode_last = db.Column(db.DateTime, nullable=True)
     joined_at = db.Column(db.DateTime, default=datetime.utcnow)
     user = db.relationship('User', backref='memberships')
 

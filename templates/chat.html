@@ -117,6 +117,7 @@
       </button>
       <div class="typing-bar" id="typingBar"></div>
       <div class="channel-hint" id="channelHint" style="display:none"><span>{{ bi('lock') }} در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
+      <div class="channel-hint slow-hint" id="slowModeHint" style="display:none"></div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
         <button class="btn sm ghost" id="bulkCancel" title="بستن">{{ bi('x-lg') }}</button>
         <span id="bulkCount"></span>
@@ -233,6 +234,17 @@
     <div class="inv-row">
       <code id="csInviteLink" class="inv-link"></code>
       <button class="btn sm" id="csCopyInvite">کپی</button>
+    </div>
+    <div id="csSlowWrap">
+      <label class="label">حالت آهسته (فاصلهٔ بین پیام‌ها)</label>
+      <div class="seg" id="csSlow">
+        <button type="button" data-val="0" class="on">خاموش</button>
+        <button type="button" data-val="5">۵ ثانیه</button>
+        <button type="button" data-val="15">۱۵ ثانیه</button>
+        <button type="button" data-val="30">۳۰ ثانیه</button>
+        <button type="button" data-val="60">۱ دقیقه</button>
+      </div>
+      <p class="sub" id="csSlowNote" style="margin-top:6px">ادمن‌ها و صاحب گپ محدودیت ندارن</p>
     </div>
     <div class="cs-members-box" id="csMembersBox">
       <div class="mb-head" id="csMembersHead">اعضا</div>
@@ -491,7 +503,8 @@ window.CHAT_DATA = {
   chat: {{ chat.to_public(me) | tojson if chat else 'null' }},
   role: {{ role | tojson }},
   members: {{ members | tojson }},
-  initialMessages: {{ messages | tojson }}
+  initialMessages: {{ messages | tojson }},
+  draft: {{ (draft or '') | tojson }}
 };
 window.CURRENT_CHAT = {{ chat.id | tojson if chat else 'null' }};
 window.JOINED = {{ 'true' if chat is none or role else 'false' }};

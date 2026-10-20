@@ -11,6 +11,7 @@ function applyAccent(color) {
 applyAccent(window.ME && window.ME.accent);
 
 let currentChat = window.CURRENT_CHAT;
+let composerChatId = window.CURRENT_CHAT || null;
 let pendingFile = null;
 let pendingReply = null;
 let selectedIds = new Set();
@@ -53,6 +54,31 @@ function api(path, body) {
   }).then(r => r.json());
 }
 
+let draftTimer = null;
+function saveDraftNow(chatId, text) {
+  if (!chatId) return;
+  api('/api/draft', { chat_id: +chatId, text: String(text == null ? '' : text) }).catch(() => {});
+}
+function flushDraftFor(chatId, text) {
+  clearTimeout(draftTimer);
+  draftTimer = null;
+  if (chatId) saveDraftNow(chatId, text);
+}
+function flushDraft() {
+  const input = document.getElementById('msgInput');
+  if (composerChatId) flushDraftFor(composerChatId, input ? input.value : '');
+  composerChatId = null;
+}
+function queueDraftSave() {
+  if (!composerChatId) return;
+  clearTimeout(draftTimer);
+  draftTimer = setTimeout(() => {
+    draftTimer = null;
+    const input = document.getElementById('msgInput');
+    saveDraftNow(composerChatId, input ? input.value : '');
+  }, 600);
+}
+
 function getMember(id) {
   if (CD.members && id !== undefined) {
     const m = CD.members.find(x => x.id === id);
@@ -63,7 +89,7 @@ function getMember(id) {
 
 function avBox(name, avatar, online, size) {
   const cls = ('avatar' + (size ? ' ' + size : '')).trim();
-  const init = (name || '?').trim().charAt(0);
+  const init = esc((name || '?').trim().charAt(0));
   const dot = avatar ? '' : (online === undefined ? '' : `<i class="dot ${online ? 'on' : 'off'}"></i>`);
   return `<div class="${cls}">${avatar ? `<img src="${avatar}" alt="">` : init}${dot}</div>`;
 }
@@ -82,9 +108,10 @@ function reactionChips(m) {
   const mine = m.my_reaction;
   const agg = {};
   Object.values(m.reactions || {}).forEach(e => { agg[e] = (agg[e] || 0) + 1; });
-  return Object.entries(agg).map(([e, n]) =>
-    `<span class="${e === mine ? 'mine' : ''}" data-emoji="${e}" data-mid="${m.id}"><span class="rx-e">${e}</span>${n}</span>`
-  ).join('');
+  return Object.entries(agg).map(([e, n]) => {
+    const safe = esc(e);
+    return `<span class="${e === mine ? 'mine' : ''}" data-emoji="${safe}" data-mid="${m.id}"><span class="rx-e">${safe}</span>${n}</span>`;
+  }).join('');
 }
 
 function canPinMsg(m) {
@@ -451,6 +478,23 @@ function appendMsg(m) {
   if (selecting) syncSelection();
 }
 
+function renderSlowHint() {
+  const el = document.getElementById('slowModeHint');
+  if (!el) return;
+  const sm = +((CD.chat && CD.chat.slow_mode) || 0);
+  if (!sm) {
+    el.style.display = 'none';
+    el.innerHTML = '';
+    return;
+  }
+  const label = sm >= 60
+    ? (sm % 60 === 0 ? (sm / 60) + ' دقیقه' : Math.round(sm / 60 * 10) / 10 + ' دقیقه')
+    : sm + ' ثانیه';
+  el.innerHTML = bi('hourglass-split')
+    + ' <span>حالت آهسته فعاله — هر ' + esc(label) + ' یک پیام (مدیران مستثنی)</span>';
+  el.style.display = 'flex';
+}
+
 function setHead() {
   const headAv = document.getElementById('chatHeadAvatar');
   const name = document.getElementById('chatHeadName');
@@ -461,6 +505,7 @@ function setHead() {
   if (!CD.chat) return;
   let displayName, subText, av = '', subHtml = false;
   const c = CD.chat;
+  renderSlowHint();
   joinBtn.style.display = 'none';
   repBtn.style.display = 'none';
   peerBtn.style.display = 'none';
@@ -789,9 +834,10 @@ function setActiveConv(id) {
 }
 
 function closeChatPane(syncUrl) {
+  flushDraft();
+  currentChat = null;
   document.getElementById('msgsPane').classList.remove('open');
   document.getElementById('mainEmpty').style.display = 'grid';
-  currentChat = null;
   document.querySelector('.chat-layout').classList.remove('chatted');
   document.querySelectorAll('.conv.active').forEach(c => c.classList.remove('active'));
   if (syncUrl !== false && location.pathname !== '/') history.pushState({}, '', '/');
@@ -804,6 +850,13 @@ function setChatted(on) {
 document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
 async function openChat(id, opts) {
+  const inputEl = document.getElementById('msgInput');
+  if (composerChatId) {
+    flushDraftFor(composerChatId, inputEl ? inputEl.value : '');
+  } else {
+    clearTimeout(draftTimer);
+    draftTimer = null;
+  }
   currentChat = +id;
   if (typeof closeChatSearch === 'function') closeChatSearch();
   const r = await fetch('/api/messages/' + id);
@@ -837,6 +890,14 @@ async function openChat(id, opts) {
   document.getElementById('msgInput').disabled = !canPost;
   document.getElementById('btnAttach').style.visibility = canPost ? 'visible' : 'hidden';
   document.getElementById('channelHint').style.display = canPost ? 'none' : 'flex';
+  // Restore the saved draft for this chat (keep locally typed text when the
+  // same chat is re-opened in place).
+  const savedDraft = typeof j.draft === 'string' ? j.draft : '';
+  if (+composerChatId !== +id) inputEl.value = savedDraft;
+  composerChatId = +id;
+  inputEl.style.height = 'auto';
+  inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+  renderSlowHint();
   renderAllMessages();
   attachMore();
   api('/api/mark-read', { chat_id: currentChat });
@@ -1205,12 +1266,13 @@ document.addEventListener('click', e => {
 let sending = false;
 async function sendText() {
   if (sending || !currentChat) return;
+  const chatId = currentChat;
   const input = document.getElementById('msgInput');
   if (input.disabled) return;
   const text = input.value.trim();
   if (!text && !pendingFile) return;
   sending = true;
-  const body = { chat_id: currentChat, content: text };
+  const body = { chat_id: chatId, content: text };
   if (pendingFile) {
     // User can force-send images/videos as a plain downloadable file.
     body.msg_type = pendingFile.asFile ? 'file' : pendingFile.kind;
@@ -1223,20 +1285,24 @@ async function sendText() {
   try {
     const r = await api('/api/message/send', body);
     if (r.ok) {
-      appendMsg(r.message);
-      input.value = '';
-      input.style.height = 'auto';
+      if (currentChat === chatId) {
+        appendMsg(r.message);
+        input.value = '';
+        input.style.height = 'auto';
+        pendingReply = null;
+        document.getElementById('attachPreview').classList.remove('show');
+        document.getElementById('attachPreview').innerHTML = '';
+        document.getElementById('replyPreview').style.display = 'none';
+        // Keep the composer focused so the mobile keyboard stays up between
+        // messages (Telegram behavior). Refocusing right after a user gesture
+        // is within the activation window, so iOS/Android keep it open.
+        input.focus({ preventScroll: true });
+        try { input.setSelectionRange(0, 0); } catch (_) {}
+      }
       pendingFile = null;
-      pendingReply = null;
-      document.getElementById('attachPreview').classList.remove('show');
-      document.getElementById('attachPreview').innerHTML = '';
-      document.getElementById('replyPreview').style.display = 'none';
+      if (composerChatId === chatId) flushDraftFor(chatId, input.value);
+      else flushDraftFor(chatId, '');
       refreshConvList();
-      // Keep the composer focused so the mobile keyboard stays up between
-      // messages (Telegram behavior). Refocusing right after a user gesture
-      // is within the activation window, so iOS/Android keep it open.
-      input.focus({ preventScroll: true });
-      try { input.setSelectionRange(0, 0); } catch (_) {}
     } else toast(r.error, 'error');
   } finally {
     sending = false;
@@ -1538,6 +1604,7 @@ document.getElementById('msgInput').addEventListener('input', function () {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 140) + 'px';
   if (!currentChat) return;
+  queueDraftSave();
   if (!typingSent) {
     S.emit('typing', { chat_id: currentChat });
     typingSent = true;
@@ -2071,6 +2138,14 @@ function openSettings() {
     if (vis.querySelector('.cs-note')) vis.querySelector('.cs-note').style.display = 'none';
   }
   segSelect(vis, c.is_public ? 'public' : 'private');
+  // Slow mode UI
+  const slowSeg = document.getElementById('csSlow');
+  const slowWrap = document.getElementById('csSlowWrap');
+  if (slowWrap && slowSeg) {
+    slowWrap.style.display = canEdit ? '' : 'none';
+    const slowVal = c.slow_mode ? String(c.slow_mode) : '0';
+    segSelect(slowSeg, slowVal);
+  }
   document.getElementById('csAvLabel').innerHTML = c.avatar ? bi('image') + ' آواتار فعلی — برای تغییر عکس جدید انتخاب کن' : bi('camera') + ' انتخاب عکس…';
   document.getElementById('csAvInput').value = '';
   const csPrev = document.getElementById('csAvPrev');
@@ -2152,6 +2227,7 @@ document.getElementById('chatSearchNext').onclick = () => goToMatch(_srchIdx + 1
 document.getElementById('chatSearchPrev').onclick = () => goToMatch(_srchIdx - 1);
 document.getElementById('csClose').onclick = () => document.getElementById('chatSettingsModal').classList.remove('show');
 document.querySelectorAll('#csVis button').forEach(b => b.onclick = () => segSelect(document.getElementById('csVis'), b.dataset.val));
+document.querySelectorAll('#csSlow button').forEach(b => b.onclick = () => segSelect(document.getElementById('csSlow'), b.dataset.val));
 
 document.getElementById('csCopyInvite').onclick = () => {
   const link = document.getElementById('csInviteLink').textContent;
@@ -2209,11 +2285,13 @@ document.getElementById('csSave').onclick = async () => {
   const role = myRole();
   const canEdit = role === 'owner' || role === 'admin' || window.ME.is_admin;
   const visVal = document.getElementById('csVis').dataset.value;
+  const slowVal = document.getElementById('csSlow').dataset.value || '0';
   const payload = canEdit
     ? {
         name: document.getElementById('csNameInput').value.trim(),
         description: document.getElementById('csDescInput').value.trim(),
-        is_public: visVal === 'public'
+        is_public: visVal === 'public',
+        slow_mode: parseInt(slowVal, 10) || 0
       }
     : {};
   if (!Object.keys(payload).length) {
@@ -2771,6 +2849,13 @@ document.addEventListener('contextmenu', e => {
 if (CD.chat) {
   setHead();
   document.getElementById('mainEmpty').style.display = 'none';
+  const initialDraft = typeof CD.draft === 'string' ? CD.draft : '';
+  if (initialDraft) {
+    const input = document.getElementById('msgInput');
+    input.value = initialDraft;
+    input.style.height = 'auto';
+    input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+  }
   renderAllMessages();
   loadPinned();
   refreshConvList();
@@ -2921,7 +3006,7 @@ S.on('stop_typing', d => {
 });
 
 S.on('presence_update', d => {
-  if (currentChat && CD.chat && CD.chat.chat_type === 'dm' && d.user_id === CD.chat.peer.id) {
+  if (currentChat && CD.chat && CD.chat.chat_type === 'dm' && CD.chat.peer && d.user_id === CD.chat.peer.id) {
     CD.chat.peer.status = d.status;
     setHead();
   }
@@ -2982,7 +3067,7 @@ S.on('profile_updated', p => {
   refreshSideAvatar();
   const csm = document.getElementById('chatSettingsModal');
   if (csm && csm.classList.contains('show') && currentChat) loadMembers(currentChat);
-  if (document.getElementById('myProfilePage').style.display === 'grid') openProfilePage();
+  if (document.getElementById('myProfilePage').style.display === 'flex') openProfilePage();
 });
 
 S.on('account_deleted', () => {

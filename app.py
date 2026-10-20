@@ -210,8 +210,10 @@ def chat_page(chat_id):
         msgs.append(m.to_dict(user.id))
     _attach_polls_to_messages(msgs, user)
     members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
+    membership = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
     return render_template('chat.html', chat=chat, user=user, messages=msgs,
-                           members=members, role=my_role_in(user, chat))
+                           members=members, role=my_role_in(user, chat),
+                           draft=(membership.draft if membership else '') or '')
 
 
 @app.route('/chat/<username>')
@@ -326,6 +328,24 @@ def api_notes():
     return jsonify(ok=True, chat_id=chat.id, created=created)
 
 
+@app.route('/api/draft', methods=['POST'])
+@require_auth
+def api_draft():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    try:
+        chat_id = int(data.get('chat_id') or 0)
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error='گپ معتبر نیست')
+    text = str(data.get('text') or '')[:2000]
+    m = ChatMember.query.filter_by(chat_id=chat_id, user_id=user.id).first()
+    if not m:
+        return jsonify(ok=False, error='عضو این گپ نیستی')
+    m.draft = text
+    db.session.commit()
+    return jsonify(ok=True, draft=text)
+
+
 @app.route('/api/group/create', methods=['POST'])
 @require_auth
 def api_group_create():
@@ -364,10 +384,13 @@ def api_chat_settings(chat_id):
     data = request.get_json(silent=True) or {}
     wants_visibility = 'is_public' in data
     wants_edit = any(k in data for k in ('name', 'description'))
+    wants_slow = 'slow_mode' in data
     if wants_visibility and role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='تغییر نوع گپ فقط برای صاحب و ادمین گپ')
     if wants_edit and role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='تغییر نام و توضیح فقط برای صاحب و ادمین گپ')
+    if wants_slow and role not in ('owner', 'admin') and not user.is_admin:
+        return jsonify(ok=False, error='تغییر حالت آهسته فقط برای صاحب و ادمین گپ')
     noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
     old_name = chat.name
     old_desc = chat.description or ''
@@ -385,6 +408,15 @@ def api_chat_settings(chat_id):
     if wants_visibility:
         chat.is_public = bool(data.get('is_public'))
         changed = True
+    if 'slow_mode' in data:
+        try:
+            chat.slow_mode = max(0, min(3600, int(data.get('slow_mode') or 0)))
+        except (TypeError, ValueError):
+            return jsonify(ok=False, error='مقدار حالت آهسته معتبر نیست')
+        changed = True
+        if not chat.slow_mode:
+            # Re-enabling later should not inherit an old cooldown.
+            ChatMember.query.filter_by(chat_id=chat.id).update({'slow_mode_last': None})
     if changed:
         db.session.commit()
         for mid in chat_member_ids(chat.id):
@@ -638,20 +670,33 @@ def api_send_message():
                 db.session.flush()
             else:
                 return jsonify(ok=False, error='دسترسی نداری')
+    member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+    role = member.role if member else None
     if chat.chat_type == 'dm':
         peer = next((m.user for m in chat.members if m.user_id != user.id), None)
         if peer and is_blocked(user.id, peer.id):
             return jsonify(ok=False, error='کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونی پیام بدی')
     if chat.chat_type == 'channel':
-        role = my_role_in(user, chat)
         if chat.owner_id != user.id and role != 'admin':
             return jsonify(ok=False, error='در کانال فقط ادمین‌ها پیام می‌فرستن')
+    # Slow mode: per-member cooldown (owners/admins/site admins exempt)
+    if chat.slow_mode and not user.is_admin and chat.owner_id != user.id and role != 'admin':
+        if member and member.slow_mode_last:
+            wait = (datetime.utcnow() - member.slow_mode_last).total_seconds()
+            remain = chat.slow_mode - wait
+            if remain > 0:
+                secs = int(remain)
+                if secs >= 60:
+                    mins, sec = secs // 60, secs % 60
+                    wait_txt = (f'{mins} دقیقه و {sec} ثانیه' if sec else f'{mins} دقیقه')
+                else:
+                    wait_txt = f'{secs} ثانیه'
+                return jsonify(ok=False, error=f'حالت آهسته فعاله — {wait_txt} صبر کن')
     msg_type = data.get('msg_type', 'text')
     if msg_type not in ('text', 'image', 'video', 'audio', 'file'):
         msg_type = 'file'
     if chat.chat_type == 'group' and not user.is_admin:
-        member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
-        if member and member.role not in ('owner', 'admin'):
+        if member and role not in ('owner', 'admin'):
             p = member_perms(member)
             need = 'send_media' if msg_type != 'text' else 'send_messages'
             if not p.get(need, False):
@@ -672,6 +717,9 @@ def api_send_message():
                 content=content, file_name=file_name, file_path=file_path,
                 reply_to=data.get('reply_to') or None)
     db.session.add(m)
+    # Start this member's slow-mode cooldown
+    if chat.slow_mode and member and not user.is_admin and role not in ('owner', 'admin'):
+        member.slow_mode_last = datetime.utcnow()
     db.session.commit()
     payload = m.to_dict(user.id)
     _attach_polls_to_messages([payload], user)
@@ -682,6 +730,21 @@ def api_send_message():
     return jsonify(ok=True, message=payload)
 
 
+def _clean_reaction(value):
+    """Reactions are rendered inside HTML on the client; only allow short
+    plain emoji strings so they can never smuggle markup."""
+    if not isinstance(value, str):
+        return ''
+    value = value.strip()
+    if not value or len(value) > 24:
+        return ''
+    if any(ch in value for ch in '<>&"\'`'):
+        return ''
+    if any(ord(ch) < 32 or ord(ch) == 127 for ch in value):
+        return ''
+    return value
+
+
 @app.route('/api/message/react', methods=['POST'])
 @require_auth
 def api_react():
@@ -690,7 +753,13 @@ def api_react():
     m = Message.query.get(int(data.get('message_id') or 0))
     if not m:
         abort(404)
-    emoji = data.get('emoji')
+    chat = Chat.query.get(m.chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری'), 403
+    if chat.chat_type != 'dm' and not user.is_admin:
+        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+            return jsonify(ok=False, error='عضو این گپ نیستی'), 403
+    emoji = _clean_reaction(data.get('emoji'))
     if not emoji:
         return jsonify(ok=False, error='ایموجی بی‌مورد')
     current = m.react_dict()
@@ -981,12 +1050,28 @@ def api_blocks():
 def api_report():
     user = current_user()
     data = request.get_json(silent=True) or {}
-    target = int(data.get('user_id') or 0)
-    reason = (data.get('reason') or '').strip()
-    if not target or not reason:
+    try:
+        target = int(data.get('user_id') or 0)
+    except (TypeError, ValueError):
+        target = 0
+    reason = (data.get('reason') or '').strip()[:300]
+    reported = User.query.get(target)
+    if not target or not reported or reported.id == user.id:
+        return jsonify(ok=False, error='کاربر معتبر نیست')
+    if not reason:
         return jsonify(ok=False, error='دلیل رو بنویس')
+    message_id = data.get('message_id') or None
+    if message_id:
+        try:
+            msg = Message.query.get(int(message_id))
+        except (TypeError, ValueError):
+            msg = None
+        msg_chat = Chat.query.get(msg.chat_id) if msg else None
+        if not msg or msg.sender_id != reported.id or not msg_chat or not can_view_chat(user, msg_chat):
+            return jsonify(ok=False, error='پیام گزارش معتبر نیست')
+        message_id = msg.id
     db.session.add(Report(reporter_id=user.id, reported_id=target,
-                          message_id=data.get('message_id') or None, reason=reason))
+                          message_id=message_id, reason=reason))
     db.session.commit()
     flash('گزارشتت ثبت شد. ادمین‌ها بررسی می‌کنن.', 'success')
     return jsonify(ok=True)
@@ -1096,7 +1181,14 @@ def api_avatar():
 
 @app.route('/files/avatar/<path:fname>')
 def static_avatar(fname):
-    return send_from_directory(app.config['AVATAR_DIR'], fname, max_age=0)
+    ext = fname.rsplit('.', 1)[-1].lower() if '.' in fname else ''
+    if ext in INLINE_UNSAFE_EXT:
+        abort(404)
+    resp = send_from_directory(app.config['AVATAR_DIR'], fname, max_age=0)
+    resp.headers['X-Content-Type-Options'] = 'nosniff'
+    resp.headers['Content-Security-Policy'] = "default-src 'none'; style-src 'unsafe-inline'; sandbox"
+    resp.headers['Cache-Control'] = 'no-cache, no-store, must-revalidate'
+    return resp
 
 
 @app.route('/files/<path:fname>')
@@ -1443,7 +1535,8 @@ def api_messages(chat_id):
         q = q.filter(Message.id < before)
     msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]
     members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
-    joined = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first() is not None or user.is_admin
+    membership = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+    joined = membership is not None or user.is_admin
     out_msgs = [m.to_dict(user.id) for m in msgs]
     _attach_polls_to_messages(out_msgs, user)
     return jsonify(
@@ -1452,6 +1545,7 @@ def api_messages(chat_id):
         role=my_role_in(user, chat),
         members=members,
         joined=joined,
+        draft=(membership.draft if membership else '') or '',
     )
 
 
@@ -1628,6 +1722,12 @@ def on_typing(data):
     chat_id = data.get('chat_id')
     if not user or not chat_id:
         return
+    try:
+        chat_id = int(chat_id)
+    except (TypeError, ValueError):
+        return
+    if not user.is_admin and not ChatMember.query.filter_by(chat_id=chat_id, user_id=user.id).first():
+        return
     for mid in chat_member_ids(chat_id):
         if mid != user.id:
             emit('typing', {'chat_id': chat_id, 'user_id': user.id,
@@ -1639,6 +1739,12 @@ def on_stop_typing(data):
     user = current_user()
     chat_id = data.get('chat_id')
     if not user or not chat_id:
+        return
+    try:
+        chat_id = int(chat_id)
+    except (TypeError, ValueError):
+        return
+    if not user.is_admin and not ChatMember.query.filter_by(chat_id=chat_id, user_id=user.id).first():
         return
     for mid in chat_member_ids(chat_id):
         if mid != user.id:
