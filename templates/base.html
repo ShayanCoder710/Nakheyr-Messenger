@@ -51,7 +51,15 @@ window.md = function(src) {
         '$1**$2**'
       );
       const raw = marked.parse(pre, { breaks: true, gfm: true });
-      return DOMPurify.sanitize(raw, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'form'] });
+      // Strip <br> that appear between block elements (list items, code blocks,
+      // paragraphs) so a single newline doesn't add a doubled visual gap.
+      const cleaned = raw
+        .replace(/<br\s*\/>\s*(<\/li>\s*)/g, '$1')        // br before </li>
+        .replace(/(<li>)\s*<br\s*\/>/g, '$1')              // br right after <li>
+        .replace(/(<br\s*\/>)\s*(<\/(p|ul|ol|pre|blockquote)>)/g, '$1$2') // br before closing block
+        .replace(/(<\/(p|ul|ol|pre|blockquote)>)\s*<br\s*\/>/g, '$1')    // br after block
+        .replace(/(<\/li>)\s*<br\s*\/>/g, '$1');            // br after </li>
+      return DOMPurify.sanitize(cleaned, { USE_PROFILES: { html: true }, FORBID_TAGS: ['style', 'form'] });
     } catch (e) {
       return window.esc(src).replace(/\n/g, '<br>');
     }
