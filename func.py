@@ -636,12 +636,16 @@ def avatar_html(user, size=''):
 
 def admin_stats():
     start = datetime.combine(date.today(), datetime.min.time())
+    active = User.query.filter(User.is_banned.is_(False), User.is_admin.is_(False)).count()
     return {
         'users': User.query.count(),
+        'active': active,
+        'admins': User.query.filter_by(is_admin=True).count(),
         'messages': Message.query.count(),
         'groups': Chat.query.filter_by(chat_type='group').count(),
         'channels': Chat.query.filter_by(chat_type='channel').count(),
         'reports': Report.query.filter_by(status='open').count(),
+        'reports_all': Report.query.count(),
         'banned': User.query.filter_by(is_banned=True).count(),
         'today_msgs': Message.query.filter(Message.created_at >= start).count(),
     }

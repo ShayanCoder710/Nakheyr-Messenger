@@ -3,85 +3,176 @@
 {% block content %}
 <div class="admin-layout">
   <aside class="admin-side">
-    <div style="display:flex; align-items:center; gap:10px; padding:6px 8px 16px">
-      <img src="{{ url_for('static', filename='images/icon.png') }}" style="width:38px; height:38px; border-radius:11px" alt="نخیر">
-      <div><b style="font-size:14px">پنل ادمین</b><br><small style="color:var(--muted); font-size:11px">@{{ me.username }}</small></div>
-    </div>
-    <a href="#stats" class="active">{{ bi('bar-chart') }} آمار</a>
-    <a href="#users">{{ bi('people') }} کاربران</a>
-    <a href="#reports">{{ bi('flag') }} گزارش‌ها</a>
-    <a href="{{ url_for('home') }}">{{ bi('chat-dots') }} بازگشت به گپ</a>
-  </aside>
-  <div class="admin-main">
-    <div id="stats" class="stat-grid">
-      <div class="stat-card red"><b>{{ stats.users }}</b><span>کاربرها</span></div>
-      <div class="stat-card"><b>{{ stats.messages }}</b><span>کل پیام‌ها</span></div>
-      <div class="stat-card"><b>{{ stats.today_msgs }}</b><span>پیام امروز</span></div>
-      <div class="stat-card"><b>{{ stats.groups }}</b><span>گروه</span></div>
-      <div class="stat-card"><b>{{ stats.channels }}</b><span>کانال</span></div>
-      <div class="stat-card red"><b>{{ stats.reports }}</b><span>گزارش باز</span></div>
-      <div class="stat-card"><b>{{ stats.banned }}</b><span>مسدودشده</span></div>
-    </div>
-
-    <div id="reports">
-      <h2 class="section-title">{{ bi('flag') }} گزارش‌های باز</h2>
-      {% for r in reports %}{% if r.status == 'open' %}
-      <div class="report-item" data-rid="{{ r.id }}">
-        <span class="badge red">باز</span>
-        <div class="grow">
-          <b>@{{ r.reported.username if r.reported else r.reported_id }}</b>
-          توسط @{{ r.reporter.username if r.reporter else r.reporter_id }}
-          <p>{{ r.reason }}</p>
-        </div>
-        <button class="btn sm" data-act="view">{{ bi('chat-dots') }} مشاهده گفتگو</button>
-        <button class="btn sm" data-act="dismiss">رد</button>
-        <button class="btn sm danger" data-act="resolve">مسدودسازی</button>
+    <div class="admin-brand">
+      <img src="{{ url_for('static', filename='images/icon.png') }}" alt="نخیر">
+      <div class="admin-brand-txt">
+        <b>نخیر</b>
+        <small>پنل مدیریت</small>
       </div>
-      {% endif %}{% endfor %}
-      {% if not reports or not reports|selectattr('status', 'equalto', 'open')|list %}<p style="color:var(--dim); font-size:13px">گزارش بازی نیست. همه‌چیز امنه</p>{% endif %}
     </div>
+    <a class="admin-me" href="{{ url_for('home') }}" title="پروفایل من">
+      {{ avatar_html(me, 'sm') | safe }}
+      <div class="admin-me-txt">
+        <b>{{ me.public_name }}</b>
+        <small>@{{ me.username }}</small>
+      </div>
+      {{ bi('box-arrow-right') }}
+    </a>
+    <nav class="admin-nav">
+      <a href="#stats" class="active">{{ bi('bar-chart') }}<span>آمار</span><i id="navStatCount">{{ stats.reports }}</i></a>
+      <a href="#users">{{ bi('people') }}<span>کاربران</span><i id="navUsersCount">{{ stats.users }}</i></a>
+      <a href="#reports">{{ bi('flag') }}<span>گزارش‌ها</span><i id="navReportsCount">{{ stats.reports }}</i></a>
+      <a href="{{ url_for('home') }}">{{ bi('chat-dots') }}<span>بازگشت به گپ‌ها</span></a>
+    </nav>
+    <div class="admin-side-foot">
+      <p class="admin-foot-note">اقدامات مهم برگشت‌پذیر نیستند.</p>
+    </div>
+  </aside>
 
-    <div id="users">
-      <h2 class="section-title">{{ bi('people') }} مدیریت کاربران</h2>
-      <div class="table-scroll">
-      <table class="data">
-        <thead>
-          <tr><th>کاربر</th><th>وضعیت</th><th>ایجاد</th><th>عملیات</th></tr>
-        </thead>
-        <tbody id="usersBody">
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <div class="admin-topbar-title">
+        <b>پنل مدیریت</b>
+        <small>مدیریت کاربران، گزارش‌ها و آمار نخیر</small>
+      </div>
+      <div class="admin-topbar-actions">
+        <a class="icon-btn" href="{{ url_for('admin_panel') }}" title="بازخوانی" aria-label="بازخوانی">{{ bi('arrow-repeat') }}</a>
+        <a class="btn sm ghost" href="{{ url_for('home') }}">{{ bi('chat-dots') }}<span>گپ‌ها</span></a>
+      </div>
+    </header>
+
+    <nav class="admin-tabs" aria-label="بخش‌های پنل">
+      <a href="#stats" class="admin-tab" data-tab="stats">{{ bi('bar-chart') }}<span>آمار</span></a>
+      <a href="#users" class="admin-tab" data-tab="users">{{ bi('people') }}<span>کاربران</span></a>
+      <a href="#reports" class="admin-tab" data-tab="reports">{{ bi('flag') }}<span>گزارش‌ها</span></a>
+    </nav>
+
+    <section id="stats" class="stat-grid">
+      <div class="stat-card red"><span class="stat-ico red">{{ bi('people') }}</span><div><b id="statUsers">{{ stats.users }}</b><span>کاربر</span></div></div>
+      <div class="stat-card"><span class="stat-ico">{{ bi('chat-dots') }}</span><div><b id="statMessages">{{ stats.messages }}</b><span>کل پیام‌ها</span></div></div>
+      <div class="stat-card gold"><span class="stat-ico gold">{{ bi('send') }}</span><div><b id="statToday">{{ stats.today_msgs }}</b><span>پیام امروز</span></div></div>
+      <div class="stat-card"><span class="stat-ico">{{ bi('collection') }}</span><div><b id="statGroups">{{ stats.groups }}</b><span>گروه</span></div></div>
+      <div class="stat-card"><span class="stat-ico">{{ bi('megaphone') }}</span><div><b id="statChannels">{{ stats.channels }}</b><span>کانال</span></div></div>
+      <div class="stat-card red"><span class="stat-ico red">{{ bi('flag') }}</span><div><b id="statReports">{{ stats.reports }}</b><span>گزارش باز</span></div></div>
+      <div class="stat-card"><span class="stat-ico">{{ bi('slash-circle') }}</span><div><b id="statBanned">{{ stats.banned }}</b><span>مسدودشده</span></div></div>
+      <div class="stat-card"><span class="stat-ico">{{ bi('shield-check') }}</span><div><b id="statAdmins">{{ stats.admins }}</b><span>ادمین</span></div></div>
+    </section>
+
+    <section id="reports" class="admin-section" data-rstatus="{{ rstatus }}">
+      <div class="admin-section-head">
+        <h2 class="admin-section-title">{{ bi('flag') }} گزارش‌ها <span class="count-pill" id="reportCountPill">{{ stats.reports }}</span></h2>
+        <div class="admin-chips" role="tablist">
+          <a class="admin-chip {{ 'on' if rstatus != 'all' }}" href="{{ url_for('admin_panel', rstatus='open', q=q, filter=ufilter) }}#reports">باز</a>
+          <a class="admin-chip {{ 'on' if rstatus == 'all' }}" href="{{ url_for('admin_panel', rstatus='all', q=q, filter=ufilter) }}#reports">همه</a>
+        </div>
+      </div>
+      <div class="report-list" id="reportList">
+        {% for r in reports %}
+        <div class="report-item" data-rid="{{ r.id }}" data-uid="{{ r.reported_id }}" data-status="{{ r.status }}">
+          {{ avatar_html(r.reported, 'sm') | safe if r.reported else '<div class="avatar sm">؟</div>' }}
+          <div class="report-main">
+            <div class="report-top">
+              <b>@{{ r.reported.username if r.reported else r.reported_id }}</b>
+              <span class="report-status {{ 'st-open' if r.status == 'open' else 'st-closed' }}">{{ r.status | replace('open', 'باز') | replace('dismissed', 'رد شده') | replace('resolved', 'حل شده') }}</span>
+              <time>{{ r.created_at.strftime('%Y/%m/%d %H:%M') }}</time>
+            </div>
+            <p class="report-reason">{{ r.reason or 'بدون توضیح' }}</p>
+            <div class="report-meta">
+              توسط <a class="u-link" href="{{ url_for('profile', username=r.reporter.username) if r.reporter else '#' }}" title="پروفایل"> @{{ r.reporter.username if r.reporter else r.reporter_id }} </a>
+              {% if r.message_id %} · پیام #{{ r.message_id }}{% endif %}
+            </div>
+          </div>
+          <div class="report-actions">
+            <button class="btn sm" data-act="view">{{ bi('chat-dots') }}<span>گفتگو</span></button>
+            {% if r.status == 'open' %}
+            <button class="btn sm" data-act="dismiss">{{ bi('check2') }}<span>رد</span></button>
+            <button class="btn sm danger" data-act="resolve">{{ bi('slash-circle') }}<span>مسدودسازی</span></button>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="admin-empty" id="reportsEmpty">
+          <div class="admin-empty-ic">{{ bi('flag') }}</div>
+          <b>گزارشی در این فهرست نیست</b>
+          <span>همه‌چیز مرتبه</span>
+        </div>
+        {% endfor %}
+      </div>
+    </section>
+
+    <section id="users" class="admin-section">
+      <div class="admin-section-head">
+        <h2 class="admin-section-title">{{ bi('people') }} کاربران <span class="count-pill" id="usersCountPill">{{ total_users }}</span></h2>
+        <form class="admin-search" method="get" action="{{ url_for('admin_panel') }}">
+          <input type="hidden" name="filter" value="{{ ufilter }}">
+          <input type="hidden" name="rstatus" value="{{ rstatus }}">
+          <span class="admin-search-ic">{{ bi('search') }}</span>
+          <input class="input" type="search" name="q" value="{{ q }}" placeholder="جستجوی نام یا @username" autocomplete="off">
+          {% if q %}<button type="button" class="admin-search-clear" data-clear-q title="پاک کردن">{{ bi('x-lg') }}</button>{% endif %}
+        </form>
+      </div>
+      <div class="admin-chips admin-filter" role="tablist">
+        <a class="admin-chip {{ 'on' if ufilter == 'all' }}" href="{{ url_for('admin_panel', filter='all', q=q, rstatus=rstatus) }}#users">همه <i>{{ stats.users }}</i></a>
+        <a class="admin-chip {{ 'on' if ufilter == 'active' }}" href="{{ url_for('admin_panel', filter='active', q=q, rstatus=rstatus) }}#users">فعال <i>{{ stats.active }}</i></a>
+        <a class="admin-chip {{ 'on' if ufilter == 'admin' }}" href="{{ url_for('admin_panel', filter='admin', q=q, rstatus=rstatus) }}#users">ادمین <i>{{ stats.admins }}</i></a>
+        <a class="admin-chip {{ 'on' if ufilter == 'banned' }}" href="{{ url_for('admin_panel', filter='banned', q=q, rstatus=rstatus) }}#users">مسدود <i>{{ stats.banned }}</i></a>
+      </div>
+      <div class="au-list" id="usersBody">
         {% for u in users %}
-          <tr data-uid="{{ u.id }}">
-            <td>
-              <div class="user-cell">
-                <div class="avatar sm">{{ u.public_name[:1] }}</div>
-                <div><b>{{ u.public_name }}</b><small>@{{ u.username }}</small></div>
-              </div>
-            </td>
-            <td>
+        <div class="au-row" data-uid="{{ u.id }}" data-banned="{{ 1 if u.is_banned else 0 }}" data-admin="{{ 1 if u.is_admin else 0 }}">
+          {{ avatar_html(u, 'sm') | safe }}
+          <div class="au-main">
+            <div class="au-name">
+              <b>{{ u.public_name }}</b>
+              {% if u.id == me.id %}<span class="mb-you">شما</span>{% endif %}
+            </div>
+            <small class="au-username">@{{ u.username }}</small>
+          </div>
+          <div class="au-meta">
+            <div class="au-badges">
+              {% if u.is_config_admin %}<span class="badge gold">مدیر اصلی</span>{% endif %}
               {% if u.is_admin %}<span class="badge red">ادمین</span>{% endif %}
               {% if u.is_banned %}<span class="badge">مسدود</span>{% endif %}
-              {% if not u.is_admin and not u.is_banned %}<span class="badge green">فعال</span>{% endif %}
-            </td>
-            <td>{{ u.created_at.strftime('%d/%m/%Y') }}</td>
-            <td>
-              <div class="tbl-actions">
-                {% if u.id != me.id %}
-                <button class="btn sm {% if u.is_banned %}primary{% else %}danger{% endif %}" data-act="ban">{{ 'رفع مسدود' if u.is_banned else 'مسدودسازی' }}</button>
-                <button class="btn sm" data-act="admin">{{ 'سلب ادمین' if u.is_admin else 'ادمین کردن' }}</button>
-                {% else %}<span style="color:var(--dim); font-size:12px">خودت</span>{% endif %}
-                <button class="btn sm" data-act="messages">{{ bi('chat-dots') }} پیام‌ها</button>
-                {% if u.id != me.id %}
-                <button class="btn sm danger" data-act="delete">{{ bi('trash') }} حذف اکانت</button>
-                {% endif %}
-              </div>
-            </td>
-          </tr>
+              {% if not u.is_admin and not u.is_banned and not u.is_config_admin %}<span class="badge green">فعال</span>{% endif %}
+            </div>
+            <time class="au-date" title="تاریخ عضویت">{{ u.created_at.strftime('%Y/%m/%d') }}</time>
+          </div>
+          <div class="au-actions">
+            {% if u.id != me.id and not u.is_config_admin %}
+            <button class="btn sm {{ 'primary' if u.is_banned else 'danger' }}" data-act="ban" title="{{ 'رفع مسدود' if u.is_banned else 'مسدودسازی' }}">
+              {{ bi('person-check' if u.is_banned else 'person-x') }}<span>{{ 'رفع مسدود' if u.is_banned else 'مسدودسازی' }}</span>
+            </button>
+            <button class="btn sm" data-act="admin" title="{{ 'سلب ادمین' if u.is_admin else 'ادمین کردن' }}">
+              {{ bi('shield-check' if u.is_admin else 'shield') }}<span>{{ 'سلب ادمین' if u.is_admin else 'ادمین' }}</span>
+            </button>
+            {% endif %}
+            <button class="btn sm ghost" data-act="messages" title="پیام‌های کاربر">{{ bi('chat-dots') }}<span>پیام‌ها</span></button>
+            {% if u.id != me.id and not u.is_config_admin %}
+            <button class="btn sm ghost danger-text" data-act="delete" title="حذف اکانت">{{ bi('trash') }}<span>حذف</span></button>
+            {% endif %}
+          </div>
+        </div>
+        {% else %}
+        <div class="admin-empty" id="usersEmpty">
+          <div class="admin-empty-ic">{{ bi('search') }}</div>
+          <b>کاربری پیدا نشد</b>
+          <span>جستجو یا فیلتر دیگری را امتحان کن</span>
+        </div>
         {% endfor %}
-        </tbody>
-      </table>
       </div>
-    </div>
-  </div>
+      {% if pages > 1 %}
+      <div class="pager">
+        {% if page > 1 %}
+        <a class="btn sm" href="{{ url_for('admin_panel', page=page-1, q=q, filter=ufilter, rstatus=rstatus) }}#users">{{ bi('chevron-right') }}<span>قبلی</span></a>
+        {% endif %}
+        <span class="pager-info">صفحه {{ page }} از {{ pages }}</span>
+        {% if page < pages %}
+        <a class="btn sm" href="{{ url_for('admin_panel', page=page+1, q=q, filter=ufilter, rstatus=rstatus) }}#users"><span>بعدی</span>{{ bi('chevron-left') }}</a>
+        {% endif %}
+      </div>
+      {% endif %}
+    </section>
+  </main>
 </div>
 
 <div class="modal" id="msgModal">
@@ -92,6 +183,18 @@
     <div class="msg-list" id="msgList"></div>
     <div class="row">
       <button class="btn ghost" id="msgClose">بستن</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="adminConfirmModal">
+  <div class="box narrow">
+    <div class="ac-ic" id="acIcon">{{ bi('exclamation-triangle') }}</div>
+    <h3 id="acTitle"></h3>
+    <p class="sub" id="acText"></p>
+    <div class="row">
+      <button class="btn ghost" id="acCancel">انصراف</button>
+      <button class="btn danger" id="acOk">تأیید</button>
     </div>
   </div>
 </div>

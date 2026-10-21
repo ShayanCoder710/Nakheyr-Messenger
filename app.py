@@ -1549,19 +1549,58 @@ def api_messages(chat_id):
     )
 
 
+ADMIN_PAGE_SIZE = 25
+ADMIN_USER_FILTERS = {'all', 'active', 'admin', 'banned'}
+
+
 @app.route('/admin')
 @require_admin
 def admin_panel():
     stats = admin_stats()
-    users = User.query.order_by(User.id.desc()).all()
-    reports = Report.query.options(
-        joinedload(Report.reporter), joinedload(Report.reported)
-    ).order_by(Report.id.desc()).all()
-    return render_template('admin.html', stats=stats, users=users,
-                           reports=reports, me=current_user())
+    q = (request.args.get('q') or '').strip()
+    ufilter = request.args.get('filter') or 'all'
+    if ufilter not in ADMIN_USER_FILTERS:
+        ufilter = 'all'
+    try:
+        page = max(1, int(request.args.get('page') or 1))
+    except (TypeError, ValueError):
+        page = 1
+    rstatus = request.args.get('rstatus')
+    if rstatus not in ('open', 'all'):
+        rstatus = 'open'
+
+    uq = User.query
+    if q:
+        like = f'%{q.lower()}%'
+        uq = uq.filter(db.or_(
+            db.func.lower(User.username).like(like),
+            db.func.lower(User.display_name).like(like),
+        ))
+    if ufilter == 'active':
+        uq = uq.filter(User.is_banned.is_(False), User.is_admin.is_(False))
+    elif ufilter == 'admin':
+        uq = uq.filter(User.is_admin.is_(True))
+    elif ufilter == 'banned':
+        uq = uq.filter(User.is_banned.is_(True))
+
+    total_users = uq.count()
+    pages = max(1, (total_users + ADMIN_PAGE_SIZE - 1) // ADMIN_PAGE_SIZE)
+    page = min(page, pages)
+    users = uq.order_by(User.id.desc()).offset((page - 1) * ADMIN_PAGE_SIZE).limit(ADMIN_PAGE_SIZE).all()
+
+    rqc = Report.query.options(joinedload(Report.reporter), joinedload(Report.reported)).order_by(Report.id.desc())
+    if rstatus == 'open':
+        rqc = rqc.filter_by(status='open')
+    reports = rqc.limit(100).all()
+
+    return render_template(
+        'admin.html', stats=stats, users=users, reports=reports, me=current_user(),
+        total_users=total_users, pages=pages, page=page, q=q,
+        ufilter=ufilter, rstatus=rstatus,
+    )
 
 
-@app.route('/admin/user/<int:uid>/<action>')
+@app.route('/admin/user/<int:uid>/<action>', methods=['POST'])
 @require_admin
 def admin_action(uid, action):
     me = current_user()
@@ -1652,7 +1691,7 @@ def admin_report_conversation(rid):
                    reported=reported.public_name if reported else '')
 
 
-@app.route('/admin/report/<int:rid>/<action>')
+@app.route('/admin/report/<int:rid>/<action>', methods=['POST'])
 @require_admin
 def admin_report(rid, action):
     r = Report.query.get(rid)
@@ -1661,19 +1700,19 @@ def admin_report(rid, action):
     if action == 'dismiss':
         r.status = 'dismissed'
         db.session.commit()
-        return jsonify(ok=True)
+        return jsonify(ok=True, status='dismissed')
     if action == 'resolve':
         r.status = 'resolved'
         target = User.query.get(r.reported_id)
-        if target:
+        if target and not target.is_config_admin:
             target.is_banned = True
             target.status = 'offline'
             db.session.commit()
             socketio.emit('banned', {'reason': 'گزارش', 'banned': True}, room=f'user:{target.id}')
         else:
             db.session.commit()
-        return jsonify(ok=True)
-    abort(404)
+        return jsonify(ok=True, status='resolved')
+    return jsonify(ok=False, error='عملیات نامعتبر')
 
 
 @socketio.on('connect')
