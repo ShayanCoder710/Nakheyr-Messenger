@@ -112,13 +112,3 @@ gunicorn -w 2 --bind 0.0.0.0:5000 "wsgi:app"
 | `GET` | `/admin` | پنل ادمین |
 | `GET/POST` | `/admin/user/<id>/<action>` | ban / admin / delete |
 | `GET/POST` | `/admin/report/<id>/<action>` | dismiss / resolve |
-
-## چرخه‌ی `config.py` در git
-
-- `config.py` **track** شده — در هر دو remote (github + gitlab) هست.
-- هر تغییری که **توی لپ‌تاپ** روی `config.py` بدی، **push نمی‌شه** — به‌خاطر **`pre-push` hook** که قبل از هر push، `config.py` رو به نسخه‌ی قبلی برمی‌گردونه.
-- اگه `config.py` رو از سیستم دیگه‌ای clone کردی، همون نسخه‌ی ثابت رو می‌بینی.
-
-## لایسنس
-
-MIT
