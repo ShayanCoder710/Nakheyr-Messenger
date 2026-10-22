@@ -765,7 +765,7 @@ b, strong { font-weight: 800; }
   display: grid; place-items: center; box-shadow: 0 8px 20px -6px var(--accent-glow);
   transition: .16s ease;
 }
-.send-btn svg { width: 21px; height: 21px; display: block; transform: scaleX(-1); }
+.send-btn svg { width: 21px; height: 21px; display: block; transform: scaleX(-1) rotate(45deg); }
 .send-btn:hover { background: linear-gradient(180deg, #ff5252, #d32f2f); box-shadow: 0 10px 24px -6px var(--accent-glow); }
 .send-btn:active { transform: scale(.94); }
 .send-btn:disabled { opacity: .5; cursor: not-allowed; }
