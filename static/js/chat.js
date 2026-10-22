@@ -2077,7 +2077,17 @@ function openDmInfo() {
   const p = CD.chat.peer || {};
   if (!p.id) return;
   window._dmPeer = p;
-  document.getElementById('dmAvatar').innerHTML = avatarInner(p.display_name, p.avatar, p.status === 'online');
+  const dmAv = document.getElementById('dmAvatar');
+  dmAv.innerHTML = avatarInner(p.display_name, p.avatar, p.status === 'online');
+  if (p.avatar) {
+    dmAv.dataset.media = 'image';
+    dmAv.dataset.src = p.avatar;
+    dmAv.dataset.name = p.display_name || (p.username ? '@' + p.username : '');
+  } else {
+    delete dmAv.dataset.media;
+    delete dmAv.dataset.src;
+    delete dmAv.dataset.name;
+  }
   document.getElementById('dmName').textContent = p.display_name || 'کاربر';
   document.getElementById('dmUsername').textContent = p.username ? '@' + p.username : '';
   document.getElementById('dmStatus').innerHTML = p.status === 'online' ? bi('circle-fill') + ' آنلاین' : bi('circle') + ' آفلاین';

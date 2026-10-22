@@ -647,6 +647,8 @@ b, strong { font-weight: 800; }
 .cs-note { display: none; margin-top: 8px; font-size: 11.5px; color: var(--dim); }
 .cs-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
 .cs-head .avatar { width: 56px; height: 56px; }
+#dmModal .avatar[data-media] { cursor: pointer; transition: transform .14s ease; }
+#dmModal .avatar[data-media]:hover { transform: scale(1.06); }
 .cs-id b { font-size: 15px; display: block; }
 .cs-id small { color: var(--muted); font-size: 11.5px; }
 .modal .bio { color: var(--muted); font-size: 13.5px; line-height: 1.8; margin: 2px 0 14px; white-space: pre-wrap; }
