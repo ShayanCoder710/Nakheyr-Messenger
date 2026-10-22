@@ -404,31 +404,66 @@ function attachMore() {
       if (j.messages && j.messages.length) {
         const keep = el.scrollTop;
         const prevH = el.scrollHeight;
-        const bodyEl = document.getElementById('msgsBody');
-        const topEl = document.createElement('div');
-        bodyEl.insertBefore(topEl, bodyEl.firstChild);
-        j.messages.forEach(m => registerMessage(m));
-        const existingSep = bodyEl.querySelector('.day-sep');
-        const nextDay = existingSep ? existingSep.dataset.day : null;
-        let lastRaw = null;
-        j.messages.forEach((m, i) => {
-          const raw = dayKey(m.created_at);
-          if (raw !== lastRaw) {
-            const isLastDay = i === j.messages.length - 1 || dayKey(j.messages[i + 1].created_at) !== raw;
-            if (!(isLastDay && raw === nextDay)) {
-              topEl.insertAdjacentHTML('beforeend',
-                `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(m.created_at)}</span></div>`);
-            }
-            lastRaw = raw;
-          }
-          topEl.insertAdjacentHTML('beforeend', `<div id="m${m.id}">${renderMsg(m)}</div>`);
-        });
-        oldestId = j.messages[0].id;
+        prependOlder(j);
         el.scrollTop = el.scrollHeight - prevH + keep;
       }
       loadingOlder = false;
     }).catch(() => { loadingOlder = false; });
   });
+}
+
+// Prepend an older page (from /api/messages/<chat>?before=) into #msgsBody.
+// Shared by the scroll-to-load-older handler and jump-to-pinned. Keeps day
+// separators consistent and updates module-level oldestId.
+function prependOlder(j) {
+  const bodyEl = document.getElementById('msgsBody');
+  const topEl = document.createElement('div');
+  bodyEl.insertBefore(topEl, bodyEl.firstChild);
+  j.messages.forEach(m => registerMessage(m));
+  const existingSep = bodyEl.querySelector('.day-sep');
+  const nextDay = existingSep ? existingSep.dataset.day : null;
+  let lastRaw = null;
+  j.messages.forEach((m, i) => {
+    const raw = dayKey(m.created_at);
+    if (raw !== lastRaw) {
+      const isLastDay = i === j.messages.length - 1 || dayKey(j.messages[i + 1].created_at) !== raw;
+      if (!(isLastDay && raw === nextDay)) {
+        topEl.insertAdjacentHTML('beforeend',
+          `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(m.created_at)}</span></div>`);
+      }
+      lastRaw = raw;
+    }
+    topEl.insertAdjacentHTML('beforeend', `<div id="m${m.id}">${renderMsg(m)}</div>`);
+  });
+  oldestId = j.messages[0].id;
+}
+
+// Scroll a message row into view (centered) and flash it. If the row is not in the
+// DOM yet (an old message), load older pages until it is, then scroll.
+function flashMsg(row) {
+  row.scrollIntoView({ behavior: 'smooth', block: 'center' });
+  row.classList.add('flash');
+  setTimeout(() => row.classList.remove('flash'), 1200);
+}
+async function jumpToMessage(mid) {
+  mid = +mid;
+  let row = document.querySelector(`.mrow[data-mid="${mid}"]`);
+  if (row) { flashMsg(row); return; }
+  let guard = 0;
+  while (oldestId && mid < oldestId && guard < 30) {
+    if (loadingOlder) break;
+    const before = oldestId;
+    let j;
+    try { j = await (await fetch('/api/messages/' + currentChat + '?before=' + before)).json(); }
+    catch { break; }
+    if (!j.messages || !j.messages.length) break;
+    prependOlder(j);
+    guard++;
+    if (j.messages.some(m => m.id === mid)) break;
+  }
+  row = document.querySelector(`.mrow[data-mid="${mid}"]`);
+  if (row) flashMsg(row);
+  // else: pinned message is older than the loaded history we can reach; leave the view as-is.
 }
 
 function shortSnippet(m) {
@@ -1580,10 +1615,7 @@ async function loadPinned() {
   }
   bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${thumb}<span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b><span>${esc(label)}</span></span><button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
   bar.style.display = 'flex';
-  bar.querySelector('.pin-bar-text').onclick = () => {
-    const t = document.querySelector(`.mrow[data-mid="${p.id}"]`);
-    if (t) t.scrollIntoView({ behavior: 'smooth', block: 'center' });
-  };
+  bar.querySelector('.pin-bar-text').onclick = () => jumpToMessage(p.id);
   bar.querySelector('[data-unpin]').onclick = () => {
     api('/api/message/pin', { message_id: +document.querySelector('#pinnedBar [data-unpin]').dataset.unpin }).then(loadPinned);
   };
