@@ -107,7 +107,10 @@ function reactionChips(m) {
 }
 
 function canPinMsg(m) {
-  return (m.sender_id === window.ME.id) || window.ME.is_admin || ['owner', 'admin'].includes(myRole());
+  if (m.sender_id === window.ME.id) return true;
+  if (window.ME.is_admin) return true;
+  if (['owner', 'admin'].includes(myRole())) return true;
+  return !!(CD.chat && CD.chat.chat_type === 'dm'); // in a DM either party can pin
 }
 
 function lastSenderOf(mid) {
@@ -1432,6 +1435,7 @@ function clearHistory(chatId) {
     toast(forEveryone ? 'تاریخچه برای همه پاک شد' : 'تاریخچه پاک شد');
     if (currentChat === chatId) {
       CD.initialMessages = [];
+      CD.pinnedId = null;
       renderAllMessages();
       document.getElementById('pinnedBar').style.display = 'none';
     }
@@ -1547,13 +1551,28 @@ function localDeleteMid(mid) {
     const wrap = row.classList.contains('mrow') ? row.closest('#m' + mid) || row : row;
     wrap.remove();
   }
+  if (+mid === +CD.pinnedId) { CD.pinnedId = null; loadPinned(); }
 }
 
+// One active pin per chat: sync the flag, bubble class and pin-tag on every
+// visible row so a replaced pin is cleaned up in place.
+function syncPinRows(pinnedId) {
+  CD.pinnedId = pinnedId || null;
+  (CD.initialMessages || []).forEach(x => { x.pinned = x.id === (pinnedId || null); });
+  document.querySelectorAll('.mrow[data-mid]').forEach(r => {
+    const b = r.querySelector('.bubble');
+    if (!b) return;
+    const on = +r.dataset.mid === pinnedId;
+    b.classList.toggle('pinned', on);
+    const meta = b.querySelector('.m-meta');
+    if (!meta) return;
+    const tag = meta.querySelector('.pin-tag');
+    if (on && !tag) meta.insertAdjacentHTML('afterbegin', `<span class="pin-tag">${bi('pin-angle-fill')} پین شده</span>`);
+    else if (!on && tag) tag.remove();
+  });
+}
 function localSetPin(mid, pinned) {
-  const m = (CD.initialMessages || []).find(x => x.id === mid);
-  if (m) m.pinned = pinned;
-  const row = document.querySelector(`.mrow[data-mid="${mid}"] .bubble`);
-  if (row) row.classList.toggle('pinned', pinned);
+  syncPinRows(pinned ? mid : null);
   loadPinned();
 }
 
@@ -1602,6 +1621,7 @@ async function loadPinned() {
   const r = await fetch('/api/chat/' + currentChat + '/pinned');
   const j = await r.json();
   const bar = document.getElementById('pinnedBar');
+  CD.pinnedId = j.pinned ? j.pinned.id : null;
   if (!j.pinned) { bar.style.display = 'none'; return; }
   const p = j.pinned;
   let thumb = '';
@@ -1621,7 +1641,10 @@ async function loadPinned() {
   bar.style.display = 'flex';
   bar.querySelector('.pin-bar-text').onclick = () => jumpToMessage(p.id);
   bar.querySelector('[data-unpin]').onclick = () => {
-    api('/api/message/pin', { message_id: +document.querySelector('#pinnedBar [data-unpin]').dataset.unpin }).then(loadPinned);
+    api('/api/message/pin', { message_id: +document.querySelector('#pinnedBar [data-unpin]').dataset.unpin }).then(j => {
+      if (j.ok) syncPinRows(null);
+      loadPinned();
+    });
   };
 }
 
@@ -2918,10 +2941,11 @@ function openMsgActions(mid, x, y) {
       copyText(m.content).then(() => toast('کپی شد')).catch(() => toast('کپی نشد', 'error'));
     } } : null,
     canPinMsg(m) ? { label: m.pinned ? 'لغو پین' : 'پین کردن', icon: bi(m.pinned ? 'pin-angle-fill' : 'pin-angle'), fn: () => {
+      const prev = CD.pinnedId || null;
       const next = !m.pinned;
       localSetPin(mid, next);
       api('/api/message/pin', { message_id: mid }).then(j => {
-        if (!j.ok) { localSetPin(mid, !next); toast(j.error || 'پین نشد', 'error'); }
+        if (!j.ok) { syncPinRows(prev); loadPinned(); toast(j.error || 'پین نشد', 'error'); }
       });
     } } : null,
     { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: bi('bookmark'), fn: () => {
@@ -3193,11 +3217,13 @@ S.on('message_deleted', d => {
     const target = row ? row.closest('#m' + d.message_id) || row : wrapper;
     target.remove();
   }
+  if (+d.message_id === +CD.pinnedId) { CD.pinnedId = null; loadPinned(); }
 });
 
 S.on('chat_cleared', d => {
   if (d.chat_id === currentChat) {
     CD.initialMessages = [];
+    CD.pinnedId = null;
     renderAllMessages();
     document.getElementById('pinnedBar').style.display = 'none';
   }
@@ -3244,9 +3270,9 @@ S.on('presence_update', d => {
 });
 
 S.on('message_pinned', d => {
+  if (!currentChat || d.chat_id !== currentChat) return;
+  syncPinRows(d.pinned ? d.message_id : null);
   loadPinned();
-  const row = document.querySelector(`.mrow[data-mid="${d.message_id}"]`);
-  if (row) row.querySelector('.bubble').classList.toggle('pinned', d.pinned);
 });
 
 S.on('chat_meta', d => {

@@ -1266,14 +1266,24 @@ def api_pin_message():
         abort(404)
     if m.deleted:
         return jsonify(ok=False, error='پیام حذف شده پین نمی‌شه')
-    role = my_role_in(user, Chat.query.get(m.chat_id))
-    allowed = user.is_admin or role in ('owner', 'admin') or m.sender_id == user.id
+    chat = Chat.query.get(m.chat_id)
+    role = my_role_in(user, chat)
+    if chat.chat_type == 'dm':
+        allowed = can_view_chat(user, chat)
+    else:
+        allowed = user.is_admin or role in ('owner', 'admin') or m.sender_id == user.id
     if not allowed:
         return jsonify(ok=False, error='دسترسی نداری')
-    m.pinned = not m.pinned
+    new_pin = not m.pinned
+    if new_pin:
+        # one active pin per chat: a new pin replaces the previous one
+        Message.query.filter(Message.chat_id == m.chat_id,
+                             Message.pinned.is_(True)).update(
+            {'pinned': False}, synchronize_session=False)
+    m.pinned = new_pin
     db.session.commit()
     for mid in chat_member_ids(m.chat_id):
-        socketio.emit('message_pinned', {'message_id': m.id, 'pinned': m.pinned}, room=f'user:{mid}')
+        socketio.emit('message_pinned', {'message_id': m.id, 'pinned': m.pinned, 'chat_id': m.chat_id}, room=f'user:{mid}')
     return jsonify(ok=True, pinned=m.pinned)
 
 
@@ -1306,7 +1316,13 @@ def api_pinned(chat_id):
     chat = Chat.query.get(chat_id)
     if not chat or not can_view_chat(user, chat):
         abort(404)
-    m = Message.query.filter_by(chat_id=chat.id, pinned=True, deleted=False).order_by(Message.id.desc()).first()
+    q = Message.query.filter_by(chat_id=chat.id, pinned=True, deleted=False)
+    hidden = [row[0] for row in db.session.execute(
+        db.select(HiddenMessage.message_id).filter_by(user_id=user.id)
+    ).all()]
+    if hidden:
+        q = q.filter(~Message.id.in_(hidden))
+    m = q.order_by(Message.id.desc()).first()
     if not m:
         return jsonify(pinned=None)
     sender = next((x for x in chat_users(chat) if x.id == m.sender_id), None)
