@@ -182,9 +182,7 @@ function fmtSize(n) {
 }
 
 function tickIcon(seen) {
-  const id = seen ? 'bi-Seen' : 'bi-Sent';
-  const label = seen ? 'Seen-icon' : 'Sent-icon';
-  return `<svg width="14" height="14" viewBox="0 0 18 18" role="img" aria-label="${label}" style="--bi-color: var(--chat-icon-color);"><use href="#${id}"></use></svg>`;
+  return bi(seen ? 'check2-all' : 'check');
 }
 
 function pollHtml(p) {
@@ -512,7 +510,7 @@ function setHead() {
   if (c.is_notes) {
     displayName = 'فضای شخصی';
     subText = 'یادداشت‌ها و پیام‌های خودت';
-    headAv.innerHTML = '<img src="/static/icons/notes.svg" alt="">';
+    headAv.innerHTML = bi('bookmark');
     name.textContent = displayName;
     sub.textContent = subText;
     return;
@@ -924,7 +922,7 @@ function renderConvItem(it) {
   const lock = (it.chat_type !== 'dm' && !it.is_notes && it.is_public === false) ? ' ' + bi('lock') : '';
   let av;
   if (it.is_notes) {
-    av = `<div class="avatar conv-av" style="border-radius:14px"><img src="/static/icons/notes.svg" alt=""></div>`;
+    av = `<div class="avatar conv-av" style="border-radius:14px">${bi('bookmark')}</div>`;
   } else if (it.avatar) {
     av = `<div class="avatar conv-av" style="border-radius:14px"><img src="${it.avatar}" alt=""></div>`;
   } else {
@@ -969,7 +967,7 @@ function loadConvList() {
           + (byCat.notes.length
             ? ''
             : `<button class="conv new-notes" id="newNotesBtn" title="فضای شخصی رو بساز">
-                 <span class="avatar conv-av" style="border-radius:14px"><img src="/static/icons/notes.svg" alt=""></span>
+                 <span class="avatar conv-av" style="border-radius:14px">${bi('bookmark')}</span>
                  <div class="body"><div class="row1"><b>فضای شخصی من</b></div><div class="row2"><span>یادداشت و پیام به خودت</span></div></div>
                </button>`);
       } else {
@@ -2598,7 +2596,7 @@ searchInput.oninput = () => {
     if (r.chats.length) {
       html += '<h4>گروه‌ها و کانال‌های عمومی</h4>' + r.chats.map(c => `
         <div class="sr-item" data-chat="${c.id}">
-          <span class="type-icon"><img src="/static/icons/${c.chat_type === 'channel' ? 'channel' : 'group'}.svg" alt=""></span>
+          <span class="type-icon">${bi(c.chat_type === 'channel' ? 'megaphone' : 'people')}</span>
           <div style="flex:1; min-width:0"><b>${esc(c.name)}</b>
           <small>${c.chat_type === 'channel' ? 'کانال' : 'گروه'} ${c.is_public ? '· ' + bi('globe') + ' عمومی' : '· ' + bi('lock') + ' خصوصی'}${c.is_member ? ' · ' + bi('check-circle') + ' عضو هستی' : ''}</small></div>
           ${c.is_member ? '' : `<button class="btn sm sr-join" data-join="${c.id}">پیوستن</button>`}
