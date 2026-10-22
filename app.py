@@ -1620,6 +1620,16 @@ def admin_action(uid, action):
         if target.is_banned:
             target.status = 'offline'
     elif action == 'admin':
+        # Prevent removing the last non-config admin (lockout).
+        if target.is_admin:
+            # is_config_admin is a @property, not a column — filter on username.
+            remaining = User.query.filter(
+                User.is_admin.is_(True),
+                User.username != ADMIN_USERNAME,
+                User.id != target.id,
+            ).count()
+            if remaining == 0:
+                return jsonify(ok=False, error='آخرین ادمین اصلی قابل حذف ادمینی نیست')
         target.is_admin = not target.is_admin
     else:
         return jsonify(ok=False, error='غیرمجاز')
