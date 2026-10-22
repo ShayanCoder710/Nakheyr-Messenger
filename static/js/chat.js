@@ -511,6 +511,7 @@ function setHead() {
     displayName = 'فضای شخصی';
     subText = 'یادداشت‌ها و پیام‌های خودت';
     headAv.innerHTML = bi('bookmark');
+    delete headAv.dataset.media; delete headAv.dataset.src; delete headAv.dataset.name;
     name.textContent = displayName;
     sub.textContent = subText;
     return;
@@ -536,6 +537,8 @@ function setHead() {
     }
   }
   headAv.innerHTML = (av ? '<img src="' + av + '" alt="">' : (displayName || '؟').charAt(0));
+  if (av) { headAv.dataset.media = 'image'; headAv.dataset.src = av; headAv.dataset.name = displayName || ''; }
+  else { delete headAv.dataset.media; delete headAv.dataset.src; delete headAv.dataset.name; }
   name.textContent = displayName;
   if (subHtml) sub.innerHTML = subText;
   else sub.textContent = subText;
@@ -2126,9 +2129,17 @@ function openSettings() {
   document.getElementById('csMeta').textContent =
     (c.chat_type === 'channel' ? 'کانال' : 'گروه') + ' · ' + ((CD.members || []).length) + ' عضو';
   document.getElementById('csDescView').textContent = c.description || 'بدون توضیح';
-  document.getElementById('csAvatar').innerHTML = c.avatar
-    ? '<img src="' + c.avatar + '" alt="">'
-    : c.name.charAt(0);
+  const csAv = document.getElementById('csAvatar');
+  csAv.innerHTML = c.avatar ? '<img src="' + c.avatar + '" alt="">' : c.name.charAt(0);
+  if (c.avatar) {
+    csAv.dataset.media = 'image';
+    csAv.dataset.src = c.avatar;
+    csAv.dataset.name = c.name;
+  } else {
+    delete csAv.dataset.media;
+    delete csAv.dataset.src;
+    delete csAv.dataset.name;
+  }
   const nameInp = document.getElementById('csNameInput');
   const descInp = document.getElementById('csDescInput');
   nameInp.value = c.name;
@@ -2173,7 +2184,8 @@ function openSettings() {
   document.getElementById('chatSettingsModal').classList.add('show');
 }
 
-document.getElementById('chatHeadId').onclick = () => {
+document.getElementById('chatHeadId').onclick = (e) => {
+  if (e.target.closest('#chatHeadAvatar[data-media]')) return; // photo opens in media viewer
   if (CD.chat && CD.chat.chat_type === 'dm' && CD.chat.peer) {
     openDmInfo();
     return;
