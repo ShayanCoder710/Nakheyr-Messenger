@@ -79,7 +79,6 @@ def init_db():
     db.create_all()
     _ensure_columns()
     _ensure_chat_usernames()
-    _migrate_accent_colors()
     _ensure_poll_tables()
     _backfill_avatars()
     admin = User.query.filter_by(username=ADMIN_USERNAME).first()
@@ -89,7 +88,6 @@ def init_db():
             display_name='',
             bio='',
             password_hash='',
-            accent='#e5393b',
             is_admin=True,
         )
         db.session.add(admin)
@@ -201,16 +199,6 @@ def _ensure_chat_usernames():
                 conn.execute(text("CREATE UNIQUE INDEX ix_chats_username ON chats (username)"))
             except Exception:
                 pass
-
-
-def _migrate_accent_colors():
-    """Move the old rose default to the new true-red palette."""
-    from sqlalchemy import text
-    with db.engine.begin() as conn:
-        conn.execute(text(
-            "UPDATE users SET accent = '#e5393b' "
-            "WHERE LOWER(accent) IN ('#e11d48', '#e5193b', '#f43f5e')"
-        ))
 
 
 def _ensure_poll_tables():

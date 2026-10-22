@@ -19,7 +19,6 @@ class User(db.Model):
     password_hash = db.Column(db.String(255), nullable=False)
     bio = db.Column(db.String(200), default='')
     avatar = db.Column(db.String(120), default='')
-    accent = db.Column(db.String(20), default='#e5393b')
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
@@ -63,7 +62,6 @@ class User(db.Model):
             'display_name': self.public_name,
             'bio': self.public_bio,
             'avatar': self.avatar_url,
-            'accent': self.accent,
             'is_admin': self.is_admin,
             'status': self.status if self.show_online else 'offline',
             'read_receipts': bool(self.read_receipts),

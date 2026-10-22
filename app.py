@@ -1093,8 +1093,6 @@ def api_profile():
         user.display_name = data['display_name'].strip()[:60]
     if 'bio' in data and not user.is_config_admin:
         user.bio = (data['bio'] or '').strip()[:200]
-    if data.get('accent') and re.match(r'^#[0-9a-fA-F]{6}$', data['accent']):
-        user.accent = data['accent']
     if 'read_receipts' in data:
         user.read_receipts = bool(data['read_receipts'])
     if 'show_online' in data:

@@ -47,7 +47,6 @@
   --red-glow: rgba(229, 72, 77, .35);
   --gold: #f0b34c;
   --green: #4ec06e;
-  --me-accent: #e5393b;
   --chat-icon-color: #FFFFFF;
   --radius: 16px;
   --ctl-h: 40px;
@@ -1260,12 +1259,6 @@ table.data { width: 100%; border-collapse: collapse; }
 .blk-id small { color: var(--dim); font-size: 11px; }
 .av-actions { display: flex; flex-direction: column; gap: 8px; }
 .av-actions .btn { min-height: var(--ctl-h); justify-content: center; }
-.color-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
-.color-swatches button {
-  width: 34px; height: 34px; border-radius: 50%; border: 2px solid transparent;
-}
-.color-swatches button.sel { border-color: #fff; box-shadow: 0 0 0 3px var(--accent-glow); }
-
 .modal {
   position: fixed; inset: 0; z-index: 90; background: rgba(0, 0, 0, .6);
   display: none; place-items: center; backdrop-filter: blur(5px);

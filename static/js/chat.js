@@ -1,14 +1,6 @@
 const S = io({ transports: ['websocket', 'polling'] });
 const CD = window.CHAT_DATA || {};
 CD.joined = window.JOINED !== false;
-const SWATCHES = ['#e5393b', '#c62828', '#8e1c1c', '#ff5252', '#b71c1c', '#d84315', '#e5484d', '#4a4a4a'];
-
-function applyAccent(color) {
-  if (/^#[0-9a-fA-F]{6}$/.test(color || '')) {
-    document.documentElement.style.setProperty('--me-accent', color);
-  }
-}
-applyAccent(window.ME && window.ME.accent);
 
 let currentChat = window.CURRENT_CHAT;
 let composerChatId = window.CURRENT_CHAT || null;
@@ -2558,13 +2550,6 @@ function openProfilePage() {
   document.getElementById('pmDisplayName').value = window.ME.display_name;
   document.getElementById('pmUsernameInput').value = window.ME.username;
   document.getElementById('pmBioInput').value = window.ME.bio || '';
-  const sw = document.getElementById('pmSwatches');
-  sw.innerHTML = SWATCHES.map(c => `<button data-c="${c}" style="background:${c}" class="${c === window.ME.accent ? 'sel' : ''}"></button>`).join('');
-  sw.querySelectorAll('button').forEach(b => b.onclick = () => {
-    sw.querySelectorAll('button').forEach(x => x.classList.remove('sel'));
-    b.classList.add('sel');
-    applyAccent(b.dataset.c);
-  });
   const prev = document.getElementById('pmAvPrev');
   if (window.ME.avatar) {
     prev.src = window.ME.avatar;
@@ -2763,16 +2748,13 @@ function refreshSideAvatar() {
 }
 
 document.getElementById('pmSave').onclick = async () => {
-  const sel = document.querySelector('#pmSwatches .sel');
   const r = await api('/api/profile', {
     display_name: document.getElementById('pmDisplayName').value.trim(),
     username: document.getElementById('pmUsernameInput').value.trim(),
-    bio: document.getElementById('pmBioInput').value,
-    accent: sel ? sel.dataset.c : ''
+    bio: document.getElementById('pmBioInput').value
   });
   if (r.ok) {
     window.ME = Object.assign(window.ME, r.profile);
-    applyAccent(window.ME.accent);
     document.getElementById('pmUsername').textContent = '@' + window.ME.username;
     toast('پروفایل ذخیره شد');
     document.getElementById('pmBio').textContent = window.ME.bio || 'بیویی نداری';
