@@ -1,114 +1,72 @@
-# نخیر (Nakheyr)
+# Nakheyr
 
-پیام‌رسان وب فارسی، ساخته‌شده با Flask + Socket.IO + MySQL — با رابط کاربری کاملاً راست‌به‌چپ.
+RTL Persian web messenger built with Flask, Socket.IO, and MySQL. Dark Telegram-style UI, fully responsive.
 
-## ویژگی‌ها
+## Features
 
-- **پیام‌رسان بلادرنگ** — Socket.IO برای ارسال/دریاب پیام، تایپ، حضور آنلاین، خوانده‌شدن
-- **گپ‌های شخصی (DM)، گروه و کانال** — با مجوزهای مدیریتی (owner / admin / member)
-- **نظرسنجی (Poll)** — single/multi، انقضای خودکار، نمایش رأی‌دهندگان
-- **پیام‌های رسانه‌ای** — عکس، ویدیو، صوت، فایل (با آپلود تا ۵۰ مگابایت)
-- **فوروارد، پاسخ، ویرایش، حذف، پین، واکنش (emoji)**
-- **بلاک، گزارش، آرشیو، بی‌صدا کردن، مخفی‌کردن پیام**
-- **پنل ادمین** — مدیریت کاربران (بن/رفع بن/حذف/ادمین)، گزارش‌ها، آمار
-- **CSRF protection** برای تمام درخواست‌های POST
-- **RTL کامل** + فونت فارسی (Vazirmatn) + Bootstrap Icons (SVG sprite)
+- Realtime messaging (Socket.IO) — send, reply, forward, edit, delete, pin, react
+- DMs, groups, and channels with owner / admin / member permissions
+- Polls (single/multi, auto-expiry, voters list)
+- Media (image, video, audio, files up to 50 MB)
+- Slow mode, drafts, archive, mute, block, report
+- Telegram-style admin panel with user search, filters, pagination, stats
+- CSRF-protected admin actions, secure avatar upload
 
-## ساختار پروژه
+## Stack
+
+- Python 3.10+, Flask 3, Flask-SocketIO, Flask-SQLAlchemy
+- MySQL 8 (utf8mb4)
+- Gunicorn + gevent for production
+
+## Project layout
 
 ```
-├── app.py          # Flask app، همه routeها، socket eventها، admin endpoints
-├── config.py       # تنظیمات DB، SECRET_KEY، ادمین (track شده در repo)
-├── func.py         # توابع کمکی: احراز هویت، آپلود، permissions، unread count
-├── models/
-│   └── models.py   # SQLAlchemy models: User, Chat, ChatMember, Message, Poll, ...
-├── static/
-│   ├── css/style.css          # CSS کل رابط کاربری
-│   ├── js/chat.js            # منطق اصلی چت (بزرگ‌ترین فایل JS)
-│   ├── js/admin.js           # پنل ادمین
-│   ├── js/emoji-data.js      # داده ایموجی‌ها
-│   ├── js/eggy.js            # toast نوتیفیکیشن
-│   ├── icons/                # SVG sprite bootstrap-icons + آیکون‌های سفارشی
-│   ├── fonts/                # Vazirmatn + JetBrains Mono
-│   ├── images/               # لوگو
-│   └── vendor/               # socket.io, marked, dompurify
-├── templates/
-│   ├── base.html             # base template (CSRF, js helpers, markdown)
-│   ├── chat.html             # صفحه اصلی چت + تمام مودال‌ها
-│   ├── admin.html            # پنل ادمین
-│   ├── login.html / register.html / profile.html
-│   └── _bi_sprite.html       # SVG sprite bootstrap-icons
-└── wsgi.py                   # entry point برای Gunicorn/uWSGI
+app.py            Flask routes + Socket.IO events
+func.py           helpers (auth, uploads, permissions, unread counts)
+models/models.py  SQLAlchemy models
+templates/        Jinja (base, chat, admin, login, register, profile)
+static/
+  css/style.css   all UI
+  js/chat.js      chat logic
+  js/admin.js     admin panel
+  icons/          bootstrap-icons sprite
+  fonts/          Vazirmatn + JetBrains Mono
+wsgi.py           entry point
 ```
 
-## نصب و اجرا
-
-### ۱. پیش‌نیازها
-
-- Python 3.10+
-- MySQL 8.x (با charset `utf8mb4`)
-
-### ۲. ایجاد database
+## Setup
 
 ```sql
 CREATE DATABASE nakheyr CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci;
 ```
 
-### ۳. تنظیم `config.py`
+Create `config.py` (never commit it):
 
 ```python
-MYSQL_CONFIG = "mysql+mysqlconnector://USER:PASSWORD@HOST:PORT/nakheyr?charset=utf8mb4"
-SECRET_KEY = "یک-رندوم-بلند-قوی"
+MYSQL_CONFIG = "mysql+mysqlconnector://USER:PASS@HOST:PORT/nakheyr?charset=utf8mb4"
+SECRET_KEY = "long-random-string"
 ADMIN_USERNAME = "admin"
-ADMIN_PASSWORD = "پسورد-ادمین"
-ADMIN_DISPLAY_NAME = "مدیر"
-ADMIN_BIO = "اکانت رسمی مدیریت"
+ADMIN_PASSWORD = "..."
+ADMIN_DISPLAY_NAME = "Admin"
+ADMIN_BIO = "Nakheyr admin"
 ```
 
-### ۴. نصب dependency‌ها
-
 ```bash
-python -m venv .venv
-source .venv/bin/activate
+python -m venv .venv && source .venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### ۵. اجرا
+## Run
 
 ```bash
-python wsgi.py          # dev server روی port 5000
-# یا با Gunicorn برای production:
-gunicorn -w 2 --bind 0.0.0.0:5000 "wsgi:app"
+# dev
+python wsgi.py
+
+# production (Socket.IO needs gevent)
+pip install gevent geventwebsocket
+gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 --bind 0.0.0.0:5000 "wsgi:app"
 ```
 
-> **نکته:** برای `gunicorn` با Socket.IO، حتماً از `gevent` + `geventwebsocket` استفاده کن:
-> ```bash
-> pip install gevent geventwebsocket
-> gunicorn -k geventwebsocket.gunicorn.workers.GeventWebSocketWorker -w 1 --bind 0.0.0.0:5000 "wsgi:app"
-> ```
+## License
 
-## feature list (API endpoints)
-
-| Method | Endpoint | توضیح |
-|--------|----------|-------|
-| `GET/POST` | `/login` | ورود |
-| `GET/POST` | `/register` | ثبت‌نام |
-| `GET` | `/` | صفحه اصلی چت |
-| `GET` | `/chat/<id>` | بازکردن گپ |
-| `POST` | `/api/dm` | ساخت DM |
-| `POST` | `/api/group/create` | ساخت گروه |
-| `POST` | `/api/channel/create` | ساخت کانال |
-| `POST` | `/api/message/send` | ارسال پیام |
-| `POST` | `/api/message/react` | واکنش |
-| `POST` | `/api/message/edit` | ویرایش |
-| `POST` | `/api/message/delete` | حذف |
-| `POST` | `/api/message/forward` | فوروارد |
-| `POST` | `/api/message/pin` | پین |
-| `POST` | `/api/poll/create` | ساخت نظرسنجی |
-| `POST` | `/api/poll/<id>/vote` | رأی |
-| `POST` | `/api/chat/<id>/prefs` | mute/archive |
-| `GET` | `/api/conversations` | لیست گفتگوها |
-| `GET` | `/api/search` | جستجو |
-| `GET` | `/admin` | پنل ادمین |
-| `GET/POST` | `/admin/user/<id>/<action>` | ban / admin / delete |
-| `GET/POST` | `/admin/report/<id>/<action>` | dismiss / resolve |
+GNU General Public License v3 (GPL-3.0). See `LICENSE`.
