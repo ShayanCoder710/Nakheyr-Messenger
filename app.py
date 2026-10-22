@@ -13,7 +13,7 @@ from sqlalchemy.orm import joinedload
 
 from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import (
-    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote
+    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
@@ -22,7 +22,8 @@ from func import (
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
     username_taken, RESERVED_USERNAMES,
     get_or_create_notes, delete_user_account, chat_label,
-    member_perms, default_perms, PERMISSION_KEYS, PERMISSION_LABELS
+    member_perms, default_perms, PERMISSION_KEYS, PERMISSION_LABELS,
+    add_owner_avatar, set_owner_avatar_primary, delete_owner_avatar, owner_avatar_gallery,
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -586,33 +587,39 @@ def api_chat_avatar(chat_id):
     role = my_role_in(user, chat)
     if role not in ('owner', 'admin') and not user.is_admin:
         return jsonify(ok=False, error='دسترسی نداری')
-    if request.form.get('delete') == '1':
-        if chat.avatar:
-            old = os.path.join(app.config['AVATAR_DIR'], chat.avatar)
-            if os.path.exists(old):
-                os.remove(old)
-        chat.avatar = ''
-        db.session.commit()
+    noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+    remove_id = request.form.get('remove')
+    primary_id = request.form.get('primary')
+    if remove_id:
+        ok = delete_owner_avatar('chat', chat.id, int(remove_id))
         for mid in chat_member_ids(chat.id):
             socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
-        noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+        return jsonify(ok=ok, avatar=chat.avatar_url)
+    if primary_id:
+        ok = set_owner_avatar_primary('chat', chat.id, int(primary_id)) is not None
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+        return jsonify(ok=ok, avatar=chat.avatar_url)
+    if request.form.get('delete') == '1':
+        prim = Avatar.query.filter_by(owner_type='chat', owner_id=chat.id, is_primary=True).first()
+        if prim:
+            delete_owner_avatar('chat', chat.id, prim.id)
+        else:
+            chat.avatar = ''
+            db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
         post_system_message(chat, user, f'عکس {noun} حذف شد')
-        return jsonify(ok=True, avatar='')
+        return jsonify(ok=True, avatar=chat.avatar_url)
     f = request.files.get('avatar')
     if not f or not f.filename:
         return jsonify(ok=False, error='فایلی دریافت نشد')
     fname = save_chat_avatar(user, f.filename)
     if not fname:
         return jsonify(ok=False, error='فرمت عکس مجاز نیست')
-    if chat.avatar:
-        old = os.path.join(app.config['AVATAR_DIR'], chat.avatar)
-        if os.path.exists(old):
-            os.remove(old)
-    chat.avatar = fname
-    db.session.commit()
+    add_owner_avatar('chat', chat.id, fname)   # becomes primary; gallery is kept
     for mid in chat_member_ids(chat.id):
         socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
-    noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
     post_system_message(chat, user, f'عکس {noun} تغییر کرد')
     return jsonify(ok=True, avatar=chat.avatar_url)
 
@@ -1154,29 +1161,61 @@ def api_account_delete():
 @require_auth
 def api_avatar():
     user = current_user()
-    if request.form.get('delete') == '1':
-        if user.avatar:
-            old = os.path.join(app.config['AVATAR_DIR'], user.avatar)
-            if os.path.exists(old):
-                os.remove(old)
-        user.avatar = ''
-        db.session.commit()
+    remove_id = request.form.get('remove')
+    primary_id = request.form.get('primary')
+    if remove_id:
+        ok = delete_owner_avatar('user', user.id, int(remove_id))
         socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
-        return jsonify(ok=True, avatar='')
+        return jsonify(ok=ok, avatar=user.avatar_url)
+    if primary_id:
+        ok = set_owner_avatar_primary('user', user.id, int(primary_id)) is not None
+        socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
+        return jsonify(ok=ok, avatar=user.avatar_url)
+    if request.form.get('delete') == '1':
+        # legacy "clear": remove the current primary, keep the rest of the gallery
+        prim = Avatar.query.filter_by(owner_type='user', owner_id=user.id, is_primary=True).first()
+        if prim:
+            delete_owner_avatar('user', user.id, prim.id)
+        else:
+            user.avatar = ''
+            db.session.commit()
+        socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
+        return jsonify(ok=True, avatar=user.avatar_url)
     f = request.files.get('avatar')
     if not f or not f.filename:
         return jsonify(ok=False, error='فایلی دریافت نشد')
     fname = save_avatar(f.filename)
     if not fname:
         return jsonify(ok=False, error='فرمت عکس مجاز نیست')
-    if user.avatar:
-        old = os.path.join(app.config['AVATAR_DIR'], user.avatar)
-        if os.path.exists(old):
-            os.remove(old)
-    user.avatar = fname
-    db.session.commit()
+    add_owner_avatar('user', user.id, fname)   # becomes primary; gallery is kept
     socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
     return jsonify(ok=True, avatar=user.avatar_url)
+
+
+@app.route('/api/avatar/all')
+@require_auth
+def api_avatar_all():
+    user = current_user()
+    return jsonify(ok=True, avatars=owner_avatar_gallery('user', user.id))
+
+
+@app.route('/api/user/<int:uid>/avatars')
+@require_auth
+def api_user_avatars(uid):
+    target = User.query.get(uid)
+    if not target:
+        return jsonify(ok=False, error='کاربر پیدا نشد')
+    return jsonify(ok=True, avatars=owner_avatar_gallery('user', uid))
+
+
+@app.route('/api/chat/<int:chat_id>/avatars')
+@require_auth
+def api_chat_avatars(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    return jsonify(ok=True, avatars=owner_avatar_gallery('chat', chat.id))
 
 
 @app.route('/files/avatar/<path:fname>')

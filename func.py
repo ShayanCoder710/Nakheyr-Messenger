@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
-from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage
+from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Avatar
 from config import ADMIN_USERNAME
 from sqlalchemy.orm import joinedload
 
@@ -81,6 +81,7 @@ def init_db():
     _ensure_chat_usernames()
     _migrate_accent_colors()
     _ensure_poll_tables()
+    _backfill_avatars()
     admin = User.query.filter_by(username=ADMIN_USERNAME).first()
     if not admin:
         admin = User(
@@ -438,6 +439,94 @@ def save_chat_avatar(owner, filename):
     os.makedirs(target, exist_ok=True)
     request.files['avatar'].save(os.path.join(target, fname))
     return fname
+
+
+def list_owner_avatars(owner_type, owner_id):
+    """Newest-first list of an owner's avatar gallery rows."""
+    return (Avatar.query
+            .filter_by(owner_type=owner_type, owner_id=owner_id)
+            .order_by(Avatar.created_at.desc(), Avatar.id.desc())
+            .all())
+
+
+def recompute_owner_primary(owner_type, owner_id):
+    """Point the owner's `.avatar` column at the current primary avatar
+    (falling back to the newest), or '' when it has none. Keeps every
+    existing renderer in sync without touching them."""
+    avs = list_owner_avatars(owner_type, owner_id)
+    prim = next((a.path for a in avs if a.is_primary), None)
+    if prim is None:
+        prim = avs[0].path if avs else ''
+        if avs:
+            for a in avs:
+                a.is_primary = (a.path == prim)
+    target = User.query.get(owner_id) if owner_type == 'user' else Chat.query.get(owner_id)
+    if target is not None:
+        target.avatar = prim
+    db.session.commit()
+
+
+def add_owner_avatar(owner_type, owner_id, filename):
+    """Register a freshly-saved avatar file and make it the new primary."""
+    a = Avatar(owner_type=owner_type, owner_id=owner_id, path=filename,
+               is_primary=True, created_at=datetime.utcnow())
+    db.session.add(a)
+    db.session.flush()
+    Avatar.query.filter(Avatar.owner_type == owner_type, Avatar.owner_id == owner_id,
+                       Avatar.id != a.id).update({'is_primary': False})
+    db.session.commit()
+    recompute_owner_primary(owner_type, owner_id)
+    return a
+
+
+def set_owner_avatar_primary(owner_type, owner_id, avatar_id):
+    """Mark one of the owner's avatars as the primary (mirrored to .avatar)."""
+    Avatar.query.filter(Avatar.owner_type == owner_type, Avatar.owner_id == owner_id,
+                       Avatar.is_primary.is_(True)).update({'is_primary': False})
+    a = Avatar.query.get(avatar_id)
+    if a and a.owner_type == owner_type and a.owner_id == owner_id:
+        a.is_primary = True
+    db.session.flush()
+    recompute_owner_primary(owner_type, owner_id)
+    return a
+
+
+def delete_owner_avatar(owner_type, owner_id, avatar_id):
+    """Remove one avatar (file + row). If it was primary, the newest
+    remaining becomes primary. Returns True on success."""
+    a = Avatar.query.get(avatar_id)
+    if not a or a.owner_type != owner_type or a.owner_id != owner_id:
+        return False
+    path = a.path
+    db.session.delete(a)
+    db.session.flush()
+    recompute_owner_primary(owner_type, owner_id)
+    target_file = os.path.join(current_app.config['AVATAR_DIR'], path)
+    if os.path.exists(target_file):
+        try:
+            os.remove(target_file)
+        except OSError:
+            pass
+    return True
+
+
+def owner_avatar_gallery(owner_type, owner_id):
+    """Newest-first JSON-serializable gallery for the owner."""
+    return [a.to_dict() for a in list_owner_avatars(owner_type, owner_id)]
+
+
+def _backfill_avatars():
+    """Give existing users/chats an Avatar row for the single primary they
+    already have, so it shows up in the gallery too. Idempotent."""
+    for u in User.query.filter(User.avatar.isnot(None), User.avatar != '').all():
+        if not Avatar.query.filter_by(owner_type='user', owner_id=u.id, path=u.avatar).first():
+            db.session.add(Avatar(owner_type='user', owner_id=u.id, path=u.avatar,
+                                  is_primary=True, created_at=datetime.utcnow()))
+    for c in Chat.query.filter(Chat.avatar.isnot(None), Chat.avatar != '').all():
+        if not Avatar.query.filter_by(owner_type='chat', owner_id=c.id, path=c.avatar).first():
+            db.session.add(Avatar(owner_type='chat', owner_id=c.id, path=c.avatar,
+                                  is_primary=True, created_at=datetime.utcnow()))
+    db.session.commit()
 
 
 def chat_display_name(chat, viewer, members=None):

@@ -377,3 +377,36 @@ class PollVote(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     user = db.relationship('User')
+
+
+class Avatar(db.Model):
+    """Every avatar image an owner (user or chat) has uploaded. The owner's
+    `.avatar` column always mirrors the *primary* one so existing rendering
+    (lists, chat heads, dm modal) keeps working unchanged; this table holds
+    the full gallery for the multi-avatar slideshow and delete UI."""
+    __tablename__ = 'avatars'
+    __table_args__ = (
+        db.UniqueConstraint('owner_type', 'owner_id', 'path', name='uq_avatar'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_type = db.Column(db.String(10), nullable=False, index=True)   # 'user' | 'chat'
+    owner_id = db.Column(db.Integer, nullable=False, index=True)
+    path = db.Column(db.String(120), nullable=False)                   # filename in AVATAR_DIR
+    is_primary = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def url(self):
+        return f'/files/avatar/{self.path}' if self.path else ''
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'owner_type': self.owner_type,
+            'owner_id': self.owner_id,
+            'path': self.path,
+            'url': self.url,
+            'is_primary': bool(self.is_primary),
+        }
