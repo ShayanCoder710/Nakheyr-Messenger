@@ -574,8 +574,9 @@ function setHead() {
     }
   }
   headAv.innerHTML = (av ? '<img src="' + av + '" alt="">' : (displayName || '؟').charAt(0));
-  if (av) { headAv.dataset.media = 'image'; headAv.dataset.src = av; headAv.dataset.name = displayName || ''; }
-  else { delete headAv.dataset.media; delete headAv.dataset.src; delete headAv.dataset.name; }
+  const oType = (c.chat_type === 'dm') ? 'user' : 'chat';
+  const oId = (c.chat_type === 'dm') ? (c.peer ? c.peer.id : null) : c.id;
+  setAvatarData(headAv, av, displayName || '', oType, oId);
   name.textContent = displayName;
   if (subHtml) sub.innerHTML = subText;
   else sub.textContent = subText;
@@ -1796,21 +1797,45 @@ document.getElementById('msgInput').addEventListener('paste', e => {
   }
 });
 
-function openMediaViewer(src, kind, name) {
-  if (!src) return;
-  const v = document.getElementById('mediaViewer');
+const MV = { items: [], index: 0, kind: 'image', canDelete: false, ownerType: null, ownerId: null, onDeleted: null };
+
+function openMediaViewer(src, kind, name, items, index, opts) {
+  if (!src && !(items && items.length)) return;
+  opts = opts || {};
+  MV.items = (items && items.length > 1) ? items : [{ src: src, name: name }];
+  MV.index = (items && items.length > 1 && index != null) ? index : 0;
+  MV.kind = kind || 'image';
+  MV.canDelete = !!opts.canDelete;
+  MV.ownerType = opts.ownerType || null;
+  MV.ownerId = opts.ownerId || null;
+  MV.onDeleted = opts.onDeleted || null;
+  MV.render();
+  document.getElementById('mediaViewer').classList.add('show');
+}
+MV.render = function () {
+  const it = MV.items[MV.index] || { src: '', name: '' };
+  const src = it.src || '';
   const stage = document.getElementById('mvStage');
-  stage.innerHTML = kind === 'video'
+  stage.innerHTML = (MV.kind === 'video' && src)
     ? `<video src="${esc(src)}" controls autoplay playsinline></video>`
-    : `<img src="${esc(src)}" alt="${esc(name || '')}">`;
-  document.getElementById('mvName').textContent = name || '';
+    : `<img src="${esc(src)}" alt="${esc(it.name || '')}">`;
+  document.getElementById('mvName').textContent = it.name || '';
   const dl = document.getElementById('mvDownload');
-  dl.href = src;
-  dl.setAttribute('download', name || '');
+  dl.href = src; dl.setAttribute('download', it.name || '');
   const op = document.getElementById('mvOpen');
-  op.href = src;
-  op.style.display = kind === 'video' ? 'none' : '';
-  v.classList.add('show');
+  op.href = src; op.style.display = (MV.kind === 'video' || !src) ? 'none' : '';
+  const multi = MV.items.length > 1;
+  document.getElementById('mvPrev').style.display = multi ? '' : 'none';
+  document.getElementById('mvNext').style.display = multi ? '' : 'none';
+  const count = document.getElementById('mvCount');
+  count.style.display = multi ? '' : 'none';
+  if (multi) count.textContent = (MV.index + 1) + ' / ' + MV.items.length;
+  document.getElementById('mvDelete').style.display = (MV.canDelete && src && it.id) ? '' : 'none';
+};
+function mvStep(delta) {
+  if (MV.items.length <= 1) return;
+  MV.index = (MV.index + delta + MV.items.length) % MV.items.length;
+  MV.render();
 }
 function closeMediaViewer() {
   const v = document.getElementById('mediaViewer');
@@ -1818,17 +1843,100 @@ function closeMediaViewer() {
   v.classList.remove('show');
   document.getElementById('mvStage').innerHTML = '';
 }
+document.getElementById('mvPrev').onclick = () => mvStep(-1);
+document.getElementById('mvNext').onclick = () => mvStep(1);
+document.getElementById('mvDelete').onclick = async () => {
+  if (!MV.canDelete || !MV.ownerType) return;
+  const it = MV.items[MV.index];
+  if (!it || !it.id) return;
+  const ep = MV.ownerType === 'user' ? '/api/avatar' : '/api/chat/' + MV.ownerId + '/avatar';
+  const j = await fetch(ep, { method: 'POST', body: new URLSearchParams({ remove: String(it.id) }) }).then(r => r.json());
+  if (!j.ok) { toast(j.error || 'حذف نشد', 'error'); return; }
+  MV.items.splice(MV.index, 1);
+  if (!MV.items.length) closeMediaViewer();
+  else { MV.index = Math.min(MV.index, MV.items.length - 1); MV.render(); }
+  if (MV.onDeleted) MV.onDeleted();
+};
+
+// Tag an avatar element so a click opens that owner's avatar slideshow.
+function setAvatarData(el, src, name, ownerType, ownerId) {
+  if (src) {
+    el.dataset.media = 'image'; el.dataset.src = src; el.dataset.name = name || '';
+    if (ownerType && (ownerId || ownerId === 0)) {
+      el.dataset.avatarType = ownerType; el.dataset.avatarId = String(ownerId);
+    } else { delete el.dataset.avatarType; delete el.dataset.avatarId; }
+  } else {
+    delete el.dataset.media; delete el.dataset.src; delete el.dataset.name;
+    delete el.dataset.avatarType; delete el.dataset.avatarId;
+  }
+}
+function canManageChatAvatar(chatId) {
+  if (window.ME.is_admin) return true;
+  return currentChat === chatId && !!(CD.role && ['owner', 'admin'].includes(CD.role));
+}
+// Open one owner's (user/chat) avatar collection as a prev/next slideshow.
+async function openAvatarSlideshow(ownerType, ownerId, ownerName, primarySrc) {
+  const ep = ownerType === 'user' ? '/api/user/' + ownerId + '/avatars' : '/api/chat/' + ownerId + '/avatars';
+  let list = [];
+  try {
+    const j = await fetch(ep).then(r => r.json());
+    if (j.ok && Array.isArray(j.avatars)) list = j.avatars;
+  } catch (e) { /* ignore; fall back to the single primary */ }
+  if (!list.length && primarySrc) list = [{ url: primarySrc, id: null, is_primary: true }];
+  if (!list.length) return;
+  const items = list.map(a => ({ src: a.url, name: ownerName, id: a.id || null, primary: !!a.is_primary }));
+  let idx = items.findIndex(a => a.primary); if (idx < 0) idx = 0;
+  const canDelete = ownerType === 'user' ? (window.ME.id === +ownerId) : canManageChatAvatar(ownerId);
+  openMediaViewer(items[idx].src, 'image', ownerName, items, idx, {
+    canDelete: canDelete,
+    ownerType: ownerType,
+    ownerId: +ownerId,
+    onDeleted: () => syncOwnerPrimary(ownerType, ownerId),
+  });
+}
+// After a delete, re-point every visible avatar of that owner at the new primary.
+function syncOwnerPrimary(ownerType, ownerId) {
+  const ep = ownerType === 'user' ? '/api/avatar/all' : '/api/chat/' + ownerId + '/avatars';
+  fetch(ep).then(r => r.json()).then(j => {
+    if (!j.ok) return;
+    const prim = j.avatars.find(a => a.is_primary) || j.avatars[0];
+    const url = prim ? prim.url : '';
+    if (ownerType === 'user' && window.ME.id === +ownerId) {
+      window.ME.avatar = url;
+      if (typeof refreshSideAvatar === 'function') refreshSideAvatar();
+      const pm = document.getElementById('pmAvatar');
+      if (pm && document.getElementById('myProfilePage').style.display !== 'none') {
+        pm.innerHTML = avatarInner(window.ME.display_name, url);
+      }
+    }
+    if (ownerType === 'chat' && currentChat === +ownerId) {
+      const head = document.getElementById('chatHeadAvatar');
+      if (head) { head.innerHTML = url ? '<img src="' + url + '" alt="">' : head.innerHTML; setAvatarData(head, url, '', 'chat', ownerId); }
+      const cs = document.getElementById('csAvatar');
+      if (cs) cs.innerHTML = url ? '<img src="' + url + '" alt="">' : cs.innerHTML;
+    }
+    if (typeof refreshConvList === 'function') refreshConvList();
+  }).catch(() => {});
+}
+
 document.addEventListener('click', e => {
   const media = e.target.closest('[data-media]');
   if (media) {
     e.preventDefault();
-    openMediaViewer(media.dataset.src, media.dataset.media, media.dataset.name);
+    const ot = media.dataset.avatarType, oid = media.dataset.avatarId;
+    if (ot && oid) openAvatarSlideshow(ot, oid, media.dataset.name, media.dataset.src);
+    else openMediaViewer(media.dataset.src, media.dataset.media, media.dataset.name);
     return;
   }
-  if (e.target.id === 'mvClose' || e.target.id === 'mediaViewer' || e.target.id === 'mvStage') closeMediaViewer();
+  if (e.target.id === 'mvClose' || e.target.id === 'mediaViewer') closeMediaViewer();
+  else if (e.target.id === 'mvStage' && MV.items.length <= 1) closeMediaViewer();
 });
 document.addEventListener('keydown', e => {
-  if (e.key === 'Escape') closeMediaViewer();
+  if (e.key === 'Escape') { closeMediaViewer(); return; }
+  if (document.getElementById('mediaViewer').classList.contains('show') && MV.items.length > 1) {
+    if (e.key === 'ArrowRight') mvStep(1);
+    else if (e.key === 'ArrowLeft') mvStep(-1);
+  }
 });
 
 async function loadMembers(chatId) {
@@ -2125,15 +2233,7 @@ function openDmInfo() {
   window._dmPeer = p;
   const dmAv = document.getElementById('dmAvatar');
   dmAv.innerHTML = avatarInner(p.display_name, p.avatar, p.status === 'online');
-  if (p.avatar) {
-    dmAv.dataset.media = 'image';
-    dmAv.dataset.src = p.avatar;
-    dmAv.dataset.name = p.display_name || (p.username ? '@' + p.username : '');
-  } else {
-    delete dmAv.dataset.media;
-    delete dmAv.dataset.src;
-    delete dmAv.dataset.name;
-  }
+  setAvatarData(dmAv, p.avatar, p.display_name || (p.username ? '@' + p.username : ''), 'user', p.id);
   document.getElementById('dmName').textContent = p.display_name || 'کاربر';
   document.getElementById('dmUsername').textContent = p.username ? '@' + p.username : '';
   document.getElementById('dmStatus').innerHTML = p.status === 'online' ? bi('circle-fill') + ' آنلاین' : bi('circle') + ' آفلاین';
@@ -2174,15 +2274,7 @@ function openSettings() {
   document.getElementById('csDescView').textContent = c.description || 'بدون توضیح';
   const csAv = document.getElementById('csAvatar');
   csAv.innerHTML = c.avatar ? '<img src="' + c.avatar + '" alt="">' : c.name.charAt(0);
-  if (c.avatar) {
-    csAv.dataset.media = 'image';
-    csAv.dataset.src = c.avatar;
-    csAv.dataset.name = c.name;
-  } else {
-    delete csAv.dataset.media;
-    delete csAv.dataset.src;
-    delete csAv.dataset.name;
-  }
+  setAvatarData(csAv, c.avatar, c.name, 'chat', c.id);
   const nameInp = document.getElementById('csNameInput');
   const descInp = document.getElementById('csDescInput');
   nameInp.value = c.name;
@@ -2214,6 +2306,7 @@ function openSettings() {
   if (csPrev) csPrev.style.display = 'none';
   document.getElementById('csAvUpload').style.display = canEdit ? 'inline-flex' : 'none';
   document.getElementById('csAvClear').style.display = (canEdit && c.avatar) ? 'inline-flex' : 'none';
+  loadChatAvGrid(c.id);
   document.getElementById('csInviteLink').textContent = location.origin + '/chat/' + c.id;
   document.getElementById('csMembersHead').textContent = 'اعضا (' + ((CD.members || []).length) + ')';
   renderMembers(CD.members || []);
@@ -2315,6 +2408,7 @@ document.getElementById('csAvUpload').onclick = async () => {
     document.getElementById('csAvClear').style.display = r.avatar ? 'inline-flex' : 'none';
     setHead();
     refreshConvList();
+    loadChatAvGrid(currentChat);
   } else toast(r.error, 'error');
 };
 
@@ -2328,21 +2422,64 @@ document.getElementById('csAvInput').addEventListener('change', e => {
 
 document.getElementById('csAvClear').onclick = async () => {
   const fd = new FormData();
-  fd.append('delete', '1');
+  fd.append('delete', '1');   // remove current primary, keep the rest of the gallery
   const r = await fetch('/api/chat/' + currentChat + '/avatar', { method: 'POST', body: fd }).then(x => x.json());
   if (r.ok) {
-    toast('آواتار گپ حذف شد');
-    CD.chat.avatar = '';
-    document.getElementById('csAvatar').innerHTML = document.getElementById('csName').textContent.charAt(0);
-    document.getElementById('csAvLabel').innerHTML = bi('camera') + ' انتخاب عکس…';
+    toast('آواتار اصلی گپ حذف شد');
+    CD.chat.avatar = r.avatar || '';
+    document.getElementById('csAvatar').innerHTML = CD.chat.avatar
+      ? '<img src="' + CD.chat.avatar + '" alt="">'
+      : document.getElementById('csName').textContent.charAt(0);
+    document.getElementById('csAvLabel').innerHTML = CD.chat.avatar ? bi('image') + ' آواتار گپ' : bi('camera') + ' انتخاب عکس…';
     const prev = document.getElementById('csAvPrev');
     if (prev) { prev.style.display = 'none'; prev.src = ''; }
     document.getElementById('csAvInput').value = '';
-    document.getElementById('csAvClear').style.display = 'none';
+    document.getElementById('csAvClear').style.display = CD.chat.avatar ? 'inline-flex' : 'none';
     setHead();
     refreshConvList();
+    loadChatAvGrid(currentChat);
   } else toast(r.error, 'error');
 };
+
+/* ── Chat avatar gallery (multiple, for group/channel managers) ── */
+async function loadChatAvGrid(chatId) {
+  const g = document.getElementById('csAvGrid');
+  if (!g) return;
+  const j = await fetch('/api/chat/' + chatId + '/avatars').then(r => r.json()).catch(() => ({ ok: false, avatars: [] }));
+  const list = (j.ok && j.avatars) || [];
+  if (!list.length) { g.innerHTML = ''; return; }
+  const canManage = window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role));
+  const cName = (CD.chat && CD.chat.name) || '';
+  g.innerHTML = list.map(a => (
+    `<div class="av-cell${a.is_primary ? ' primary' : ''}" data-avid="${a.id}">`
+    + `<img src="${a.url}" alt="" title="اسلاید">`
+    + (a.is_primary ? `<span class="av-tag">${bi('star-fill')} اصلی</span>` : '')
+    + (canManage && !a.is_primary ? `<button class="av-cell-btn" data-cssetprim="${a.id}" title="اصلی کردن">${bi('star')}</button>` : '')
+    + (canManage ? `<button class="av-cell-btn av-del" data-csdel="${a.id}" title="حذف این عکس">${bi('trash')}</button>` : '')
+    + `</div>`
+  )).join('');
+  g.querySelectorAll('.av-cell img').forEach(img => {
+    img.onclick = () => openAvatarSlideshow('chat', chatId, cName, img.src);
+  });
+}
+function actChatAvatar(fields) {
+  fetch('/api/chat/' + currentChat + '/avatar', { method: 'POST', body: new URLSearchParams(fields) }).then(r => r.json()).then(j => {
+    if (!j.ok) { toast(j.error || 'انجام نشد', 'error'); return; }
+    CD.chat.avatar = j.avatar || '';
+    const cs = document.getElementById('csAvatar');
+    cs.innerHTML = j.avatar ? '<img src="' + j.avatar + '" alt="">' : document.getElementById('csName').textContent.charAt(0);
+    setAvatarData(cs, j.avatar || '', document.getElementById('csName').textContent, 'chat', currentChat);
+    setHead();
+    refreshConvList();
+    loadChatAvGrid(currentChat);
+  });
+}
+document.getElementById('csAvGrid').addEventListener('click', e => {
+  const setp = e.target.closest('[data-cssetprim]');
+  if (setp) { actChatAvatar({ primary: setp.dataset.cssetprim }); return; }
+  const del = e.target.closest('[data-csdel]');
+  if (del) actChatAvatar({ remove: del.dataset.csdel });
+});
 
 document.getElementById('csSave').onclick = async () => {
   const role = myRole();
@@ -2443,6 +2580,7 @@ function openProfilePage() {
   const ad = document.getElementById('pmAdmin');
   if (ad) ad.style.display = window.ME.is_admin ? 'inline-flex' : 'none';
   loadBlocks();
+  loadMyAvatarGrid();
 }
 
 const pmRR = document.getElementById('pmReadReceipts');
@@ -2548,26 +2686,74 @@ document.getElementById('pmAvatarBtn').onclick = async () => {
     const prev = document.getElementById('pmAvPrev');
     prev.src = r.avatar;
     prev.style.display = 'block';
+    document.getElementById('pmAvClear').style.display = 'inline-flex';
     document.getElementById('pmAvatar').innerHTML = avatarInner(window.ME.display_name, r.avatar);
     refreshSideAvatar();
     refreshConvList();
+    loadMyAvatarGrid();
   } else toast(r.error, 'error');
 };
 
 document.getElementById('pmAvClear').onclick = async () => {
   const fd = new FormData();
-  fd.append('delete', '1');
+  fd.append('delete', '1');   // remove the current primary, keep the rest
   const r = await fetch('/api/avatar', { method: 'POST', body: fd }).then(x => x.json());
   if (r.ok) {
-    toast('عکس حذف شد');
-    window.ME.avatar = '';
-    document.getElementById('pmAvPrev').style.display = 'none';
-    document.getElementById('pmAvClear').style.display = 'none';
-    document.getElementById('pmAvatar').innerHTML = avatarInner(window.ME.display_name, '');
+    toast('عکس اصلی حذف شد');
+    window.ME.avatar = r.avatar || '';
+    const prev = document.getElementById('pmAvPrev');
+    prev.src = window.ME.avatar;
+    prev.style.display = window.ME.avatar ? 'block' : 'none';
+    document.getElementById('pmAvClear').style.display = window.ME.avatar ? 'inline-flex' : 'none';
+    document.getElementById('pmAvatar').innerHTML = avatarInner(window.ME.display_name, window.ME.avatar);
     refreshSideAvatar();
     refreshConvList();
+    loadMyAvatarGrid();
   } else toast(r.error, 'error');
 };
+
+/* ── My avatar gallery (multiple profiles) ─────────────────── */
+async function loadMyAvatarGrid() {
+  const j = await fetch('/api/avatar/all').then(r => r.json()).catch(() => ({ ok: false, avatars: [] }));
+  renderMyAvGrid((j.ok && j.avatars) || []);
+}
+function renderMyAvGrid(list) {
+  const grid = document.getElementById('pmAvGrid');
+  if (!grid) return;
+  if (!list.length) { grid.innerHTML = '<p class="av-empty">هنوز عکسی نداری</p>'; return; }
+  grid.innerHTML = list.map(a => (
+    `<div class="av-cell${a.is_primary ? ' primary' : ''}" data-avid="${a.id}">`
+    + `<img src="${a.url}" alt="" title="باز کردن اسلاید">`
+    + (a.is_primary
+        ? `<span class="av-tag">${bi('star-fill')} اصلی</span>`
+        : `<button class="av-cell-btn" data-setprim="${a.id}" title="اصلی کردن">${bi('star')}</button>`)
+    + `<button class="av-cell-btn av-del" data-avdel="${a.id}" title="حذف این عکس">${bi('trash')}</button>`
+    + `</div>`
+  )).join('');
+  grid.querySelectorAll('.av-cell img').forEach(img => {
+    img.onclick = () => openAvatarSlideshow('user', window.ME.id, window.ME.display_name, img.src);
+  });
+}
+function actMyAvatar(fields) {
+  fetch('/api/avatar', { method: 'POST', body: new URLSearchParams(fields) }).then(r => r.json()).then(j => {
+    if (!j.ok) { toast(j.error || 'انجام نشد', 'error'); return; }
+    window.ME.avatar = j.avatar || '';
+    document.getElementById('pmAvatar').innerHTML = avatarInner(window.ME.display_name, window.ME.avatar);
+    const prev = document.getElementById('pmAvPrev');
+    prev.src = window.ME.avatar;
+    prev.style.display = window.ME.avatar ? 'block' : 'none';
+    document.getElementById('pmAvClear').style.display = window.ME.avatar ? 'inline-flex' : 'none';
+    refreshSideAvatar();
+    refreshConvList();
+    loadMyAvatarGrid();
+  });
+}
+document.getElementById('pmAvGrid').addEventListener('click', e => {
+  const setp = e.target.closest('[data-setprim]');
+  if (setp) { actMyAvatar({ primary: setp.dataset.setprim }); return; }
+  const del = e.target.closest('[data-avdel]');
+  if (del) { actMyAvatar({ remove: del.dataset.avdel }); }
+});
 
 function refreshSideAvatar() {
   const link = document.getElementById('sideProfileLink');

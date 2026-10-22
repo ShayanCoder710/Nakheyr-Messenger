@@ -227,9 +227,11 @@
       </label>
       <div class="av-actions">
         <button class="btn" id="csAvUpload">آپلود</button>
-        <button class="btn ghost" id="csAvClear" style="display:none">حذف</button>
+        <button class="btn ghost" id="csAvClear" style="display:none">حذف اصلی</button>
       </div>
     </div>
+    <label class="label">عکس‌های گپ <small>اسلاید: روی هرکدوم بزن</small></label>
+    <div class="av-grid" id="csAvGrid"></div>
     <label class="label">ارسال دعوت (لینک عضویت)</label>
     <div class="inv-row">
       <code id="csInviteLink" class="inv-link"></code>
@@ -364,9 +366,11 @@
       </label>
       <div class="av-actions">
         <button class="btn" id="pmAvatarBtn">آپلود</button>
-        <button class="btn ghost" id="pmAvClear" style="display:none">حذف</button>
+        <button class="btn ghost" id="pmAvClear" style="display:none">حذف اصلی</button>
       </div>
     </div>
+    <label class="label">عکس‌های پروفایل <small>بزن روی هرکدوم تا همه رو به‌صورت اسلاید ببینی</small></label>
+    <div class="av-grid" id="pmAvGrid"></div>
     <label class="label">تغییر رمز عبور</label>
     <div class="pass-fields">
       <input class="input" id="pmCurPass" type="password" placeholder="رمز فعلی" autocomplete="current-password">
@@ -489,11 +493,15 @@
   <div class="mv-bar">
     <span class="mv-name" id="mvName"></span>
     <div class="mv-tools">
+      <button class="mv-btn mv-del" id="mvDelete" title="حذف این عکس" style="display:none">{{ bi('trash') }}</button>
       <a class="mv-btn" id="mvOpen" href="#" target="_blank" rel="noopener" title="باز کردن در تب جدید">{{ bi('box-arrow-up-right') }}</a>
       <a class="mv-btn" id="mvDownload" href="#" download title="دریافت">{{ bi('download') }}</a>
       <button class="mv-btn" id="mvClose" title="بستن">{{ bi('x-lg') }}</button>
     </div>
   </div>
+  <button class="mv-nav mv-prev" id="mvPrev" title="قبلی" style="display:none">{{ bi('chevron-right') }}</button>
+  <button class="mv-nav mv-next" id="mvNext" title="بعدی" style="display:none">{{ bi('chevron-left') }}</button>
+  <div class="mv-count" id="mvCount" style="display:none"></div>
   <div class="mv-stage" id="mvStage"></div>
 </div>
 
