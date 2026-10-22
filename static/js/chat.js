@@ -180,61 +180,55 @@ function tickIcon(seen) {
   return bi(seen ? 'check2-all' : 'check');
 }
 
+function faNum(n) {
+  return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+}
+
+/* Telegram-style poll card:
+   - before voting: plain tappable option rows
+   - after voting / when closed: percentage track under every option,
+     the voter's picks get the accent border + accent fill
+   - footer: vote count + «لغو رای» (undo) + admin actions        */
 function pollHtml(p) {
   const total = p.total || 0;
   const voters = (p.voters !== undefined && p.voters !== null) ? p.voters : 0;
   const multi = !!p.multi;
   const closed = !!p.closed;
   const myVotes = p.my_votes || [];
+  const voted = myVotes.length > 0;
+  const showResults = closed || voted;
   const opts = (p.options || []).map((label, i) => {
     const c = (p.counts && p.counts[i]) || 0;
     const pct = total ? Math.round(c / total * 100) : 0;
     const sel = myVotes.includes(i);
-    const input = closed
-      ? `<input type="${multi ? 'checkbox' : 'radio'}" disabled>`
-      : `<input type="${multi ? 'checkbox' : 'radio'}" data-pollvote="${p.id}" value="${i}" ${sel ? 'checked' : ''} name="pv${p.id}">`;
-    return `<label class="poll-opt ${sel ? 'selected' : ''}">
-      <span class="opt-bar" style="width:${closed ? pct : 0}%"></span>
-      ${input}<span class="opt-ic">${sel ? bi('check-circle-fill') : (multi ? bi('collection') : bi('circle'))}</span>
-      <span class="opt-label">${esc(label)}</span>
-      ${closed ? `<span class="opt-count"><b>${c}</b> · ${pct}%</span>` : ''}
-    </label>`;
+    return `<div class="poll-opt ${sel ? 'selected' : ''}" data-pollopt="${p.id}" data-opt="${i}">
+      <div class="opt-top">
+        <span class="opt-label">${esc(label)}</span>
+        ${showResults ? `<span class="opt-pct${sel ? ' sel' : ''}">${faNum(pct)}٪</span>` : ''}
+      </div>
+      ${showResults ? `<div class="opt-track"><span class="opt-fill${sel ? ' sel' : ''}" style="width:${pct}%"></span></div>` : ''}
+    </div>`;
   }).join('');
   const isGroup = CD.chat && CD.chat.chat_type === 'group';
   const canSeeVoters = closed && isGroup && (window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
   const canClose = !closed && (p.created_by === window.ME.id || window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
   const expTag = closed ? (p.expires_at ? `<span class="poll-tag exp">${bi('hourglass-split')} انقضاشده</span>` : `<span class="poll-tag">${bi('lock')} بسته</span>`) : '';
-  const canRevoke = !closed && myVotes.length > 0;
+  const multiTag = multi ? `<span class="poll-tag">${bi('ui-checks')} چندگزینه‌ای</span>` : '';
+  const canRevoke = !closed && voted;
   const foot = `<div class="poll-foot">
-    <span class="poll-total">${bi('people')} ${voters} نفر شرکت${multi ? ' · چندگزینه‌ای' : ''}</span>
+    <span class="poll-total">${bi('people')} ${faNum(voters)} رای</span>
     <span class="poll-foot-acts">
-      ${canRevoke ? `<button class="poll-close-btn" data-pollrevoke="${p.id}" title="پس گرفتن رای من">${bi('arrow-counterclockwise')}</button>` : ''}
+      ${canRevoke ? `<button class="poll-revoke-btn" data-pollrevoke="${p.id}" title="پس گرفتن رای من">${bi('arrow-counterclockwise')} لغو رای</button>` : ''}
       ${canSeeVoters ? `<button class="poll-close-btn" data-pollvoters="${p.id}" title="مشاهده رأی‌دهندگان">${bi('eye')}</button>` : ''}
       ${canClose ? `<button class="poll-close-btn" data-pollclose="${p.id}" title="بستن">${bi('lock')}</button>` : ''}
     </span>
   </div>`;
   return `<div class="poll-card ${closed ? 'poll-locked' : ''}" data-pollid="${p.id}">
-    <div class="poll-head"><span class="poll-head-ic">${bi('bar-chart')}</span><b>نظرسنجی</b>${expTag}</div>
+    <div class="poll-head"><span class="poll-head-ic">${bi('bar-chart')}</span><b>نظرسنجی</b>${multiTag}${expTag}</div>
     <div class="poll-q">${esc(p.question)}</div>
     <div class="poll-opts">${opts}</div>
-    ${pollResultsBar(p)}
     ${foot}
   </div>`;
-}
-
-/* Pretty percentage result bars shown when the poll is closed */
-function pollResultsBar(p) {
-  if (!p.closed || !p.total) return '';
-  const total = p.total;
-  return `<div class="poll-results-strip">${(p.options || []).map((label, i) => {
-    const c = (p.counts && p.counts[i]) || 0;
-    const pct = total ? Math.round(c / total * 100) : 0;
-    return `<div class="res-col" title="${esc(label)}">
-      <div class="res-val">${pct}%</div>
-      <div class="res-bar"><span style="width:${pct}%"></span></div>
-      <div class="res-label">${esc(label)}</div>
-    </div>`;
-  }).join('')}</div>`;
 }
 
 function renderMsg(m) {
@@ -838,21 +832,35 @@ document.getElementById('pollVotersModal').addEventListener('click', e => {
     document.getElementById('pollVotersModal').classList.remove('show');
   }
 });
-document.addEventListener('change', e => {
-  const inp = e.target.closest('[data-pollvote]');
-  if (!inp) return;
-  const pid = +inp.dataset.pollvote;
-  const card = inp.closest('.poll-card');
-  const multi = inp.type === 'checkbox';
+// Telegram-style: tapping an option votes right away — single-choice
+// switches the pick, multi-choice toggles it; an empty toggle set undoes
+// the whole vote. The card re-renders from the poll_vote/poll_revoke
+// socket events (no optimistic local state needed).
+document.addEventListener('click', e => {
+  const opt = e.target.closest('[data-pollopt]');
+  if (!opt) return;
+  const pid = +opt.dataset.pollopt;
+  const idx = +opt.dataset.opt;
+  const m = (CD.initialMessages || []).find(x => x.poll && x.poll.id === pid);
+  if (!m || !m.poll) return;
+  const p = m.poll;
+  if (p.closed) return;
+  const myVotes = p.my_votes || [];
   let pick;
-  if (multi) {
-    pick = [...card.querySelectorAll('[data-pollvote]:checked')].map(x => +x.value);
+  if (p.multi) {
+    pick = myVotes.includes(idx) ? myVotes.filter(x => x !== idx) : myVotes.concat(idx).sort((a, b) => a - b);
   } else {
-    pick = +inp.value;
+    pick = [idx];
   }
-  api('/api/poll/' + pid + '/vote', { options: multi ? pick : [pick] }).then(j => {
-    if (!j.ok) { toast(j.error || 'رای ثبت نشد', 'error'); inp.checked = false; }
-  });
+  if (pick.length === 0) {
+    api('/api/poll/' + pid + '/revoke', {}).then(j => {
+      if (!j.ok) toast(j.error || 'نمی‌شود پس گرفت', 'error');
+    });
+  } else {
+    api('/api/poll/' + pid + '/vote', { options: pick }).then(j => {
+      if (!j.ok) toast(j.error || 'رای ثبت نشد', 'error');
+    });
+  }
 });
 
 // Poll modal: ESC to close

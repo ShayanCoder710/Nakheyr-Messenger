@@ -1552,46 +1552,50 @@ body.dragging::after {
   color: var(--text);
 }
 .mrow.mine-row .poll-q { color: var(--text); }
-.poll-opts { display: flex; flex-direction: column; gap: 5px; padding: 6px 10px 10px; }
-.poll-opt {
-  position: relative; display: flex; align-items: center; gap: 8px;
-  padding: 8px 10px; border-radius: 11px; cursor: pointer;
-  background: var(--panel-2); border: 1px solid var(--line);
-  font-size: 12.5px; font-weight: 600; overflow: hidden;
-  transition: border-color .15s ease, background .15s ease, transform .12s ease;
+.poll-opts { display: flex; flex-direction: column; gap: 4px; padding: 8px 10px 10px; }
+/* tappable option row (Telegram-like): label on top, percentage track below.
+   Scoped to the card so the create-modal's <input class="input poll-opt">
+   keeps its .input look. */
+.poll-card .poll-opt {
+  position: relative; border-radius: 12px; padding: 9px 11px; cursor: pointer;
+  border: 1.5px solid transparent; font-size: 13px; font-weight: 600; color: var(--text);
+  transition: border-color .15s ease, background .15s ease;
 }
-.poll-opt:hover { border-color: var(--line-2); transform: translateX(-1px); }
-.poll-opt input {
-  accent-color: var(--accent); cursor: pointer; flex: 0 0 auto; width: 15px; height: 15px;
+.poll-card .poll-opt:hover { background: var(--panel-2); }
+.poll-card .poll-opt .opt-top { display: flex; align-items: center; justify-content: space-between; gap: 10px; }
+.poll-card .poll-opt .opt-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.poll-card .poll-opt .opt-pct { font-size: 11.5px; font-weight: 800; color: var(--dim); flex: 0 0 auto; }
+.poll-card .poll-opt .opt-pct.sel { color: var(--accent-2); }
+.poll-card .poll-opt.selected { border-color: var(--accent); background: var(--accent-soft); }
+/* animated percentage track under the label */
+.poll-card .poll-opt .opt-track {
+  height: 5px; border-radius: 99px; margin-top: 7px; overflow: hidden; background: var(--line);
 }
-.poll-opt .opt-ic { display: grid; place-items: center; flex: 0 0 auto; color: var(--dim); }
-.poll-opt .opt-ic .bi-ic { width: 14px; height: 14px; }
-.poll-opt.selected { border-color: var(--accent); background: var(--accent-soft); }
-.poll-opt.selected .opt-ic { color: var(--accent-2); }
-.poll-opt.selected:hover { transform: translateX(0); }
-.poll-opt .opt-label { flex: 1; min-width: 0; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; position: relative; z-index: 1; }
-.poll-opt .opt-count {
-  font-size: 11px; font-weight: 700; color: var(--muted); flex: 0 0 auto;
-  position: relative; z-index: 1;
+.poll-card .poll-opt .opt-fill {
+  display: block; height: 100%; border-radius: 99px; background: var(--muted);
+  transition: width .5s cubic-bezier(.22, 1, .36, 1);
 }
-.poll-opt .opt-count b { color: var(--accent-2); font-weight: 800; }
-/* animated fill bar (results, shown when closed) */
-.poll-opt .opt-bar {
-  position: absolute; inset: 0 auto 0 0; width: 0;
-  background: linear-gradient(90deg, rgba(229,57,59,.35), rgba(229,57,59,.12));
-  transition: width .6s cubic-bezier(.22, 1, .36, 1);
-  border-radius: 10px;
-}
-.mrow.mine-row .poll-opt .opt-bar {
-  background: linear-gradient(90deg, rgba(229,57,59,.35), rgba(229,57,59,.12));
-}
+.poll-card .poll-opt .opt-fill.sel { background: var(--accent); }
+.mrow.mine-row .poll-card .poll-opt .opt-fill.sel { background: var(--accent-2); }
+/* create-modal option inputs (kept compact like before) */
+#pollOptions .poll-opt { font-size: 12.5px; font-weight: 600; }
 .poll-foot {
   display: flex; justify-content: space-between; align-items: center;
   padding: 8px 12px; border-top: 1px solid var(--line);
   background: rgba(0,0,0,.15); font-size: 11px; color: var(--dim);
 }
+.poll-foot-acts { display: inline-flex; align-items: center; gap: 6px; }
 .poll-total { display: inline-flex; align-items: center; gap: 5px; font-weight: 700; }
 .poll-total .bi-ic { width: 12px; height: 12px; }
+/* text «لغو رای» button (undo the whole vote) */
+.poll-revoke-btn {
+  display: inline-flex; align-items: center; gap: 4px;
+  border: 1px solid var(--line-2); background: var(--panel-2); color: var(--muted);
+  font-size: 11px; font-weight: 700; border-radius: 9px; padding: 4px 9px; cursor: pointer;
+  transition: .15s ease;
+}
+.poll-revoke-btn:hover { color: var(--accent-2); border-color: var(--accent); }
+.poll-revoke-btn .bi-ic { width: 12px; height: 12px; }
 .poll-close-btn {
   width: 28px; height: 28px; border-radius: 9px; border: 1px solid var(--line-2);
   background: var(--panel-2); color: var(--muted); cursor: pointer;
@@ -1600,8 +1604,7 @@ body.dragging::after {
 .poll-close-btn:hover { color: var(--accent-2); border-color: var(--accent); transform: scale(1.08); }
 .poll-close-btn .bi-ic { width: 13px; height: 13px; }
 .poll-locked .poll-opt { cursor: default; }
-.poll-locked .poll-opt input { opacity: .35; }
-.poll-locked .poll-opt:hover { transform: none; }
+.poll-locked .poll-opt:hover { background: transparent; }
 
 /* ── Create modal ─────────────────────────────────────────────── */
 .poll-modal-head { display: flex; align-items: center; gap: 12px; margin-bottom: 12px; }
@@ -1653,26 +1656,6 @@ body.dragging::after {
 }
 .exp-seg button:hover { background: var(--bg-3); color: var(--text); }
 .exp-seg button.on { background: var(--accent-soft); border-color: var(--accent); color: var(--accent-2); }
-
-/* Pretty percentage results strip (shown when closed) */
-.poll-results-strip {
-  display: flex; gap: 8px; padding: 4px 12px 10px;
-}
-.res-col { flex: 1 1 0; min-width: 0; display: flex; flex-direction: column; gap: 3px; }
-.res-val { font-size: 11px; font-weight: 800; color: var(--accent-2); text-align: center; }
-.res-bar {
-  height: 6px; border-radius: 999px; background: var(--bg-3); overflow: hidden;
-}
-.res-bar span {
-  display: block; height: 100%; border-radius: inherit;
-  background: linear-gradient(90deg, var(--accent-2), var(--accent));
-  transition: width .6s cubic-bezier(.22, 1, .36, 1);
-}
-.res-label {
-  font-size: 10px; color: var(--dim); text-align: center;
-  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
-}
-.poll-foot-acts { display: inline-flex; gap: 6px; }
 
 /* Poll voters modal */
 .pv-head { display: flex; align-items: center; gap: 12px; margin-bottom: 14px; position: relative; }
