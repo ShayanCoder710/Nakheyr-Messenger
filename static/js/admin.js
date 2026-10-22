@@ -148,13 +148,13 @@ function handleReportAction(btn) {
               empty.style.display = '';
             }
           }, 220);
-        }
-        if (act === 'resolve') {
-          const uid = item.dataset.uid;
-          if (uid) {
-            const row = document.querySelector('.au-row[data-uid="' + uid + '"]');
-            if (row) refreshUserRow(row, { is_admin: row.dataset.admin === '1', is_banned: true });
-            bumpStat('statBanned', 1);
+          if (act === 'resolve') {
+            const uid = item.dataset.uid;
+            if (uid) {
+              const row = document.querySelector('.au-row[data-uid="' + uid + '"]');
+              if (row) refreshUserRow(row, { is_admin: row.dataset.admin === '1', is_banned: true });
+              bumpStat('statBanned', 1);
+            }
           }
         }
         toast('انجام شد');
