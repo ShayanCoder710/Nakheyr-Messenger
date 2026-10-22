@@ -1438,6 +1438,31 @@ def api_poll_vote(poll_id):
     return jsonify(ok=True, **payload)
 
 
+@app.route('/api/poll/<int:poll_id>/revoke', methods=['POST'])
+@require_auth
+def api_poll_revoke(poll_id):
+    """Undo the current user's vote(s) on a poll. Idempotent: removes every
+    PollVote row for (poll, user) and re-broadcasts the tallied state."""
+    user = current_user()
+    poll = Poll.query.get(poll_id)
+    if not poll:
+        return jsonify(ok=False, error='نظرسنجی پیدا نشد')
+    if poll.closed or poll.is_expired():
+        return jsonify(ok=False, error='این نظرسنجی بسته شده')
+    chat = Chat.query.get(poll.chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    if not user.is_admin and not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+        return jsonify(ok=False, error='عضو این گپ نیستی')
+    PollVote.query.filter_by(poll_id=poll.id, user_id=user.id).delete(synchronize_session=False)
+    db.session.commit()
+    payload = _poll_vote_payload(poll, user.id)
+    payload['voter'] = user.to_public()
+    for mid in chat_member_ids(poll.chat_id):
+        socketio.emit('poll_revoke', payload, room=f'user:{mid}')
+    return jsonify(ok=True, **payload)
+
+
 @app.route('/api/poll/<int:poll_id>/close', methods=['POST'])
 @require_auth
 def api_poll_close(poll_id):

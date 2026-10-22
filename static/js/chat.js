@@ -209,9 +209,11 @@ function pollHtml(p) {
   const canSeeVoters = closed && isGroup && (window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
   const canClose = !closed && (p.created_by === window.ME.id || window.ME.is_admin || (CD.role && ['owner', 'admin'].includes(CD.role)));
   const expTag = closed ? (p.expires_at ? `<span class="poll-tag exp">${bi('hourglass-split')} انقضاشده</span>` : `<span class="poll-tag">${bi('lock')} بسته</span>`) : '';
+  const canRevoke = !closed && myVotes.length > 0;
   const foot = `<div class="poll-foot">
     <span class="poll-total">${bi('people')} ${voters} نفر شرکت${multi ? ' · چندگزینه‌ای' : ''}</span>
     <span class="poll-foot-acts">
+      ${canRevoke ? `<button class="poll-close-btn" data-pollrevoke="${p.id}" title="پس گرفتن رای من">${bi('arrow-counterclockwise')}</button>` : ''}
       ${canSeeVoters ? `<button class="poll-close-btn" data-pollvoters="${p.id}" title="مشاهده رأی‌دهندگان">${bi('eye')}</button>` : ''}
       ${canClose ? `<button class="poll-close-btn" data-pollclose="${p.id}" title="بستن">${bi('lock')}</button>` : ''}
     </span>
@@ -785,8 +787,17 @@ document.getElementById('pollCreate').onclick = async () => {
   } else if (r.error) toast(r.error, 'error');
 };
 
-/* Poll vote / close clicks (event delegation) */
+/* Poll vote / close / revoke clicks (event delegation) */
 document.addEventListener('click', e => {
+  const revBtn = e.target.closest('[data-pollrevoke]');
+  if (revBtn) {
+    e.preventDefault();
+    api('/api/poll/' + revBtn.dataset.pollrevoke + '/revoke', {}).then(j => {
+      if (!j.ok) toast(j.error || 'نمی‌شود پس گرفت', 'error');
+      // on success the poll_revoke socket event re-renders the card on every client
+    });
+    return;
+  }
   const closeBtn = e.target.closest('[data-pollclose]');
   if (closeBtn) {
     e.preventDefault();
@@ -3089,10 +3100,28 @@ S.on('poll_vote', d => {
       ...m.poll,
       counts: d.counts, total: d.total,
       voters: d.voters,
-      my_votes: d.my_votes, multi: d.multi, closed: d.closed,
+      multi: d.multi, closed: d.closed,
       question: m.poll.question, options: m.poll.options,
       expires_at: m.poll.expires_at, created_by: m.poll.created_by,
     };
+    // my_votes is per-viewer: only the voter's own screen updates its selection.
+    if (d.voter && d.voter.id === window.ME.id) m.poll.my_votes = d.my_votes;
+  }
+  card.outerHTML = (m && m.poll) ? pollHtml(m.poll) : '';
+});
+
+S.on('poll_revoke', d => {
+  if (d.chat_id !== currentChat) return;
+  const card = document.querySelector(`.poll-card[data-pollid="${d.poll_id}"]`);
+  if (!card) return;
+  const m = (CD.initialMessages || []).find(x => x.poll && x.poll.id === d.poll_id);
+  if (m) {
+    m.poll.counts = d.counts;
+    m.poll.total = d.total;
+    m.poll.voters = d.voters;
+    m.poll.closed = d.closed;
+    // Only the revoker's own view clears its selection; everyone else keeps theirs.
+    if (d.voter && d.voter.id === window.ME.id) m.poll.my_votes = [];
   }
   card.outerHTML = (m && m.poll) ? pollHtml(m.poll) : '';
 });
