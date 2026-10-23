@@ -76,12 +76,14 @@ function getMember(id) {
     const m = CD.members.find(x => x.id === id);
     if (m) return m;
   }
-  return { display_name: id, username: '', avatar: '', status: 'offline' };
+  // Sender is no longer a member (kicked/left/deleted): keep the name a
+  // string — a numeric display_name crashes avBox and the whole boot.
+  return { display_name: 'کاربر', username: '', avatar: '', status: 'offline' };
 }
 
 function avBox(name, avatar, online, size) {
   const cls = ('avatar' + (size ? ' ' + size : '')).trim();
-  const init = esc((name || '?').trim().charAt(0));
+  const init = esc(String(name || '?').trim().charAt(0) || '?');
   const dot = avatar ? '' : (online === undefined ? '' : `<i class="dot ${online ? 'on' : 'off'}"></i>`);
   return `<div class="${cls}">${avatar ? `<img src="${avatar}" alt="">` : init}${dot}</div>`;
 }
@@ -328,13 +330,19 @@ function renderAllMessages() {
   if (msgs.length) {
     let lastRaw = null;
     msgs.forEach(m => {
-      const raw = dayKey(m.created_at);
-      if (raw !== lastRaw) {
-        body.insertAdjacentHTML('beforeend',
-          `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(m.created_at)}</span></div>`);
-        lastRaw = raw;
+      // One bad message must never kill the whole boot (loadPinned,
+      // conv list, etc. all run after this loop).
+      try {
+        const raw = dayKey(m.created_at);
+        if (raw !== lastRaw) {
+          body.insertAdjacentHTML('beforeend',
+            `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(m.created_at)}</span></div>`);
+          lastRaw = raw;
+        }
+        body.insertAdjacentHTML('beforeend', renderMsg(m));
+      } catch (err) {
+        console.warn('renderMsg failed for message', m.id, err);
       }
-      body.insertAdjacentHTML('beforeend', renderMsg(m));
     });
   } else if (currentChat) {
     body.innerHTML = '<div class="empty-msgs">اینجا جای پیام‌هاست. اولین پیام رو تو بفرست</div>';
