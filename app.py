@@ -17,7 +17,7 @@ from models.models import (
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
-    kind_for, INLINE_UNSAFE_EXT, mp4_has_audio,
+    kind_for, INLINE_UNSAFE_EXT, mp4_has_audio, AUDIO_EXT,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
     username_taken, RESERVED_USERNAMES,
@@ -1021,8 +1021,70 @@ def api_upload():
     if not path:
         return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۵۰ مگ).')
     kind = kind_for(f.filename, f.mimetype)
+    # A voice-note recording is a valid audio container (webm/opus etc.) even
+    # when the extension reads like a video container: accept a client-side
+    # `kind=audio` hint, validated against the real audio containers.
+    if request.form.get('kind') == 'audio':
+        ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+        if ext in (AUDIO_EXT | {'webm', 'oga', 'opus', 'webma'}):
+            kind = 'audio'
     return jsonify(ok=True, file_path=path, file_name=f.filename, kind=kind,
                    file_url=f'/files/{path}')
+
+
+@app.route('/api/chat/<int:chat_id>/search', methods=['GET'])
+@require_auth
+def api_chat_message_search(chat_id):
+    """Search ALL (not just loaded) messages of a chat: text + captions + filenames."""
+    user = current_user()
+    chat = db.session.execute(
+        db.select(Chat).where(Chat.id == chat_id)
+        .options(joinedload(Chat.members).joinedload(ChatMember.user))
+    ).scalars().first()
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    q = request.args.get('q', '').strip()
+    limit = max(1, min(int(request.args.get('limit', 30) or 30), 50))
+    if len(q) < 2:
+        return jsonify(ok=True, matches=[])
+    qq = '%' + q.replace('\\', '\\\\').replace('%', '\\%').replace('_', '\\_') + '%'
+    rows = (Message.query
+            .filter(Message.chat_id == chat.id,
+                    Message.deleted == False,
+                    db.or_(Message.content.like(qq, escape='\\'),
+                           Message.file_name.like(qq, escape='\\')))
+            .order_by(Message.id.desc()).limit(limit).all())
+    matches = []
+    for m in rows:
+        raw = (m.content or m.file_name or '').strip()
+        matches.append({
+            'id': m.id, 'msg_type': m.msg_type, 'sender_id': m.sender_id,
+            'created_at': m.created_at.isoformat() if m.created_at else None,
+            'file_name': m.file_name or '',
+            'snippet': raw[:80] + ('…' if len(raw) > 80 else ''),
+        })
+    return jsonify(ok=True, matches=matches)
+
+
+@app.route('/api/chat/<int:chat_id>/messages/around', methods=['GET'])
+@require_auth
+def api_chat_messages_around(chat_id):
+    """History page around a message id (for jumping to search results)."""
+    user = current_user()
+    chat = db.session.execute(
+        db.select(Chat).where(Chat.id == chat_id)
+        .options(joinedload(Chat.members).joinedload(ChatMember.user))
+    ).scalars().first()
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    mid = int(request.args.get('mid') or 0)
+    limit = max(1, min(int(request.args.get('limit', 20) or 20), 40))
+    base = Message.query.filter(Message.chat_id == chat.id, Message.deleted == False)
+    if mid:
+        base = base.filter(Message.id <= mid)
+    msgs = [m.to_dict(user.id) for m in base.order_by(Message.id.desc()).limit(limit).all()][::-1]
+    _attach_polls_to_messages(msgs, user)
+    return jsonify(ok=True, messages=msgs)
 
 
 @app.route('/api/gifs', methods=['GET'])

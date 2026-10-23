@@ -781,6 +781,16 @@ b, strong { font-weight: 800; }
   background: var(--bg-3); border: 1px dashed var(--line-2); color: var(--dim);
   font-size: 10px; line-height: 1;
 }
+/* loading skeleton tiles (shimmer) while the gif library fetches */
+.ep-giftile.ep-gifskel { cursor: default; background: var(--bg-3); overflow: hidden; }
+.ep-giftile.ep-gifskel:hover { box-shadow: none; }
+.ep-giftile.ep-gifskel .skel-shimmer {
+  position: absolute; inset: 0;
+  background: linear-gradient(100deg, transparent 30%, rgba(255, 255, 255, .06) 50%, transparent 70%);
+  background-size: 220% 100%;
+  animation: skelShimmer 1.2s ease-in-out infinite;
+}
+@keyframes skelShimmer { from { background-position: 120% 0; } to { background-position: -120% 0; } }
 .ep-giftile.ep-gifadd:hover { color: var(--text); box-shadow: none; }
 .ep-giftile.ep-gifadd .bi-ic { width: 15px; height: 15px; }
 .ep-gifempty { grid-column: 1 / -1; text-align: center; color: var(--dim); font-size: 12px; padding: 16px 0; user-select: none; }
@@ -1103,10 +1113,38 @@ b, strong { font-weight: 800; }
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
 .attach-preview { display: none; padding: 8px 14px 0; }
-.attach-preview.show { display: flex; gap: 10px; align-items: center; }
+.attach-preview.show { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .attach-preview img { width: 44px; height: 44px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line-2); }
 .attach-preview .fname { font-size: 12px; color: var(--muted); }
 .attach-preview button { color: var(--accent-2); background: none; border: none; font-size: 16px; }
+/* multi-file queue rows */
+.ap-item {
+  display: flex; align-items: center; gap: 10px;
+  padding: 6px 10px; border-radius: 14px; background: var(--panel-2);
+  border: 1px solid var(--line-2);
+}
+.ap-item img { flex: none; }
+.ap-item .fname { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.ap-item.uploading { opacity: .95; }
+/* upload progress bar + percent (Telegram-style, cancellable) */
+.ap-progress { flex: 1; min-width: 60px; max-width: 180px; height: 5px; border-radius: 99px; background: var(--line-2); overflow: hidden; position: relative; display: inline-block; }
+.ap-progress .ap-bar { display: block; height: 100%; width: 0; border-radius: 99px; background: var(--accent); transition: width .15s ease; }
+.ap-progress .ap-pct { position: absolute; inset: 0; display: flex; align-items: center; justify-content: center; font-size: 9px; font-weight: 800; color: var(--text); font-family: 'JetBrains Mono', monospace; }
+.ap-item .ap-x { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); cursor: pointer; transition: .15s ease; }
+.ap-item .ap-x:hover { color: var(--danger, #d93a3d); background: var(--panel); }
+.ap-item .ap-x .bi-ic { font-size: 13px; }
+/* voice recorder bar (live timer + cancel/stop) */
+.rec-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line-2); user-select: none; }
+.rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger, #d93a3d); animation: recPulse 1s ease-in-out infinite; flex: none; }
+@keyframes recPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
+.rec-time { font-family: 'JetBrains Mono', monospace; font-size: 13px; font-weight: 700; min-width: 42px; text-align: left; direction: ltr; }
+.rec-lbl { flex: 1; font-size: 12px; color: var(--muted); }
+.rec-bar .rec-x, .rec-bar .rec-ok { flex: none; width: 32px; height: 32px; border-radius: 50%; display: grid; place-items: center; cursor: pointer; transition: .15s ease; border: none; }
+.rec-bar .rec-x { background: var(--panel); color: var(--muted); }
+.rec-bar .rec-x:hover { color: var(--danger, #d93a3d); }
+.rec-bar .rec-ok { background: var(--accent); color: #fff; }
+.rec-bar .rec-ok:hover { filter: brightness(1.1); }
+.rec-bar .bi-ic { font-size: 15px; }
 
 .member-list { position: absolute; top: 56px; left: 12px; z-index: 60; display: none; width: min(360px, 90vw); max-height: 70vh; overflow-y: auto; background: var(--card); border: 1px solid var(--line-2); border-radius: 18px; box-shadow: var(--shadow); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 .member-list.show { display: block; }

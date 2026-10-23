@@ -132,9 +132,10 @@
           <div class="composer-tools">
             <button class="icon-btn" id="btnEmoji" title="ایموجی">{{ bi('emoji-smile') }}</button>
             <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل">{{ bi('paperclip') }}</button>
+            <button class="icon-btn" id="btnMic" title="ضبط پیام صوتی" aria-label="ضبط پیام صوتی">{{ bi('mic') }}</button>
             <button class="icon-btn" id="btnPoll" title="نظرسنجی" aria-label="نظرسنجی" type="button">{{ bi('bar-chart') }}</button>
           </div>
-          <input type="file" id="fileInput" hidden>
+          <input type="file" id="fileInput" multiple hidden>
           <textarea class="composer-input" id="msgInput" rows="1" placeholder="پیام…"></textarea>
           <button class="send-btn" id="btnSend" title="ارسال">
             {{ bi('send-fill') }}

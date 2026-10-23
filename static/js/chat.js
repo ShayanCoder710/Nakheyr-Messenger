@@ -4,7 +4,9 @@ CD.joined = window.JOINED !== false;
 
 let currentChat = window.CURRENT_CHAT;
 let composerChatId = window.CURRENT_CHAT || null;
-let pendingFile = null;
+let pendingFiles = [];   // attachment queue: {id, file?, name, size, status, progress, path, kind, url, asFile, vid, xhr, forceKind}
+let _pfSeq = 0;
+let recState = null;     // active voice recording: {rec, stream, chunks, mime, secs, int}
 let pendingReply = null;
 let selectedIds = new Set();
 let selecting = false;
@@ -1270,14 +1272,26 @@ function renderEpCurrentSet() {
 // send button sends it as a `gif` message.
 async function loadGifs() {
   if (CD.gifs !== undefined) return;
+  CD.gifs = null;               // loading sentinel → grid shows skeleton
+  renderGifGrid();
   try {
     const r = await fetch('/api/gifs').then(x => x.json());
-    if (r && r.ok) CD.gifs = r.gifs || [];   // leave undefined on failure → retry on next open
-  } catch (e) { /* offline: retry next time the panel opens */ }
+    if (r && r.ok) CD.gifs = r.gifs || [];
+    else CD.gifs = undefined;   // failure → retry on next open
+  } catch (e) { CD.gifs = undefined; }
+  renderGifGrid();
 }
 function renderGifGrid() {
   const grid = document.getElementById('epGifGrid');
   if (!grid) return;
+  if (CD.gifs === undefined || CD.gifs === null) {
+    // Still loading (or a failed first load): shimmer skeleton, not an empty state.
+    grid.innerHTML = Array.from({ length: 6 }, () =>
+      `<div class="ep-giftile ep-gifskel" aria-hidden="true"><div class="skel-shimmer"></div></div>`).join('')
+      + `<span class="ep-gifempty">در حال بارگذاری گیف‌ها…</span>`;
+    if (CD.gifs === undefined) loadGifs();
+    return;
+  }
   const search = document.getElementById('epSearch');
   const q = (search && search.value || '').trim().toLowerCase();
   const all = CD.gifs || [];
@@ -1328,8 +1342,9 @@ function sendGifFromTile(gid) {
   const g = (CD.gifs || []).find(x => x.id === +gid);
   if (!g) return;
   // Same shape the upload flow produces: composer preview + normal send.
-  pendingFile = { path: g.url.slice('/files/'.length), name: g.name + (g.kind === 'video' ? '.mp4' : '.gif'),
-                  kind: 'gif', url: g.url, asFile: false, vid: g.kind === 'video' };
+  pendingFiles.push({ id: ++_pfSeq, path: g.url.slice('/files/'.length), name: g.name + (g.kind === 'video' ? '.mp4' : '.gif'),
+                      kind: 'gif', url: g.url, asFile: false, vid: g.kind === 'video',
+                      status: 'ready', progress: 100, size: 0 });
   renderAttachPreview();
   const inp = document.getElementById('msgInput');
   if (inp && !inp.disabled) inp.focus();
@@ -1459,20 +1474,22 @@ document.addEventListener('click', e => {
 });
 
 let sending = false;
-async function sendText() {
+async function sendText(caption) {
   if (sending || !currentChat) return;
   const chatId = currentChat;
   const input = document.getElementById('msgInput');
   if (input.disabled) return;
-  const text = input.value.trim();
-  if (!text && !pendingFile) return;
+  const text = (caption !== undefined ? caption : input.value).trim();
+  // Next ready attachment in the queue (uploads keep queuing while it waits).
+  const item = pendingFiles.find(f => f.status === 'ready');
+  if (!text && !item) return;
   sending = true;
   const body = { chat_id: chatId, content: text };
-  if (pendingFile) {
+  if (item) {
     // User can force-send images/videos as a plain downloadable file.
-    body.msg_type = pendingFile.asFile ? 'file' : pendingFile.kind;
-    body.file_path = pendingFile.path;
-    body.file_name = pendingFile.name;
+    body.msg_type = item.asFile ? 'file' : item.kind;
+    body.file_path = item.path;
+    body.file_name = item.name;
   } else {
     body.msg_type = 'text';
   }
@@ -1480,13 +1497,18 @@ async function sendText() {
   try {
     const r = await api('/api/message/send', body);
     if (r.ok) {
+      if (item) {
+        const i = pendingFiles.indexOf(item);
+        if (i > -1) pendingFiles.splice(i, 1);
+      }
       if (currentChat === chatId) {
         appendMsg(r.message);
-        input.value = '';
-        input.style.height = 'auto';
+        if (caption === undefined) {
+          input.value = '';
+          input.style.height = 'auto';
+        }
         pendingReply = null;
-        document.getElementById('attachPreview').classList.remove('show');
-        document.getElementById('attachPreview').innerHTML = '';
+        renderAttachPreview();
         document.getElementById('replyPreview').style.display = 'none';
         // Keep the composer focused so the mobile keyboard stays up between
         // messages (Telegram behavior). Refocusing right after a user gesture
@@ -1494,10 +1516,26 @@ async function sendText() {
         input.focus({ preventScroll: true });
         try { input.setSelectionRange(0, 0); } catch (_) {}
       }
-      pendingFile = null;
-      if (composerChatId === chatId) flushDraftFor(chatId, input.value);
-      else flushDraftFor(chatId, '');
       refreshConvList();
+      // Multi-file send: chain the remaining ready attachments, one message
+      // each, keeping the same caption (Telegram multi-attach behavior).
+      if (caption === undefined) {
+        setTimeout(() => {
+          if (currentChat !== chatId) return;
+          if (pendingFiles.some(f => f.status === 'ready')) {
+            sendText(text);
+          } else {
+            // Chain finished: clear the caption input + draft.
+            input.value = '';
+            input.style.height = 'auto';
+            flushDraftFor(chatId, '');
+          }
+        }, 250);
+      } else {
+        // Chained send: when this was the last item, the input was already
+        // cleared by the first send — flush the draft once at chain end.
+        if (!pendingFiles.some(f => f.status === 'ready')) flushDraftFor(chatId, '');
+      }
     } else toast(r.error, 'error');
   } finally {
     sending = false;
@@ -1762,7 +1800,9 @@ async function bulkDelete() {
 async function bulkCopy() {
   const msgs = (CD.initialMessages || []).filter(m => selectedIds.has(m.id) && !m.deleted);
   const text = msgs.map(m => m.msg_type === 'text' ? m.content
-    : m.msg_type === 'image' ? '[تصویر]' : m.msg_type === 'gif' ? '[گیف]' : '[فایل]').join('\n');
+    : m.msg_type === 'image' ? '[تصویر]' : m.msg_type === 'gif' ? '[گیف]'
+    : m.msg_type === 'video' ? '[ویدیو]' : m.msg_type === 'audio' ? '[پیام صوتی]'
+    : m.msg_type === 'poll' ? '[نظرسنجی]' : '[فایل]').join('\n');
   if (!text) return toast('چیزی برای کپی نیست', 'error');
   try { await copyText(text); toast(msgs.length + ' پیام کپی شد'); }
   catch (e) { toast('کپی نشد', 'error'); }
@@ -1944,65 +1984,125 @@ attachMenu.querySelectorAll('[data-attach]').forEach(it => {
   });
 });
 
+function apItemIcon(f) {
+  return f.kind === 'image' ? '' : f.kind === 'video' ? bi('camera-reels')
+    : f.kind === 'gif' ? (f.vid ? bi('camera-reels') : '')
+    : f.kind === 'audio' ? bi('headphones') : bi(fileIcon(f.name));
+}
 function renderAttachPreview() {
   const pv = document.getElementById('attachPreview');
-  if (!pendingFile) {
+  if (recState) { renderRecBar(); return; }
+  if (!pendingFiles.length) {
     pv.classList.remove('show');
     pv.innerHTML = '';
     return;
   }
-  const icon = pendingFile.kind === 'image' ? '' : pendingFile.kind === 'video' ? bi('camera-reels')
-    : pendingFile.kind === 'gif' ? (pendingFile.vid ? bi('camera-reels') : '')
-    : pendingFile.kind === 'audio' ? bi('headphones') : bi(fileIcon(pendingFile.name));
-  const thumb = (pendingFile.kind === 'image' || pendingFile.kind === 'gif') && !pendingFile.vid
-    ? `<img src="${esc(pendingFile.url)}" alt="">`
-    : `<span class="ap-ic">${icon}</span>`;
-  const size = pendingFile.size ? `<small>${fmtSize(pendingFile.size)}</small>` : '';
-  // For images, videos and silent MP4 "gifs" the user can choose to send it as a plain downloadable file.
-  const asFileBtn = (pendingFile.kind === 'image' || pendingFile.kind === 'video' || pendingFile.kind === 'gif')
-    ? `<button class="${pendingFile.asFile ? 'on' : ''}" data-asfile title="ارسال به‌عنوان فایل (دانلود)">${bi('download')} فایل</button>`
-    : '';
-  pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span>${asFileBtn}<button data-clearattach>${bi('x-lg')}</button>`;
+  // Queue view: one row per attachment — uploads show a progress bar + cancel,
+  // ready items show a thumb + name + "as file" toggle + remove.
+  const rows = pendingFiles.map(f => {
+    if (f.status === 'uploading') {
+      return `<div class="ap-item uploading" id="apItem${f.id}">
+        <span class="ap-ic">${bi('hourglass-split')}</span>
+        <span class="fname">${esc(f.name)}</span>
+        <span class="ap-progress" title="در حال آپلود"><span class="ap-bar" style="width:${f.progress}%"></span><span class="ap-pct">${f.progress}%</span></span>
+        <button class="ap-x" data-rm="${f.id}" title="لغو آپلود">${bi('x-lg')}</button>
+      </div>`;
+    }
+    const thumb = (f.kind === 'image' || f.kind === 'gif') && !f.vid && f.url
+      ? `<img src="${esc(f.url)}" alt="">`
+      : `<span class="ap-ic">${apItemIcon(f)}</span>`;
+    const size = f.size ? `<small>${fmtSize(f.size)}</small>` : '';
+    // For images, videos and silent MP4 "gifs" the user can choose to send it as a plain downloadable file.
+    const asFileBtn = ['image', 'video', 'gif'].includes(f.kind)
+      ? `<button class="ap-asfile ${f.asFile ? 'on' : ''}" data-asfile="${f.id}" title="ارسال به‌عنوان فایل (دانلود)">${bi('download')} فایل</button>`
+      : '';
+    return `<div class="ap-item ready" id="apItem${f.id}">
+      ${thumb}<span class="fname">${esc(f.name)}${size}</span>${asFileBtn}
+      <button class="ap-x" data-rm="${f.id}" title="حذف">${bi('x-lg')}</button>
+    </div>`;
+  }).join('');
+  pv.innerHTML = rows;
   pv.classList.add('show');
 }
 
-let uploading = false;
-async function handleFiles(file) {
-  if (!file || uploading) return;
-  uploading = true;
-  const pv = document.getElementById('attachPreview');
-  pv.innerHTML = `<span class="ap-ic">${bi('hourglass-split')}</span><span class="fname">در حال آپلود…</span>`;
-  pv.classList.add('show');
-  const fd = new FormData();
-  fd.append('file', file);
-  try {
-    const r = await fetch('/api/upload', { method: 'POST', body: fd }).then(x => x.json());
-    if (!r.ok) { toast(r.error, 'error'); uploading = false; renderAttachPreview(); return; }
-    pendingFile = { path: r.file_path, name: r.file_name, kind: r.kind, url: r.file_url, size: file.size, asFile: false };
-    renderAttachPreview();
-    document.getElementById('msgInput').focus();
-  } catch (err) {
-    toast('آپلود ناموفق بود', 'error');
-    renderAttachPreview();
-  } finally {
-    uploading = false;
-  }
+// —— Attachment queue (multi-file, Telegram-style). Each item uploads with a
+// progress bar; ready items wait in the composer preview; the send button
+// chains them one message at a time (caption repeats on every message).
+function removePendingFile(id, silent) {
+  const it = pendingFiles.find(f => f.id === id);
+  if (it && it.xhr && it.status === 'uploading') { try { it.xhr.abort(); } catch (_) {} }
+  pendingFiles = pendingFiles.filter(f => f.id !== id);
+  renderAttachPreview();
 }
+function uploadFile(item) {
+  const fd = new FormData();
+  fd.append('file', item.file, item.name);
+  if (item.forceKind) fd.append('kind', item.forceKind);
+  item.xhr = new XMLHttpRequest();
+  item.xhr.open('POST', '/api/upload');
+  item.xhr.upload.addEventListener('progress', e => {
+    if (!e.lengthComputable) return;
+    item.progress = Math.min(99, Math.round(e.loaded * 100 / e.total));
+    const row = document.getElementById('apItem' + item.id);
+    if (!row) return;
+    const bar = row.querySelector('.ap-bar'); if (bar) bar.style.width = item.progress + '%';
+    const pct = row.querySelector('.ap-pct'); if (pct) pct.textContent = item.progress + '%';
+  });
+  const done = (r) => {
+    if (r && r.ok) {
+      item.status = 'ready';
+      item.path = r.file_path; item.kind = r.kind; item.url = r.file_url;
+      item.name = r.file_name || item.name;
+      renderAttachPreview();
+      document.getElementById('msgInput').focus();
+    } else {
+      toast((r && r.error) || 'آپلود ناموفق بود', 'error');
+      removePendingFile(item.id, true);
+    }
+  };
+  item.xhr.onload = () => { let r = null; try { r = JSON.parse(item.xhr.responseText); } catch (_) {} done(r); };
+  item.xhr.onerror = () => { toast('آپلود ناموفق بود', 'error'); removePendingFile(item.id, true); };
+  item.xhr.onabort = () => { /* cancelled by the user */ renderAttachPreview(); };
+  item.xhr.send(fd);
+}
+function enqueueFiles(list, opts) {
+  const files = Array.from(list || []);
+  if (!files.length) return;
+  for (const f of files) {
+    if (!f || !f.name) continue;
+    if (f.size > 50 * 1024 * 1024) { toast('حجم هر فایل حداکثر ۵۰ مگابایت است', 'error'); continue; }
+    const item = {
+      id: ++_pfSeq, file: f, name: f.name, size: f.size,
+      status: 'uploading', progress: 0, asFile: false, xhr: null,
+      forceKind: opts && opts.forceKind,
+    };
+    pendingFiles.push(item);
+    uploadFile(item);
+  }
+  renderAttachPreview();
+}
+// Kept for existing call sites (drag&drop / paste): the single-file shape.
+function handleFiles(file, opts) { enqueueFiles([file], opts); }
 
 document.getElementById('fileInput').onchange = e => {
-  const f = e.target.files[0];
+  const files = e.target.files;
   e.target.value = '';
-  handleFiles(f);
+  if (files && files.length) enqueueFiles(files);
 };
 document.addEventListener('click', e => {
-  if (e.target.closest('[data-clearattach]')) {
-    pendingFile = null;
-    renderAttachPreview();
+  const rm = e.target.closest('[data-rm]');
+  if (rm) {
+    e.stopPropagation();
+    removePendingFile(Number(rm.dataset.rm));
+    return;
   }
-  if (e.target.closest('[data-asfile]') && pendingFile) {
-    pendingFile.asFile = !pendingFile.asFile;
-    e.target.closest('[data-asfile]').classList.toggle('on');
+  const af = e.target.closest('[data-asfile]');
+  if (af) {
+    const it = pendingFiles.find(f => f.id === Number(af.dataset.asfile));
+    if (it) { it.asFile = !it.asFile; af.classList.toggle('on'); }
   }
+  const rec = e.target.closest('[data-rec]');
+  if (rec) finishRec(rec.dataset.rec === 'stop');
 });
 
 const dropZone = document.getElementById('app') || document.body;
@@ -2017,10 +2117,10 @@ const dropZone = document.getElementById('app') || document.body;
 }));
 dropZone.addEventListener('drop', e => {
   if (!currentChat) return;
-  const f = e.dataTransfer && e.dataTransfer.files && e.dataTransfer.files[0];
-  if (!f) return;
+  const files = e.dataTransfer && e.dataTransfer.files;
+  if (!files || !files.length) return;
   e.preventDefault();
-  handleFiles(f);
+  enqueueFiles(files);
 });
 document.getElementById('msgInput').addEventListener('paste', e => {
   if (!currentChat) return;
@@ -2032,6 +2132,90 @@ document.getElementById('msgInput').addEventListener('paste', e => {
     }
   }
 });
+
+// —— Voice notes (Telegram-style recorder). MediaRecorder → webm/opus (Chrome,
+// Firefox, Android) or m4a (Safari) → uploaded as an `audio` message.
+// The recording bar replaces the composer preview while active: live timer +
+// cancel (X) / stop-and-queue (check). Needs a secure context (localhost or
+// https) for getUserMedia.
+document.getElementById('btnMic').onclick = e => {
+  e.stopPropagation();
+  if (recState) return;
+  startRec();
+};
+async function startRec() {
+  if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
+    toast('مرورگر شما ضبط صدا را پشتیبانی نمی‌کند', 'error');
+    return;
+  }
+  let stream;
+  try {
+    stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+  } catch (_) {
+    toast('دسترسی به میکروفون لازم است', 'error');
+    return;
+  }
+  const mime = ['audio/webm;codecs=opus', 'audio/webm', 'audio/mp4', 'audio/ogg']
+    .find(t => MediaRecorder.isTypeSupported(t)) || '';
+  let rec;
+  try {
+    rec = new MediaRecorder(stream, mime ? { mimeType: mime } : undefined);
+  } catch (_) {
+    stream.getTracks().forEach(t => t.stop());
+    toast('ضبط صدا ممکن نشد', 'error');
+    return;
+  }
+  recState = { rec, stream, mime, chunks: [], secs: 0, started: Date.now() };
+  rec.ondataavailable = e => { if (e.data && e.data.size) recState.chunks.push(e.data); };
+  rec.start(250);
+  recState.int = setInterval(() => {
+    if (!recState) return;
+    recState.secs = Math.floor((Date.now() - recState.started) / 1000);
+    const el = document.getElementById('recTime');
+    if (el) el.textContent = fmtRec(recState.secs);
+  }, 250);
+  renderRecBar();
+}
+function fmtRec(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
+function renderRecBar() {
+  const pv = document.getElementById('attachPreview');
+  pv.innerHTML =
+    `<div class="rec-bar">
+       <span class="rec-dot" title="در حال ضبط"></span>
+       <span class="rec-time" id="recTime">0:00</span>
+       <span class="rec-lbl">ضبط صدا…</span>
+       <button class="rec-x" data-rec="cancel" title="لغو ضبط">${bi('x-lg')}</button>
+       <button class="rec-ok" data-rec="stop" title="توقف و گذاشتن در صف ارسال">${bi('check')}</button>
+     </div>`;
+  pv.classList.add('show');
+}
+function finishRec(keep) {
+  if (!recState) return;
+  const st = recState;
+  recState = null;
+  clearInterval(st.int);
+  st.stream.getTracks().forEach(t => t.stop());
+  st.rec.stop();
+  const onStopped = () => {
+    if (keep) {
+      const secs = Math.floor((Date.now() - st.started) / 1000);
+      const blob = new Blob(st.chunks, { type: st.mime || 'audio/webm' });
+      if (blob.size < 2048) {
+        toast('ضبط خیلی کوتاه بود', 'error');
+        renderAttachPreview();
+        return;
+      }
+      const ext = (st.mime || '').includes('mp4') ? 'm4a' : (st.mime || '').includes('ogg') ? 'ogg' : 'webm';
+      const d = new Date();
+      const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}-${String(d.getMinutes()).padStart(2, '0')}-${String(d.getSeconds()).padStart(2, '0')}`;
+      const f = new File([blob], `voice-${stamp}.${ext}`, { type: blob.type });
+      enqueueFiles([f], { forceKind: 'audio' });
+      toast('پیام صوتی آماده ارسال است');
+    }
+    renderAttachPreview();
+  };
+  st.rec.onstop = onStopped;
+}
 
 const MV = { items: [], index: 0, kind: 'image', canDelete: false, ownerType: null, ownerId: null, onDeleted: null };
 
@@ -2567,7 +2751,7 @@ document.getElementById('chatHeadId').onclick = (e) => {
   openSettings();
 };
 
-let _srchMatches = [], _srchIdx = -1;
+let _srchMatches = [], _srchIdx = -1, _srchTimer = null, _srchSeq = 0;
 function clearChatSearchMarks() {
   document.querySelectorAll('.mrow.search-hit, .mrow.search-cur').forEach(r => r.classList.remove('search-hit', 'search-cur'));
 }
@@ -2585,27 +2769,79 @@ function closeChatSearch() {
   _srchMatches = []; _srchIdx = -1;
   clearChatSearchMarks();
 }
-function runChatSearch() {
+// Searches the WHOLE chat on the server (not just the loaded window) and
+// jumps to results, loading surrounding history on demand.
+async function runChatSearch() {
   const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();
   clearChatSearchMarks();
-  _srchMatches = []; _srchIdx = -1;
+  _srchIdx = -1;
   const cnt = document.getElementById('chatSearchCount');
+  clearTimeout(_srchTimer);
+  _srchMatches = [];
   if (!q) { cnt.textContent = ''; return; }
-  _srchMatches = (CD.initialMessages || []).filter(m => (m.content || '').toLowerCase().includes(q));
-  _srchMatches.forEach(m => {
-    const row = document.querySelector(`.mrow[data-mid="${m.id}"]`);
-    if (row) row.classList.add('search-hit');
-  });
-  if (!_srchMatches.length) { cnt.textContent = 'پیدا نشد'; return; }
-  goToMatch(0);
+  if (q.length < 2) { cnt.textContent = 'بیشتر بنویس'; return; }
+  cnt.textContent = '…';
+  _srchTimer = setTimeout(async () => {
+    const mySeq = ++_srchSeq;
+    try {
+      const r = await fetch(`/api/chat/${currentChat}/search?q=${encodeURIComponent(q)}`).then(x => x.json());
+      if (mySeq !== _srchSeq) return; // a newer query replaced this one
+      if (!r || !r.ok) { cnt.textContent = 'خطا'; return; }
+      _srchMatches = r.matches || [];
+      if (!_srchMatches.length) { cnt.textContent = 'پیدا نشد'; return; }
+      cnt.textContent = '۱/' + _srchMatches.length;
+      // Mark rows already in the DOM; others get marked when we jump to them.
+      _srchMatches.forEach(m => {
+        const row = document.querySelector(`.mrow[data-mid="${m.id}"]`);
+        if (row) row.classList.add('search-hit');
+      });
+      _srchIdx = 0;
+      goToMatch(0);
+    } catch (_) {
+      if (mySeq === _srchSeq) cnt.textContent = 'خطا';
+    }
+  }, 350);
 }
-function goToMatch(i) {
+async function goToMatch(i) {
   if (!_srchMatches.length) return;
   _srchIdx = (i + _srchMatches.length) % _srchMatches.length;
+  const m = _srchMatches[_srchIdx];
   document.querySelectorAll('.mrow.search-cur').forEach(r => r.classList.remove('search-cur'));
-  const row = document.querySelector(`.mrow[data-mid="${_srchMatches[_srchIdx].id}"]`);
-  if (row) { row.classList.add('search-cur'); row.scrollIntoView({ block: 'center', behavior: 'smooth' }); }
+  let row = document.querySelector(`.mrow[data-mid="${m.id}"]`);
+  if (!row) row = await loadAround(m.id);
+  if (row) {
+    row.classList.add('search-hit', 'search-cur');
+    row.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  }
   document.getElementById('chatSearchCount').textContent = (_srchIdx + 1) + '/' + _srchMatches.length;
+}
+// Load a history window around a (possibly unseen) message id and render it
+// into the message list at the right position. Returns the target .mrow.
+async function loadAround(mid) {
+  if (!currentChat) return null;
+  let r;
+  try {
+    r = await fetch(`/api/chat/${currentChat}/messages/around?mid=${mid}&limit=21`).then(x => x.json());
+  } catch (_) { return null; }
+  if (!r || !r.ok || !r.messages || !r.messages.length) return null;
+  const body = document.getElementById('msgsBody');
+  for (const m of r.messages) {
+    if (document.getElementById('m' + m.id)) continue;
+    if (!CD.initialMessages.find(x => x.id === m.id)) CD.initialMessages.push(m);
+    let anchor = null;
+    for (const el of body.children) {
+      if (!el.id || el.id[0] !== 'm') continue;
+      if (Number(el.id.slice(1)) > m.id) { anchor = el; break; }
+    }
+    const wrap = document.createElement('div');
+    wrap.id = 'm' + m.id;
+    wrap.innerHTML = renderMsg(m); // m comes from our own API (to_dict) — safe markup via renderMsg
+    if (anchor) body.insertBefore(wrap, anchor); else body.appendChild(wrap);
+  }
+  const target = body.querySelector(`.mrow[data-mid="${mid}"]`);
+  if (!target) return null;
+  target.scrollIntoView({ block: 'center', behavior: 'smooth' });
+  return target;
 }
 document.getElementById('btnChatSearch').onclick = () => {
   const bar = document.getElementById('chatSearch');
