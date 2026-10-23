@@ -135,6 +135,7 @@ def _ensure_columns():
         ('users', 'read_receipts', "BOOLEAN NOT NULL DEFAULT 1"),
         ('users', 'show_online', "BOOLEAN NOT NULL DEFAULT 1"),
         ('users', 'theme', "VARCHAR(10) NOT NULL DEFAULT 'dark'"),
+        ('gifs', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'gif'"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -293,6 +294,82 @@ def save_avatar(filename):
     os.makedirs(target, exist_ok=True)
     request.files['avatar'].save(os.path.join(target, fname))
     return fname
+
+
+def mp4_has_audio(path):
+    """Pure-Python check whether an MP4/MOV file contains an audio track.
+
+    Walks the ISO-BMFF box tree to `moov` -> (any `trak`) -> `mdia` -> `hdlr`
+    and looks for handler type `soun` (sound). Used to reject MP4s with audio
+    as "gifs" (Telegram-style silent animated media). Returns False when no
+    `moov` is found (not a playable MP4) or on any read/parse error."""
+    import struct
+    try:
+        with open(path, 'rb') as fh:
+            data = fh.read()
+    except OSError:
+        return False
+    n = len(data)
+
+    def box_bounds(off):
+        """Return (type, body_start, box_end) or None. body_start is just past
+        the box header; box_end is where the next sibling begins."""
+        if off + 8 > n:
+            return None
+        btype = data[off + 4:off + 8]
+        size = struct.unpack('>I', data[off:off + 4])[0]
+        hdr = 8
+        if size == 1:
+            if off + 16 > n:
+                return None
+            size = struct.unpack('>Q', data[off + 8:off + 16])[0]
+            hdr = 16
+        elif size == 0:
+            size = n - off  # box extends to EOF
+        size = max(size, hdr)
+        return btype, off + hdr, off + size
+
+    def track_has_audio(trak_body, trak_end):
+        o2 = trak_body
+        while o2 + 8 <= trak_end:
+            t2 = box_bounds(o2)
+            if t2 is None:
+                break
+            if t2[0] == b'mdia':
+                o3 = t2[1]
+                e3 = t2[2]
+                while o3 + 8 <= e3:
+                    t3 = box_bounds(o3)
+                    if t3 is None:
+                        break
+                    if t3[0] == b'hdlr':
+                        h = data[t3[1] + 8:t3[1] + 12]
+                        if h == b'soun':
+                            return True
+                        break
+                    o3 = t3[2]
+            o2 = t2[2]
+        return False
+
+    off = 0
+    while off + 8 <= n:
+        bt = box_bounds(off)
+        if bt is None:
+            break
+        btype, body, end = bt
+        if btype == b'moov':
+            # walk moov's direct children for audio tracks
+            o2 = body
+            while o2 + 8 <= end:
+                t2 = box_bounds(o2)
+                if t2 is None:
+                    break
+                if t2[0] == b'trak' and track_has_audio(t2[1], t2[2]):
+                    return True
+                o2 = t2[2]
+            return False
+        off = end
+    return False
 
 
 def save_upload_file(file):

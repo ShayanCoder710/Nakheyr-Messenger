@@ -253,6 +253,16 @@ function renderMsg(m) {
   if (m.msg_type === 'image') {
     body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+  } else if (m.msg_type === 'gif') {
+    // Silent animated media: a .gif (image element) or a silent .mp4 "gif"
+    // (Telegram-style: autoplay, muted, looping, no controls in-bubble).
+    if (/\.mp4$/i.test(m.file_name || '')) {
+      body = `<div class="vid-wrap"><video class="vid" src="${url}" muted loop autoplay playsinline preload="metadata"></video>`
+        + `<button class="vid-expand" title="نمایش بزرگ" data-media="gif" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
+    } else {
+      body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
+    }
+    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'video') {
     body = `<div class="vid-wrap"><video class="vid" src="${url}" controls preload="metadata" playsinline></video>`
       + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
@@ -279,8 +289,8 @@ function renderMsg(m) {
   const sender = m.sender_id ? getMember(m.sender_id) : { display_name: 'سیستم', avatar: '' };
   const mine = m.sender_id === window.ME.id;
   const hasImg = m.msg_type === 'image';
-  const isMedia = hasImg || m.msg_type === 'video';
-  const imgOnly = hasImg && !m.content;
+  const isMedia = hasImg || m.msg_type === 'video' || m.msg_type === 'gif';
+  const imgOnly = (hasImg || m.msg_type === 'gif') && !m.content;
   const seen = mine && window.ME.read_receipts !== false && Array.isArray(m.read_by) && m.read_by.some(id => String(id) !== String(window.ME.id));
   const newGroup = String(m.sender_id) !== String(lastSenderOf(m.id));
   const groupTail = String(nextSenderOf(m.id)) !== String(m.sender_id);
@@ -1182,12 +1192,12 @@ function buildEmojiPanel() {
   let current = 0;
   const renderSet = i => {
     current = i;
-    const set = EMOJI_SETS[i];
-    body.innerHTML = set.emojis.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('');
-    body.scrollTop = 0;
+    epCurrentSet = i;
+    renderEpCurrentSet();
   };
   const runSearch = () => {
     const q = (search.value || '').trim().toLowerCase();
+    if (epMode === 'gif') { renderGifGrid(); return; }  // gif mode: filter the library
     if (!q) { tabs.style.display = 'flex'; renderSet(current); return; }
     tabs.style.display = 'none';
     const found = searchEmojis(q);
@@ -1205,42 +1215,89 @@ function buildEmojiPanel() {
   });
   search.oninput = runSearch;
   search.onkeydown = ev => {
-    if (ev.key === 'Enter') {
-      ev.preventDefault();
-      const first = body.querySelector('[data-em]');
-      if (first) insertEmoji(first.dataset.em);
+    if (ev.key !== 'Enter') return;
+    ev.preventDefault();
+    if (epMode === 'gif') {
+      const first = document.querySelector('#epGifGrid [data-gif]');
+      if (first) sendGifFromTile(first.dataset.gif);
+      return;
     }
+    const first = body.querySelector('[data-em]');
+    if (first) insertEmoji(first.dataset.em);
   };
   renderSet(0);
-  loadGifStrip();
+  // Bottom switcher: emoji | gif views inside the panel
+  const swEm = document.getElementById('epSwEmoji');
+  const swGif = document.getElementById('epSwGif');
+  swEm.onclick = () => epSetMode('emoji');
+  swGif.onclick = () => epSetMode('gif');
+  epSetMode('emoji');
 }
 
-// —— GIF strip (bottom of the emoji panel): the user's own GIF library.
-// Pick a tile → it lands in the composer as a pending attachment (image kind),
-// then the user sends it with the normal send button.
-async function loadGifStrip() {
-  const strip = document.getElementById('epGifStrip');
-  if (!strip) return;
-  if (CD.gifs !== undefined) { renderGifStrip(); return; }
-  strip.innerHTML = `<span class="ep-gifloading">${bi('hourglass-split')} در حال بارگذاری…</span>`;
+let epMode = 'emoji';      // 'emoji' | 'gif' — which view the panel's bottom switcher shows
+let epCurrentSet = 0;      // selected emoji category tab
+
+function epSetMode(mode) {
+  epMode = mode;
+  const gifView = document.getElementById('epGifView');
+  const tabs = document.getElementById('epTabs');
+  const body = document.getElementById('epBody');
+  const search = document.getElementById('epSearch');
+  document.getElementById('epSwEmoji').classList.toggle('on', mode === 'emoji');
+  document.getElementById('epSwGif').classList.toggle('on', mode === 'gif');
+  gifView.style.display = mode === 'gif' ? 'flex' : 'none';
+  tabs.style.display = mode === 'emoji' ? 'flex' : 'none';
+  body.style.display = mode === 'emoji' ? 'grid' : 'none';
+  search.placeholder = mode === 'gif' ? 'جستجوی گیف…' : 'جستجوی ایموجی…';
+  search.value = '';
+  if (mode === 'gif') { loadGifs(); renderGifGrid(); }
+  else renderEpCurrentSet();
+}
+
+function renderEpCurrentSet() {
+  const set = EMOJI_SETS[epCurrentSet] || EMOJI_SETS[0];
+  const body = document.getElementById('epBody');
+  const tabs = document.getElementById('epTabs');
+  body.innerHTML = set.emojis.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('');
+  body.scrollTop = 0;
+  tabs.style.display = 'flex';
+  tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.tab === epCurrentSet));
+}
+
+// —— GIF view (bottom switcher of the emoji panel): the user's own library of
+// silent animated media — .gif files and audio-free .mp4 "gifs" (Telegram-style).
+// Pick a tile → it lands in the composer as a pending attachment; the normal
+// send button sends it as a `gif` message.
+async function loadGifs() {
+  if (CD.gifs !== undefined) return;
   try {
     const r = await fetch('/api/gifs').then(x => x.json());
-    if (r && r.ok) { CD.gifs = r.gifs || []; }   // leave undefined on failure → retry on next open
+    if (r && r.ok) CD.gifs = r.gifs || [];   // leave undefined on failure → retry on next open
   } catch (e) { /* offline: retry next time the panel opens */ }
-  renderGifStrip();
 }
-function renderGifStrip() {
-  const strip = document.getElementById('epGifStrip');
-  if (!strip) return;
-  const gifs = CD.gifs || [];
-  const tiles = gifs.map(g =>
-    `<button type="button" class="ep-gif" data-gif="${g.id}" title="${esc(g.name)}" style="background-image:url('${esc(g.url)}')" aria-label="${esc(g.name)}"></button>`
-  ).join('');
-  strip.innerHTML =
-    `<button type="button" class="ep-gif ep-gif-add" id="epGifAdd">${bi('plus')}<span>افزودن گیف</span></button>` +
-    (gifs.length ? '' : '<span class="ep-gifempty">هنوز گیفی نداری — یکی اضافه کن</span>') + tiles;
+function renderGifGrid() {
+  const grid = document.getElementById('epGifGrid');
+  if (!grid) return;
+  const search = document.getElementById('epSearch');
+  const q = (search && search.value || '').trim().toLowerCase();
+  const all = CD.gifs || [];
+  const gifs = q ? all.filter(g => (g.name || '').toLowerCase().includes(q)) : all;
+  // Tile names/url/kinds come from the server-side gif library (filenames are
+  // sanitized to [A-Za-z0-9_.-] on upload); esc() keeps markup out of attrs.
+  const tiles = gifs.map(g => {
+    const media = g.kind === 'video'
+      ? `<video src="${esc(g.url)}" muted loop autoplay playsinline preload="metadata"></video>`
+      : `<img src="${esc(g.url)}" alt="" loading="lazy">`;
+    return `<button type="button" class="ep-giftile" data-gif="${g.id}" title="${esc(g.name)}">`
+      + media + `<span class="ep-gifx" data-gifdel="${g.id}" title="حذف از گیف‌های من">${bi('x-lg')}</span></button>`;
+  }).join('');
+  grid.innerHTML =
+    `<button type="button" class="ep-giftile ep-gifadd" id="epGifAdd">${bi('plus')}<span>افزودن گیف یا ویدیو</span></button>`
+    + tiles
+    + (q ? (!gifs.length ? '<span class="ep-gifempty">گیفی با این اسم پیدا نشد</span>' : '')
+      : (!all.length ? '<span class="ep-gifempty">هنوز گیفی نداری — یکی اضافه کن</span>' : ''));
   const add = document.getElementById('epGifAdd');
-  add.onclick = () => document.getElementById('epGifInput').click();
+  if (add) add.onclick = () => document.getElementById('epGifInput').click();
   document.getElementById('epGifInput').onchange = e => {
     addGifFile(e.target.files[0]);
     e.target.value = '';
@@ -1248,21 +1305,31 @@ function renderGifStrip() {
 }
 async function addGifFile(file) {
   if (!file) return;
-  if (!/\.gif$/i.test(file.name)) { toast('فقط فایل گیف مجازه', 'error'); return; }
+  if (!/\.(gif|mp4)$/i.test(file.name)) { toast('فقط GIF یا MP4 بدون صدا مجازه', 'error'); return; }
   const fd = new FormData();
   fd.append('file', file, file.name);
-  toast('در حال آپلود گیف…');
+  toast('در حال آپلود…');
   const r = await fetch('/api/gifs', { method: 'POST', body: fd }).then(x => x.json()).catch(() => null);
   if (!r || !r.ok) { toast((r && r.error) || 'افزودن گیف ناموفق بود', 'error'); return; }
   CD.gifs = [r.gif, ...((CD.gifs || []))];
-  renderGifStrip();
-  toast('گیف اضافه شد');
+  renderGifGrid();
+  toast('به گیف‌های تو اضافه شد');
 }
-function sendGifFromStrip(gid) {
+function delGifFromGrid(gid) {
+  const id = +gid;
+  CD.gifs = (CD.gifs || []).filter(x => x.id !== id);
+  renderGifGrid();
+  fetch('/api/gifs/' + id, { method: 'DELETE' }).then(x => x.json()).then(j => {
+    if (!j.ok) toast(j.error || 'حذف نشد', 'error');
+    else toast('گیف از لیستت حذف شد');
+  }).catch(() => { /* best effort; the list row is already gone */ });
+}
+function sendGifFromTile(gid) {
   const g = (CD.gifs || []).find(x => x.id === +gid);
   if (!g) return;
   // Same shape the upload flow produces: composer preview + normal send.
-  pendingFile = { path: g.url.slice('/files/'.length), name: g.name, kind: 'image', url: g.url, asFile: false };
+  pendingFile = { path: g.url.slice('/files/'.length), name: g.name + (g.kind === 'video' ? '.mp4' : '.gif'),
+                  kind: 'gif', url: g.url, asFile: false, vid: g.kind === 'video' };
   renderAttachPreview();
   const inp = document.getElementById('msgInput');
   if (inp && !inp.disabled) inp.focus();
@@ -1273,6 +1340,7 @@ function hideEmojiPanel() {
   if (p) p.style.display = 'none';
   const s = document.getElementById('epSearch');
   if (s) s.value = '';
+  epSetMode('emoji'); // panel reopens on the emoji view
   const b = document.getElementById('btnEmoji');
   if (b) b.classList.remove('active');
 }
@@ -1313,10 +1381,12 @@ document.getElementById('btnEmoji').onclick = e => {
   openEmojiPanel();
 };
 document.getElementById('emojiPanel').addEventListener('click', e => {
+  const gx = e.target.closest('.ep-gifx');
+  if (gx) { e.stopPropagation(); delGifFromGrid(gx.dataset.gifdel); return; }
   const b = e.target.closest('[data-em]');
   if (b) { insertEmoji(b.dataset.em); return; }
   const g = e.target.closest('[data-gif]');
-  if (g) { sendGifFromStrip(g.dataset.gif); return; }
+  if (g) { sendGifFromTile(g.dataset.gif); return; }
   e.stopPropagation();
 });
 document.addEventListener('click', e => {
@@ -1439,7 +1509,7 @@ function openReply(mid) {
   if (!row) return;
   const m = (CD.initialMessages || []).find(x => x.id === mid) || {};
   const sender = getMember(m.sender_id);
-  const raw = m.msg_type === 'image' ? 'تصویر' : m.msg_type === 'file' ? 'فایل' : (m.content || '');
+  const raw = m.msg_type === 'image' ? 'تصویر' : m.msg_type === 'gif' ? 'گیف' : m.msg_type === 'file' ? 'فایل' : (m.content || '');
   const label = String(raw).replace(/\n/g, ' ').slice(0, 60);
   pendingReply = { id: mid, name: sender.display_name || 'کاربر', preview: label || 'پیام' };
   const pv = document.getElementById('replyPreview');
@@ -1692,7 +1762,7 @@ async function bulkDelete() {
 async function bulkCopy() {
   const msgs = (CD.initialMessages || []).filter(m => selectedIds.has(m.id) && !m.deleted);
   const text = msgs.map(m => m.msg_type === 'text' ? m.content
-    : m.msg_type === 'image' ? '[تصویر]' : '[فایل]').join('\n');
+    : m.msg_type === 'image' ? '[تصویر]' : m.msg_type === 'gif' ? '[گیف]' : '[فایل]').join('\n');
   if (!text) return toast('چیزی برای کپی نیست', 'error');
   try { await copyText(text); toast(msgs.length + ' پیام کپی شد'); }
   catch (e) { toast('کپی نشد', 'error'); }
@@ -1706,13 +1776,16 @@ document.getElementById('bulkCopy').onclick = bulkCopy;
 function pinSnippet(m) {
   if (m.msg_type === 'image') return m.content || 'تصویر';
   if (m.msg_type === 'video') return m.content || 'ویدیو';
+  if (m.msg_type === 'gif') return m.content || 'گیف';
   if (m.msg_type === 'audio') return m.content || 'پیام صوتی';
   if (m.msg_type === 'file') return m.file_name || 'فایل';
   return m.content || 'پیام';
 }
 function pinThumb(m) {
   if (m.msg_type === 'image' && m.file_url) return `<img class="pin-thumb" src="${m.file_url}" alt="">`;
+  if (m.msg_type === 'gif' && /\.gif$/i.test(m.file_name || '') && m.file_url) return `<img class="pin-thumb" src="${m.file_url}" alt="">`;
   if (m.msg_type === 'video' && m.file_url) return `<span class="pin-vid">${bi('camera-reels')}</span>`;
+  if (m.msg_type === 'gif' && m.file_url) return `<span class="pin-vid">${bi('camera-reels')}</span>`;
   return '';
 }
 function renderPinnedBar() {
@@ -1748,6 +1821,7 @@ function openPinsModal() {
   document.getElementById('pinsModalSub').textContent = CD.pins.length + ' پیام پین شده';
   list.innerHTML = CD.pins.map(p => {
     const ic = p.m.msg_type === 'image' ? 'image' : p.m.msg_type === 'video' ? 'camera-reels'
+      : p.m.msg_type === 'gif' ? 'image'
       : p.m.msg_type === 'audio' ? 'headphones' : p.m.msg_type === 'file' ? 'paperclip' : 'chat-dots';
     const t = p.m.created_at ? fmtTime(p.m.created_at) : '';
     return `<div class="pin-item" data-pid="${p.id}">
@@ -1878,13 +1952,14 @@ function renderAttachPreview() {
     return;
   }
   const icon = pendingFile.kind === 'image' ? '' : pendingFile.kind === 'video' ? bi('camera-reels')
+    : pendingFile.kind === 'gif' ? (pendingFile.vid ? bi('camera-reels') : '')
     : pendingFile.kind === 'audio' ? bi('headphones') : bi(fileIcon(pendingFile.name));
-  const thumb = pendingFile.kind === 'image'
+  const thumb = (pendingFile.kind === 'image' || pendingFile.kind === 'gif') && !pendingFile.vid
     ? `<img src="${esc(pendingFile.url)}" alt="">`
     : `<span class="ap-ic">${icon}</span>`;
   const size = pendingFile.size ? `<small>${fmtSize(pendingFile.size)}</small>` : '';
-  // For images/videos the user can choose to send it as a plain downloadable file.
-  const asFileBtn = (pendingFile.kind === 'image' || pendingFile.kind === 'video')
+  // For images, videos and silent MP4 "gifs" the user can choose to send it as a plain downloadable file.
+  const asFileBtn = (pendingFile.kind === 'image' || pendingFile.kind === 'video' || pendingFile.kind === 'gif')
     ? `<button class="${pendingFile.asFile ? 'on' : ''}" data-asfile title="ارسال به‌عنوان فایل (دانلود)">${bi('download')} فایل</button>`
     : '';
   pv.innerHTML = `${thumb}<span class="fname">${esc(pendingFile.name)}${size}</span>${asFileBtn}<button data-clearattach>${bi('x-lg')}</button>`;
@@ -1979,12 +2054,14 @@ MV.render = function () {
   const stage = document.getElementById('mvStage');
   stage.innerHTML = (MV.kind === 'video' && src)
     ? `<video src="${esc(src)}" controls autoplay playsinline></video>`
+    : (MV.kind === 'gif' && src)
+    ? `<video src="${esc(src)}" controls autoplay muted loop playsinline></video>`
     : `<img src="${esc(src)}" alt="${esc(it.name || '')}">`;
   document.getElementById('mvName').textContent = it.name || '';
   const dl = document.getElementById('mvDownload');
   dl.href = src; dl.setAttribute('download', it.name || '');
   const op = document.getElementById('mvOpen');
-  op.href = src; op.style.display = (MV.kind === 'video' || !src) ? 'none' : '';
+  op.href = src; op.style.display = (MV.kind === 'video' || MV.kind === 'gif' || !src) ? 'none' : '';
   const multi = MV.items.length > 1;
   document.getElementById('mvPrev').style.display = multi ? '' : 'none';
   document.getElementById('mvNext').style.display = multi ? '' : 'none';

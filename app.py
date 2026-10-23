@@ -17,7 +17,7 @@ from models.models import (
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
-    kind_for, INLINE_UNSAFE_EXT,
+    kind_for, INLINE_UNSAFE_EXT, mp4_has_audio,
     is_blocked, get_or_create_dm, create_group, create_channel, chat_display_name,
     user_chats, unread_counts, admin_stats, bump_online, avatar_html, save_chat_avatar,
     username_taken, RESERVED_USERNAMES,
@@ -700,7 +700,7 @@ def api_send_message():
                     wait_txt = f'{secs} ثانیه'
                 return jsonify(ok=False, error=f'حالت آهسته فعاله — {wait_txt} صبر کن')
     msg_type = data.get('msg_type', 'text')
-    if msg_type not in ('text', 'image', 'video', 'audio', 'file'):
+    if msg_type not in ('text', 'image', 'video', 'audio', 'file', 'gif'):
         msg_type = 'file'
     if chat.chat_type == 'group' and not user.is_admin:
         if member and role not in ('owner', 'admin'):
@@ -1037,20 +1037,31 @@ def api_gifs_list():
 @app.route('/api/gifs', methods=['POST'])
 @require_auth
 def api_gifs_add():
-    """Add a .gif file to the user's GIF library."""
+    """Add a .gif or a SILENT .mp4 to the user's GIF library."""
     user = current_user()
     f = request.files.get('file')
     if not f or not f.filename:
         return jsonify(ok=False, error='گیفی انتخاب نشده')
     name, _ = os.path.splitext(f.filename)
     ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
-    if ext != 'gif':
-        return jsonify(ok=False, error='فقط فایل GIF مجازه')
+    if ext == 'gif':
+        kind = 'gif'
+    elif ext == 'mp4':
+        kind = 'video'
+    else:
+        return jsonify(ok=False, error='فقط فایل GIF یا MP4 مجازه')
     path = save_upload_file(f)
     if not path:
         return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۵۰ مگ).')
+    # Silent-only rule: an MP4 "gif" must carry no audio track.
+    if kind == 'video' and mp4_has_audio(os.path.join(current_app.config['UPLOAD_DIR'], path)):
+        try:
+            os.remove(os.path.join(current_app.config['UPLOAD_DIR'], path))
+        except OSError:
+            pass
+        return jsonify(ok=False, error='ویدیو صدا نداره که گیف بشه — MP4 بدون صدا انتخاب کن')
     g = Gif(user_id=user.id, name=re.sub(r'[^\w.\-]', '_', name)[:60] or f'gif-{path}',
-            file_path=path)
+            file_path=path, kind=kind)
     db.session.add(g)
     db.session.commit()
     return jsonify(ok=True, gif=g.to_dict())
@@ -1067,8 +1078,9 @@ def api_gifs_del(gif_id):
         return jsonify(ok=False, error='گیف پیدا نشد')
     db.session.delete(g)
     db.session.flush()
-    in_use = Message.query.filter_by(file_path=g.file_path, msg_type='image',
-                                    deleted=False).first() is not None
+    in_use = Message.query.filter(Message.file_path == g.file_path,
+                                 Message.msg_type.in_(['image', 'gif']),
+                                 Message.deleted == False).first() is not None
     if not in_use:
         try:
             os.remove(os.path.join(current_app.config['UPLOAD_DIR'], g.file_path))

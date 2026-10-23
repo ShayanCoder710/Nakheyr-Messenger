@@ -423,6 +423,7 @@ class Gif(db.Model):
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     name = db.Column(db.String(160), default='')
     file_path = db.Column(db.String(200), nullable=False)   # 'user_id/fname' under UPLOAD_DIR
+    kind = db.Column(db.String(10), default='gif', nullable=False)  # 'gif' (.gif) | 'video' (silent .mp4)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
@@ -434,4 +435,5 @@ class Gif(db.Model):
             'id': self.id,
             'name': self.name,
             'url': self.url,
+            'kind': self.kind,
         }

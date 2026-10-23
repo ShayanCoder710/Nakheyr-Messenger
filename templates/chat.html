@@ -503,10 +503,13 @@
   <div class="ep-search"><input id="epSearch" type="text" placeholder="جستجوی ایموجی…" autocomplete="off"></div>
   <div class="ep-tabs" id="epTabs"></div>
   <div class="ep-body" id="epBody"></div>
-  <div class="ep-gifbar">
-    <span class="ep-giflabel">{{ bi('image') }} گیف</span>
-    <div class="ep-gifstrip" id="epGifStrip"></div>
-    <input type="file" id="epGifInput" accept="image/gif" style="display:none">
+  <div class="ep-gifview" id="epGifView" style="display:none">
+    <div class="ep-gifgrid" id="epGifGrid"></div>
+    <input type="file" id="epGifInput" accept=".gif,.mp4,image/gif,video/mp4" style="display:none">
+  </div>
+  <div class="ep-switch">
+    <button type="button" id="epSwEmoji" class="on">{{ bi('emoji-smile') }} ایموجی</button>
+    <button type="button" id="epSwGif">{{ bi('image') }} گیف</button>
   </div>
 </div>
 
