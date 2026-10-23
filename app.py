@@ -1278,11 +1278,6 @@ def api_pin_message():
     if not allowed:
         return jsonify(ok=False, error='دسترسی نداری')
     new_pin = not m.pinned
-    if new_pin:
-        # one active pin per chat: a new pin replaces the previous one
-        Message.query.filter(Message.chat_id == m.chat_id,
-                             Message.pinned.is_(True)).update(
-            {'pinned': False}, synchronize_session=False)
     m.pinned = new_pin
     db.session.commit()
     for mid in chat_member_ids(m.chat_id):
@@ -1325,11 +1320,35 @@ def api_pinned(chat_id):
     ).all()]
     if hidden:
         q = q.filter(~Message.id.in_(hidden))
-    m = q.order_by(Message.id.desc()).first()
-    if not m:
-        return jsonify(pinned=None)
-    sender = next((x for x in chat_users(chat) if x.id == m.sender_id), None)
-    return jsonify(pinned=m.to_dict(user.id), sender=(sender.to_public() if sender else None))
+    rows = q.order_by(Message.id.desc()).all()
+    members = {x.id: x for x in chat_users(chat)}
+    pins = [{'m': m.to_dict(user.id),
+             'sender': (members[m.sender_id].to_public() if m.sender_id in members else None)}
+            for m in rows]
+    return jsonify(pins=pins, count=len(pins))
+
+
+@app.route('/api/chat/<int:chat_id>/pins/clear', methods=['POST'])
+@require_auth
+def api_clear_pins(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    role = my_role_in(user, chat)
+    if chat.chat_type == 'dm':
+        allowed = True  # either party of a DM can clear all pins
+    else:
+        allowed = user.is_admin or role in ('owner', 'admin')
+    if not allowed:
+        return jsonify(ok=False, error='دسترسی نداری')
+    n = Message.query.filter(Message.chat_id == chat.id, Message.pinned.is_(True)).update(
+        {'pinned': False}, synchronize_session=False)
+    db.session.commit()
+    if n:
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('message_pinned', {'cleared': True, 'chat_id': chat.id}, room=f'user:{mid}')
+    return jsonify(ok=True, cleared=n)
 
 
 # ── Polls ────────────────────────────────────────────────────────

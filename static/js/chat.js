@@ -1460,9 +1460,9 @@ function clearHistory(chatId) {
     toast(forEveryone ? 'تاریخچه برای همه پاک شد' : 'تاریخچه پاک شد');
     if (currentChat === chatId) {
       CD.initialMessages = [];
-      CD.pinnedId = null;
+      CD.pins = [];
       renderAllMessages();
-      document.getElementById('pinnedBar').style.display = 'none';
+      renderPinnedBar();
     }
     refreshConvList();
   });
@@ -1576,18 +1576,18 @@ function localDeleteMid(mid) {
     const wrap = row.classList.contains('mrow') ? row.closest('#m' + mid) || row : row;
     wrap.remove();
   }
-  if (+mid === +CD.pinnedId) { CD.pinnedId = null; loadPinned(); }
+  if ((CD.pins || []).some(p => +p.id === +mid)) loadPinned();
 }
 
-// One active pin per chat: sync the flag, bubble class and pin-tag on every
-// visible row so a replaced pin is cleaned up in place.
-function syncPinRows(pinnedId) {
-  CD.pinnedId = pinnedId || null;
-  (CD.initialMessages || []).forEach(x => { x.pinned = x.id === (pinnedId || null); });
+// Multiple pins per chat: sync the flag, bubble class and pin-tag on every
+// visible row so pin/unpin/clear updates rows in place.
+function syncPinRows(ids) {
+  const set = new Set((ids || []).map(Number));
+  (CD.initialMessages || []).forEach(x => { x.pinned = set.has(+x.id); });
   document.querySelectorAll('.mrow[data-mid]').forEach(r => {
     const b = r.querySelector('.bubble');
     if (!b) return;
-    const on = +r.dataset.mid === pinnedId;
+    const on = set.has(+r.dataset.mid);
     b.classList.toggle('pinned', on);
     const meta = b.querySelector('.m-meta');
     if (!meta) return;
@@ -1597,7 +1597,12 @@ function syncPinRows(pinnedId) {
   });
 }
 function localSetPin(mid, pinned) {
-  syncPinRows(pinned ? mid : null);
+  CD.pins = (CD.pins || []).filter(p => +p.id !== +mid);
+  if (pinned) {
+    const m = (CD.initialMessages || []).find(x => x.id === mid);
+    if (m) { m.pinned = true; CD.pins.unshift({ id: mid, m, sender: getMember(m.sender_id) }); }
+  }
+  syncPinRows(CD.pins.map(p => p.id));
   loadPinned();
 }
 
@@ -1641,36 +1646,95 @@ document.getElementById('bulkCancel').onclick = cancelSelect;
 document.getElementById('bulkAllMine').onclick = selectAllMine;
 document.getElementById('bulkCopy').onclick = bulkCopy;
 
-async function loadPinned() {
-  if (!currentChat) return;
-  const r = await fetch('/api/chat/' + currentChat + '/pinned');
-  const j = await r.json();
+function pinSnippet(m) {
+  if (m.msg_type === 'image') return m.content || 'تصویر';
+  if (m.msg_type === 'video') return m.content || 'ویدیو';
+  if (m.msg_type === 'audio') return m.content || 'پیام صوتی';
+  if (m.msg_type === 'file') return m.file_name || 'فایل';
+  return m.content || 'پیام';
+}
+function pinThumb(m) {
+  if (m.msg_type === 'image' && m.file_url) return `<img class="pin-thumb" src="${m.file_url}" alt="">`;
+  if (m.msg_type === 'video' && m.file_url) return `<span class="pin-vid">${bi('camera-reels')}</span>`;
+  return '';
+}
+function renderPinnedBar() {
   const bar = document.getElementById('pinnedBar');
-  CD.pinnedId = j.pinned ? j.pinned.id : null;
-  if (!j.pinned) { bar.style.display = 'none'; return; }
-  const p = j.pinned;
-  let thumb = '';
-  let label = p.content || 'پیام';
-  if (p.msg_type === 'image' && p.file_url) {
-    thumb = `<img class="pin-thumb" src="${p.file_url}" alt="">`;
-    label = p.content || 'تصویر';
-  } else if (p.msg_type === 'video' && p.file_url) {
-    thumb = `<span class="pin-vid">${bi('camera-reels')}</span>`;
-    label = p.content || 'ویدیو';
-  } else if (p.msg_type === 'audio') {
-    label = p.content || 'پیام صوتی';
-  } else if (p.msg_type === 'file') {
-    label = p.file_name || 'فایل';
-  }
-  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${thumb}<span class="pin-bar-text"><b>${esc((j.sender || {}).display_name || 'کاربر')}</b><span>${esc(label)}</span></span><button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
+  if (!currentChat) return;
+  CD.pins = CD.pins || [];
+  if (!CD.pins.length) { bar.style.display = 'none'; bar.innerHTML = ''; return; }
+  const p = CD.pins[0];
+  const moreChip = CD.pins.length > 1
+    ? `<span class="pin-count" title="${CD.pins.length} پیام پین شده">${CD.pins.length}</span>` : '';
+  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${pinThumb(p.m)}<span class="pin-bar-text"><b>${esc((p.sender || {}).display_name || 'کاربر')}</b><span>${esc(pinSnippet(p.m))}</span></span>${moreChip}<button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
   bar.style.display = 'flex';
-  bar.querySelector('.pin-bar-text').onclick = () => jumpToMessage(p.id);
+  bar.querySelector('.pin-bar-text').onclick = () => {
+    if (CD.pins.length > 1) openPinsModal();
+    else jumpToMessage(p.id);
+  };
   bar.querySelector('[data-unpin]').onclick = () => {
-    api('/api/message/pin', { message_id: +document.querySelector('#pinnedBar [data-unpin]').dataset.unpin }).then(j => {
-      if (j.ok) syncPinRows(null);
-      loadPinned();
+    const id = +document.querySelector('#pinnedBar [data-unpin]').dataset.unpin;
+    localSetPin(id, false);
+    api('/api/message/pin', { message_id: id }).then(j => {
+      if (!j.ok) { loadPinned(); toast(j.error || 'لغو پین نشد', 'error'); }
     });
   };
+}
+function canClearAllPins() {
+  if (!CD.chat) return false;
+  if (CD.chat.chat_type === 'dm') return true;
+  return !!(window.ME && window.ME.is_admin) || ['owner', 'admin'].includes(CD.role || '');
+}
+function openPinsModal() {
+  CD.pins = CD.pins || [];
+  const list = document.getElementById('pinsList');
+  document.getElementById('pinsModalSub').textContent = CD.pins.length + ' پیام پین شده';
+  list.innerHTML = CD.pins.map(p => {
+    const ic = p.m.msg_type === 'image' ? 'image' : p.m.msg_type === 'video' ? 'camera-reels'
+      : p.m.msg_type === 'audio' ? 'headphones' : p.m.msg_type === 'file' ? 'paperclip' : 'chat-dots';
+    const t = p.m.created_at ? fmtTime(p.m.created_at) : '';
+    return `<div class="pin-item" data-pid="${p.id}">
+      <span class="pin-item-ic">${bi(ic)}</span>
+      <span class="pin-item-body"><b>${esc((p.sender || {}).display_name || 'کاربر')}</b><span>${esc(pinSnippet(p.m))}</span><em>${esc(t)}</em></span>
+      <button class="pin-item-btn" data-jump="${p.id}" title="رفتن به پیام">${bi('chevron-down')}</button>
+      <button class="pin-item-btn danger" data-unpin="${p.id}" title="لغو پین">${bi('pin-angle')}</button>
+    </div>`;
+  }).join('');
+  document.getElementById('pinsClearRow').style.display = canClearAllPins() ? '' : 'none';
+  list.querySelectorAll('[data-jump]').forEach(b => b.onclick = () => {
+    document.getElementById('pinsModal').classList.remove('show');
+    jumpToMessage(+b.dataset.jump);
+  });
+  list.querySelectorAll('[data-unpin]').forEach(b => b.onclick = () => {
+    const id = +b.dataset.unpin;
+    localSetPin(id, false);
+    api('/api/message/pin', { message_id: id }).then(j => {
+      if (!j.ok) { loadPinned(); toast(j.error || 'لغو پین نشد', 'error'); }
+      else if (CD.pins.length) openPinsModal();
+      else document.getElementById('pinsModal').classList.remove('show');
+    });
+  });
+  document.getElementById('pinsClearAll').onclick = async () => {
+    const j = await api('/api/chat/' + currentChat + '/pins/clear', {});
+    if (j.ok) {
+      toast((j.cleared || 0) + ' پین حذف شد');
+      document.getElementById('pinsModal').classList.remove('show');
+      loadPinned();
+    } else toast(j.error || 'حذف نشد', 'error');
+  };
+  document.getElementById('pinsModal').classList.add('show');
+}
+let pinSeq = 0;
+async function loadPinned() {
+  if (!currentChat) return;
+  const my = ++pinSeq;
+  const r = await fetch('/api/chat/' + currentChat + '/pinned');
+  if (!r.ok || my !== pinSeq) return; // a newer fetch superseded this one
+  const j = await r.json();
+  // API returns {m, sender} pairs — normalize to {id, m, sender} for the UI.
+  CD.pins = (j.pins || []).map(p => ({ id: p.m.id, m: p.m, sender: p.sender }));
+  syncPinRows(CD.pins.map(p => p.id));
+  renderPinnedBar();
 }
 
 document.getElementById('btnSend').onclick = sendText;
@@ -2994,11 +3058,9 @@ function openMsgActions(mid, x, y) {
       copyText(m.content).then(() => toast('کپی شد')).catch(() => toast('کپی نشد', 'error'));
     } } : null,
     canPinMsg(m) ? { label: m.pinned ? 'لغو پین' : 'پین کردن', icon: bi(m.pinned ? 'pin-angle-fill' : 'pin-angle'), fn: () => {
-      const prev = CD.pinnedId || null;
-      const next = !m.pinned;
-      localSetPin(mid, next);
+      localSetPin(mid, !m.pinned);
       api('/api/message/pin', { message_id: mid }).then(j => {
-        if (!j.ok) { syncPinRows(prev); loadPinned(); toast(j.error || 'پین نشد', 'error'); }
+        if (!j.ok) { loadPinned(); toast(j.error || 'پین نشد', 'error'); }
       });
     } } : null,
     { label: 'ذخیره در پیام‌های ذخیره‌شده', icon: bi('bookmark'), fn: () => {
@@ -3270,15 +3332,15 @@ S.on('message_deleted', d => {
     const target = row ? row.closest('#m' + d.message_id) || row : wrapper;
     target.remove();
   }
-  if (+d.message_id === +CD.pinnedId) { CD.pinnedId = null; loadPinned(); }
+  if ((CD.pins || []).some(p => +p.id === +d.message_id)) loadPinned();
 });
 
 S.on('chat_cleared', d => {
   if (d.chat_id === currentChat) {
     CD.initialMessages = [];
-    CD.pinnedId = null;
+    CD.pins = [];
     renderAllMessages();
-    document.getElementById('pinnedBar').style.display = 'none';
+    renderPinnedBar();
   }
   refreshConvList();
 });
@@ -3324,7 +3386,6 @@ S.on('presence_update', d => {
 
 S.on('message_pinned', d => {
   if (!currentChat || d.chat_id !== currentChat) return;
-  syncPinRows(d.pinned ? d.message_id : null);
   loadPinned();
 });
 
