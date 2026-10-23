@@ -128,8 +128,8 @@ html[data-theme="light"], html[data-theme="auto"] { color-scheme: light; }
   --bubble-in-line: rgba(15, 15, 30, .08);
   --bubble-in-shadow: 0 1px 4px rgba(30, 30, 60, .1);
   --bubble-hover-shadow: 0 4px 14px rgba(30, 30, 60, .16);
-  --bubble-out: #fbe4e4;
-  --bubble-out-line: rgba(217, 58, 61, .24);
+  --bubble-out: #f6f6f9;
+  --bubble-out-line: rgba(15, 15, 30, .08);
   --modal-bg: rgba(255, 255, 255, .98);
   --card-shadow: 0 18px 44px -20px rgba(30, 30, 60, .25);
   --pane-shadow: 0 16px 40px -18px rgba(30, 30, 60, .18);
