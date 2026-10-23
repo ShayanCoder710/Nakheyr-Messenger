@@ -23,6 +23,7 @@ class User(db.Model):
     is_banned = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
     show_online = db.Column(db.Boolean, default=True, nullable=False)
+    theme = db.Column(db.String(10), default='dark', nullable=False)
     status = db.Column(db.String(10), default='offline')
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)
     streak_days = db.Column(db.Integer, default=0)
@@ -71,6 +72,7 @@ class User(db.Model):
         data = self.to_public()
         data['is_banned'] = self.is_banned
         data['show_online'] = bool(self.show_online)
+        data['theme'] = self.theme if self.theme in ('dark', 'light', 'auto') else 'dark'
         data['created_at'] = self.created_at.isoformat()
         data['streak_days'] = self.streak_days
         return data

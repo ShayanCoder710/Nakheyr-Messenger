@@ -1097,6 +1097,9 @@ def api_profile():
         user.read_receipts = bool(data['read_receipts'])
     if 'show_online' in data:
         user.show_online = bool(data['show_online'])
+    if 'theme' in data:
+        t = str(data.get('theme') or 'dark')
+        user.theme = t if t in ('dark', 'light', 'auto') else 'dark'
     if 'username' in data:
         new_username = (data.get('username') or '').strip().lower()
         if not re.match(r'^[a-z0-9_]{3,30}$', new_username):

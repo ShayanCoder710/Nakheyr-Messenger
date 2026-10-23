@@ -134,6 +134,7 @@ def _ensure_columns():
         ('messages', 'fwd_from_name', "VARCHAR(60) NOT NULL DEFAULT ''"),
         ('users', 'read_receipts', "BOOLEAN NOT NULL DEFAULT 1"),
         ('users', 'show_online', "BOOLEAN NOT NULL DEFAULT 1"),
+        ('users', 'theme', "VARCHAR(10) NOT NULL DEFAULT 'dark'"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:

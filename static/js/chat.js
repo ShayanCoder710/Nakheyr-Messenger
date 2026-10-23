@@ -12,6 +12,15 @@ let typingTimers = {};
 let typingSent = false;
 let typingSelfTimer = null;
 
+/* Theme: the server renders html[data-theme] (no flash on load); toggling
+   in settings re-applies it. "auto" is resolved by CSS via
+   prefers-color-scheme, so system changes switch it live with no JS. */
+function applyTheme(t) {
+  const v = (t === 'light' || t === 'auto') ? t : 'dark';
+  document.documentElement.dataset.theme = v;
+}
+applyTheme(window.ME ? window.ME.theme : 'dark');
+
 const sideEl = document.querySelector('.sidebar');
 const sideToggleBtn = document.getElementById('sideToggle');
 function setSideCollapsed(v) {
@@ -2601,6 +2610,7 @@ function openProfilePage() {
   if (rr) rr.checked = window.ME.read_receipts !== false;
   const so = document.getElementById('pmShowOnline');
   if (so) so.checked = window.ME.show_online !== false;
+  syncThemeSeg();
   const ad = document.getElementById('pmAdmin');
   if (ad) ad.style.display = window.ME.is_admin ? 'inline-flex' : 'none';
   loadBlocks();
@@ -2634,6 +2644,33 @@ if (pmSO) pmSO.onchange = e => {
     }
   });
 };
+
+const pmTheme = document.getElementById('pmTheme');
+function syncThemeSeg() {
+  if (!pmTheme) return;
+  const cur = (window.ME && window.ME.theme) || 'dark';
+  pmTheme.querySelectorAll('button[data-theme-v]').forEach(b =>
+    b.classList.toggle('on', b.dataset.themeV === cur));
+}
+if (pmTheme) pmTheme.addEventListener('click', e => {
+  const b = e.target.closest('button[data-theme-v]');
+  if (!b) return;
+  const prev = (window.ME && window.ME.theme) || 'dark';
+  const next = b.dataset.themeV;
+  window.ME.theme = next;
+  applyTheme(next);
+  syncThemeSeg();
+  api('/api/profile', { theme: next }).then(j => {
+    if (!j.ok) {
+      window.ME.theme = prev;
+      applyTheme(prev);
+      syncThemeSeg();
+      toast(j.error, 'error');
+    } else {
+      toast({ dark: 'تم تیره شد', light: 'تم روشن شد', auto: 'تم با سیستم همگام شد' }[next]);
+    }
+  });
+});
 
 async function loadBlocks() {
   const box = document.getElementById('pmBlocks');
@@ -3355,6 +3392,7 @@ S.on('chat_deleted', d => {
 
 S.on('profile_updated', p => {
   window.ME = Object.assign(window.ME, p);
+  if (p && p.theme) applyTheme(p.theme);
   refreshSideAvatar();
   const csm = document.getElementById('chatSettingsModal');
   if (csm && csm.classList.contains('show') && currentChat) loadMembers(currentChat);
