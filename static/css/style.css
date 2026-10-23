@@ -67,6 +67,7 @@
   --bubble-in-shadow: 0 2px 8px rgba(0, 0, 0, .35);
   --bubble-hover-shadow: 0 5px 16px rgba(0, 0, 0, .45);
   --bubble-out: #1e1e25;
+  --bubble-out-line: rgba(255, 255, 255, .06);
   --modal-bg: rgba(20, 20, 25, .97);
   --card-shadow: 0 18px 44px -20px rgba(0, 0, 0, .85);
   --pane-shadow: 0 16px 40px -18px rgba(0, 0, 0, .8);
@@ -127,7 +128,8 @@ html[data-theme="light"], html[data-theme="auto"] { color-scheme: light; }
   --bubble-in-line: rgba(15, 15, 30, .08);
   --bubble-in-shadow: 0 1px 4px rgba(30, 30, 60, .1);
   --bubble-hover-shadow: 0 4px 14px rgba(30, 30, 60, .16);
-  --bubble-out: rgba(217, 58, 61, .12);
+  --bubble-out: #fbe4e4;
+  --bubble-out-line: rgba(217, 58, 61, .24);
   --modal-bg: rgba(255, 255, 255, .98);
   --card-shadow: 0 18px 44px -20px rgba(30, 30, 60, .25);
   --pane-shadow: 0 16px 40px -18px rgba(30, 30, 60, .18);
@@ -185,6 +187,7 @@ html[data-theme="light"], html[data-theme="auto"] { color-scheme: light; }
     --bubble-in-shadow: 0 2px 8px rgba(0, 0, 0, .35);
     --bubble-hover-shadow: 0 5px 16px rgba(0, 0, 0, .45);
     --bubble-out: #1e1e25;
+    --bubble-out-line: rgba(255, 255, 255, .06);
     --modal-bg: rgba(20, 20, 25, .97);
     --card-shadow: 0 18px 44px -20px rgba(0, 0, 0, .85);
     --pane-shadow: 0 16px 40px -18px rgba(0, 0, 0, .8);
@@ -563,7 +566,7 @@ b, strong { font-weight: 800; }
 .mrow.mine-row .bubble { border-bottom-right-radius: 6px; border-bottom-left-radius: 18px; }
 .mrow.mine-row .bubble.me {
   background: var(--bubble-out);
-  border-color: var(--bubble-in-line);
+  border-color: var(--bubble-out-line);
   box-shadow: var(--bubble-in-shadow);
 }
 .mrow.mine-row .bubble.me .m-meta { color: var(--muted); }
