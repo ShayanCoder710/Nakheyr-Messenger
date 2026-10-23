@@ -6,14 +6,14 @@ from datetime import datetime
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
-    flash, abort, jsonify, send_from_directory
+    flash, abort, jsonify, send_from_directory, current_app
 )
 from flask_socketio import SocketIO, emit, join_room
 from sqlalchemy.orm import joinedload
 
 from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import (
-    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar
+    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar, Gif
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
@@ -1023,6 +1023,59 @@ def api_upload():
     kind = kind_for(f.filename, f.mimetype)
     return jsonify(ok=True, file_path=path, file_name=f.filename, kind=kind,
                    file_url=f'/files/{path}')
+
+
+@app.route('/api/gifs', methods=['GET'])
+@require_auth
+def api_gifs_list():
+    """The user's GIF library (emoji panel bottom strip)."""
+    user = current_user()
+    gifs = Gif.query.filter_by(user_id=user.id).order_by(Gif.created_at.desc()).all()
+    return jsonify(ok=True, gifs=[g.to_dict() for g in gifs])
+
+
+@app.route('/api/gifs', methods=['POST'])
+@require_auth
+def api_gifs_add():
+    """Add a .gif file to the user's GIF library."""
+    user = current_user()
+    f = request.files.get('file')
+    if not f or not f.filename:
+        return jsonify(ok=False, error='گیفی انتخاب نشده')
+    name, _ = os.path.splitext(f.filename)
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    if ext != 'gif':
+        return jsonify(ok=False, error='فقط فایل GIF مجازه')
+    path = save_upload_file(f)
+    if not path:
+        return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۵۰ مگ).')
+    g = Gif(user_id=user.id, name=re.sub(r'[^\w.\-]', '_', name)[:60] or f'gif-{path}',
+            file_path=path)
+    db.session.add(g)
+    db.session.commit()
+    return jsonify(ok=True, gif=g.to_dict())
+
+
+@app.route('/api/gifs/<int:gif_id>', methods=['DELETE'])
+@require_auth
+def api_gifs_del(gif_id):
+    """Remove a GIF from the library. If a sent message still references the
+    file on disk, keep the file so old messages don't break."""
+    user = current_user()
+    g = Gif.query.filter_by(id=gif_id, user_id=user.id).first()
+    if not g:
+        return jsonify(ok=False, error='گیف پیدا نشد')
+    db.session.delete(g)
+    db.session.flush()
+    in_use = Message.query.filter_by(file_path=g.file_path, msg_type='image',
+                                    deleted=False).first() is not None
+    if not in_use:
+        try:
+            os.remove(os.path.join(current_app.config['UPLOAD_DIR'], g.file_path))
+        except OSError:
+            pass
+    db.session.commit()
+    return jsonify(ok=True)
 
 
 @app.route('/api/block', methods=['POST'])

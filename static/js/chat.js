@@ -1200,6 +1200,7 @@ function buildEmojiPanel() {
     tabs.querySelectorAll('button').forEach(x => x.classList.remove('on'));
     b.classList.add('on');
     search.value = '';
+    tabs.style.display = 'flex';
     renderSet(+b.dataset.tab);
   });
   search.oninput = runSearch;
@@ -1211,6 +1212,60 @@ function buildEmojiPanel() {
     }
   };
   renderSet(0);
+  loadGifStrip();
+}
+
+// —— GIF strip (bottom of the emoji panel): the user's own GIF library.
+// Pick a tile → it lands in the composer as a pending attachment (image kind),
+// then the user sends it with the normal send button.
+async function loadGifStrip() {
+  const strip = document.getElementById('epGifStrip');
+  if (!strip) return;
+  if (CD.gifs !== undefined) { renderGifStrip(); return; }
+  strip.innerHTML = `<span class="ep-gifloading">${bi('hourglass-split')} در حال بارگذاری…</span>`;
+  try {
+    const r = await fetch('/api/gifs').then(x => x.json());
+    if (r && r.ok) { CD.gifs = r.gifs || []; }   // leave undefined on failure → retry on next open
+  } catch (e) { /* offline: retry next time the panel opens */ }
+  renderGifStrip();
+}
+function renderGifStrip() {
+  const strip = document.getElementById('epGifStrip');
+  if (!strip) return;
+  const gifs = CD.gifs || [];
+  const tiles = gifs.map(g =>
+    `<button type="button" class="ep-gif" data-gif="${g.id}" title="${esc(g.name)}" style="background-image:url('${esc(g.url)}')" aria-label="${esc(g.name)}"></button>`
+  ).join('');
+  strip.innerHTML =
+    `<button type="button" class="ep-gif ep-gif-add" id="epGifAdd">${bi('plus')}<span>افزودن گیف</span></button>` +
+    (gifs.length ? '' : '<span class="ep-gifempty">هنوز گیفی نداری — یکی اضافه کن</span>') + tiles;
+  const add = document.getElementById('epGifAdd');
+  add.onclick = () => document.getElementById('epGifInput').click();
+  document.getElementById('epGifInput').onchange = e => {
+    addGifFile(e.target.files[0]);
+    e.target.value = '';
+  };
+}
+async function addGifFile(file) {
+  if (!file) return;
+  if (!/\.gif$/i.test(file.name)) { toast('فقط فایل گیف مجازه', 'error'); return; }
+  const fd = new FormData();
+  fd.append('file', file, file.name);
+  toast('در حال آپلود گیف…');
+  const r = await fetch('/api/gifs', { method: 'POST', body: fd }).then(x => x.json()).catch(() => null);
+  if (!r || !r.ok) { toast((r && r.error) || 'افزودن گیف ناموفق بود', 'error'); return; }
+  CD.gifs = [r.gif, ...((CD.gifs || []))];
+  renderGifStrip();
+  toast('گیف اضافه شد');
+}
+function sendGifFromStrip(gid) {
+  const g = (CD.gifs || []).find(x => x.id === +gid);
+  if (!g) return;
+  // Same shape the upload flow produces: composer preview + normal send.
+  pendingFile = { path: g.url.slice('/files/'.length), name: g.name, kind: 'image', url: g.url, asFile: false };
+  renderAttachPreview();
+  const inp = document.getElementById('msgInput');
+  if (inp && !inp.disabled) inp.focus();
 }
 
 function hideEmojiPanel() {
@@ -1260,6 +1315,8 @@ document.getElementById('btnEmoji').onclick = e => {
 document.getElementById('emojiPanel').addEventListener('click', e => {
   const b = e.target.closest('[data-em]');
   if (b) { insertEmoji(b.dataset.em); return; }
+  const g = e.target.closest('[data-gif]');
+  if (g) { sendGifFromStrip(g.dataset.gif); return; }
   e.stopPropagation();
 });
 document.addEventListener('click', e => {

@@ -756,6 +756,34 @@ b, strong { font-weight: 800; }
 }
 .ep-body button:hover { background: var(--bg-3); transform: scale(1.18); }
 .ep-body .ep-label { grid-column: 1 / -1; font-size: 11px; font-weight: 800; color: var(--dim); padding: 6px 2px 2px; }
+/* GIF strip — bottom of the emoji panel (user's own GIF library) */
+.ep-gifbar {
+  flex: 0 0 auto; display: flex; align-items: center; gap: 8px;
+  padding: 7px 10px; border-top: 1px solid var(--line);
+  background: var(--bg-2);
+}
+.ep-giflabel {
+  flex: 0 0 auto; display: inline-flex; align-items: center; gap: 4px;
+  font-size: 11px; font-weight: 800; color: var(--dim); user-select: none;
+}
+.ep-giflabel .bi-ic { width: 14px; height: 14px; }
+.ep-gifstrip { flex: 1 1 auto; display: flex; gap: 6px; overflow-x: auto; overflow-y: hidden; min-width: 0; padding: 2px; }
+.ep-gif {
+  flex: 0 0 auto; width: 68px; height: 46px; border: none; padding: 0;
+  border-radius: 9px; background: var(--bg-3) center / cover no-repeat;
+  cursor: pointer;
+}
+.ep-gif:hover { box-shadow: inset 0 0 0 2px var(--accent); }
+.ep-gif.ep-gif-add {
+  width: auto; min-width: 88px; display: flex; flex-direction: column;
+  align-items: center; justify-content: center; gap: 2px;
+  background: var(--bg-3); color: var(--dim); font-size: 10px; line-height: 1;
+}
+.ep-gif.ep-gif-add .bi-ic { width: 14px; height: 14px; }
+.ep-gif.ep-gif-add:hover { color: var(--text); }
+.ep-gifempty { flex: 0 0 auto; font-size: 11px; color: var(--dim); align-self: center; user-select: none; }
+.ep-gifloading { flex: 0 0 auto; font-size: 11px; color: var(--dim); display: inline-flex; gap: 5px; align-items: center; user-select: none; }
+.ep-gifloading .bi-ic { width: 12px; height: 12px; }
 
 .empty-msgs { text-align: center; color: var(--dim); padding: 40px 0; font-size: 13px; }
 

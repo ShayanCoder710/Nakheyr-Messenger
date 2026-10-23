@@ -410,3 +410,28 @@ class Avatar(db.Model):
             'url': self.url,
             'is_primary': bool(self.is_primary),
         }
+
+
+class Gif(db.Model):
+    """User-owned GIF library shown in the emoji panel's bottom strip.
+    Each entry points at a file already stored under UPLOAD_DIR (via the
+    regular upload pipeline); the user can re-send any of them at will."""
+    __tablename__ = 'gifs'
+    __table_args__ = ({'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},)
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    name = db.Column(db.String(160), default='')
+    file_path = db.Column(db.String(200), nullable=False)   # 'user_id/fname' under UPLOAD_DIR
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def url(self):
+        return f'/files/{self.file_path}' if self.file_path else ''
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'name': self.name,
+            'url': self.url,
+        }
