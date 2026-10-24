@@ -259,12 +259,13 @@ function renderMsg(m) {
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'audio') {
     const vcMine = m.sender_id === window.ME.id;
-    body = `<div class="voice-card ${vcMine ? 'sent' : ''}" data-mid="${m.id}" data-vurl="${esc(url)}">
+    body = `<div class="voice-card ${vcMine ? 'sent' : ''}" data-mid="${m.id}" data-vurl="${esc(url)}" dir="ltr">
       <button class="vc-play" title="پخش">${bi('play-fill')}</button>
-      <span class="vc-wave">${vcWaveHtml(m.id)}</span>
+      <span class="vc-wave" data-vcwave="${m.id}" title="برای جابه‌جایی کلیک یا بکشید">${vcWaveHtml(m.id)}</span>
+      <button class="vc-speed" data-mid="${m.id}" title="سرعت پخش">1x</button>
       <span class="vc-times"><span class="vc-cur">0:00</span><span class="vc-dur">…</span></span>
     </div>`;
-    ensureVoiceMeta(m);
+    ensureVoiceMeta(m, vcMine ? 'پیام صوتی من' : 'پیام صوتی');
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'file') {
     body = `<div class="file-card"><div class="fi">${bi(fileIcon(m.file_name))}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
@@ -887,7 +888,6 @@ function setActiveConv(id) {
 
 function closeChatPane(syncUrl) {
   if (recState) finishRec(false);
-  vcCache.forEach(st => { if (st.audio) { try { st.audio.pause(); } catch (_) {} st.audio = null; } });
   flushDraft();
   currentChat = null;
   document.getElementById('msgsPane').classList.remove('open');
@@ -2010,86 +2010,256 @@ function pseudoPeaks(seed, n) {
   return out;
 }
 const vcCache = new Map();
+let vcMpMid = null;
+const vcSpeeds = [1, 1.5, 2];
 function vcWaveHtml(mid) {
   const st = vcCache.get(mid);
   const peaks = (st && st.peaks) ? st.peaks : pseudoPeaks(mid, 36);
   return peaks.map(p => `<i style="height:${Math.round(2 + p * 22)}px"></i>`).join('');
 }
+function vcFindCard(mid) { return document.querySelector(`.voice-card[data-mid="${mid}"]`); }
 function vcPaint(mid) {
   const st = vcCache.get(mid);
-  const card = document.querySelector(`.voice-card[data-mid="${mid}"]`);
+  const card = vcFindCard(mid);
   if (!st || !card) return;
   if (st.peaks) card.querySelector('.vc-wave').innerHTML = vcWaveHtml(mid);
   const dur = card.querySelector('.vc-dur');
   if (dur && st.dur) dur.textContent = fmtRec(Math.round(st.dur));
+  vcPaintSpeed(mid);
 }
-function ensureVoiceMeta(m) {
-  if (!m || !m.file_url || vcCache.has(m.id)) return;
-  if (vcCache.size > 200) {
-    for (const k of vcCache.keys()) {
-      const old = vcCache.get(k);
-      if (!old || !old.audio) { vcCache.delete(k); break; }
-    }
-  }
-  const st = { url: m.file_url, peaks: null, dur: 0, audio: null };
-  vcCache.set(m.id, st);
-  fetch(m.file_url).then(r => r.arrayBuffer()).then(buf => {
-    const AC = window.AudioContext || window.webkitAudioContext;
-    const ctx = new AC();
-    return ctx.decodeAudioData(buf).then(dec => {
-      st.dur = dec.duration;
-      const data = dec.getChannelData(0);
-      const n = 36;
-      const step = Math.max(1, Math.floor(data.length / n));
-      st.peaks = [];
-      for (let i = 0; i < n; i++) {
-        let mx = 0;
-        for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j += 32) {
-          const v = Math.abs(data[j]);
-          if (v > mx) mx = v;
-        }
-        st.peaks.push(mx < 0.02 ? 0.06 : mx);
+function ensureVoiceMeta(m, title) {
+  if (!m || !m.file_url) return;
+  if (!vcCache.has(m.id)) {
+    if (vcCache.size > 200) {
+      for (const k of vcCache.keys()) {
+        const old = vcCache.get(k);
+        if (!old || !old.audio) { vcCache.delete(k); break; }
       }
-      ctx.close();
-      vcPaint(m.id);
-    });
-  }).catch(() => {});
+    }
+    vcCache.set(m.id, { url: m.file_url, peaks: null, dur: 0, audio: null, speed: 1, title: title || 'پیام صوتی' });
+  }
+  const st = vcCache.get(m.id);
+  if (!st.audio) {
+    fetch(m.file_url).then(r => r.arrayBuffer()).then(buf => {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      return ctx.decodeAudioData(buf).then(dec => {
+        st.dur = dec.duration;
+        const data = dec.getChannelData(0);
+        const n = 36;
+        const step = Math.max(1, Math.floor(data.length / n));
+        st.peaks = [];
+        for (let i = 0; i < n; i++) {
+          let mx = 0;
+          for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j += 32) {
+            const v = Math.abs(data[j]);
+            if (v > mx) mx = v;
+          }
+          st.peaks.push(mx < 0.02 ? 0.06 : mx);
+        }
+        ctx.close();
+        vcPaint(m.id);
+      });
+    }).catch(() => {});
+  }
 }
-function toggleVoiceCard(mid) {
+function vcSpeedLabel(s) { return (s === 1 ? '1' : s) + 'x'; }
+function vcPaintSpeed(mid) {
   const st = vcCache.get(mid);
   if (!st) return;
-  const card = document.querySelector(`.voice-card[data-mid="${mid}"]`);
-  if (!card) return;
-  const btn = card.querySelector('.vc-play');
-  if (st.audio && !st.audio.paused) {
-    st.audio.pause();
-    btn.innerHTML = bi('play-fill');
-    return;
+  const label = vcSpeedLabel(st.speed);
+  document.querySelectorAll(`.vc-speed[data-mid="${mid}"]`).forEach(el => {
+    el.textContent = label;
+    el.classList.toggle('on', st.speed !== 1);
+  });
+  if (vcMpMid === mid) {
+    const el = document.getElementById('mpSpeed');
+    if (el) el.textContent = label;
   }
+}
+function vcEnsureAudio(mid) {
+  const st = vcCache.get(mid);
+  if (!st || !st.url) return null;
   if (!st.audio) {
     const a = new Audio(st.url);
     st.audio = a;
-    a.ontimeupdate = () => {
-      const pr = a.duration && isFinite(a.duration) && a.duration > 0 ? a.currentTime / a.duration : 0;
-      const bars = card.querySelectorAll('.vc-wave i');
-      const cut = Math.round(pr * bars.length);
-      bars.forEach((b, i) => b.classList.toggle('on', i < cut));
-      const cur = card.querySelector('.vc-cur');
-      if (cur) cur.textContent = fmtRec(Math.floor(a.currentTime));
-    };
-    a.onended = () => {
-      st.audio = null;
-      card.querySelectorAll('.vc-wave i').forEach(b => b.classList.remove('on'));
-      const cur = card.querySelector('.vc-cur');
-      if (cur) cur.textContent = '0:00';
-      btn.innerHTML = bi('play-fill');
-    };
-    a.play().catch(() => {});
-  } else {
-    st.audio.play().catch(() => {});
+    a.playbackRate = st.speed;
+    a.addEventListener('timeupdate', () => vcPaintProgress(mid));
+    a.addEventListener('ended', () => vcOnEnded(mid));
   }
-  btn.innerHTML = bi('pause-fill');
+  return st.audio;
 }
+function vcResetVisuals(mid) {
+  const card = vcFindCard(mid);
+  if (!card) return;
+  card.querySelectorAll('.vc-wave i').forEach(b => b.classList.remove('on'));
+  const cur = card.querySelector('.vc-cur');
+  if (cur) cur.textContent = '0:00';
+  const btn = card.querySelector('.vc-play');
+  if (btn) btn.innerHTML = bi('play-fill');
+}
+function vcOnEnded(mid) {
+  const st = vcCache.get(mid);
+  if (!st) return;
+  st.audio = null;
+  vcResetVisuals(mid);
+  if (vcMpMid === mid) vcMpHide();
+}
+function vcPaintProgress(mid) {
+  const st = vcCache.get(mid);
+  if (!st) return;
+  const a = st.audio;
+  const t = a ? (a.currentTime || 0) : 0;
+  const d = (a && a.duration && isFinite(a.duration) ? a.duration : 0) || st.dur;
+  const card = vcFindCard(mid);
+  if (card) {
+    const bars = card.querySelectorAll('.vc-wave i');
+    const cut = d ? Math.round(t / d * bars.length) : 0;
+    bars.forEach((b, i) => b.classList.toggle('on', i < cut));
+    const cur = card.querySelector('.vc-cur');
+    if (cur) cur.textContent = fmtRec(Math.floor(t || 0));
+  }
+  if (vcMpMid === mid) vcMpPaint();
+}
+function toggleVoiceCard(mid) {
+  const st = vcCache.get(mid);
+  if (!st || !st.url) return;
+  const a = vcEnsureAudio(mid);
+  if (!a) return;
+  if (!a.paused) {
+    a.pause();
+    const card = vcFindCard(mid);
+    if (card) card.querySelector('.vc-play').innerHTML = bi('play-fill');
+    vcMpIcon();
+    return;
+  }
+  a.playbackRate = st.speed;
+  vcCache.forEach((o, oid) => {
+    if (oid === mid || !o.audio || o.audio.paused) return;
+    try { o.audio.pause(); } catch (_) {}
+    o.audio = null;
+    vcResetVisuals(oid);
+    if (vcMpMid === oid) vcMpHide();
+  });
+  a.play().then(() => {
+    const card = vcFindCard(mid);
+    if (card) card.querySelector('.vc-play').innerHTML = bi('pause-fill');
+    vcMpShow(mid);
+  }).catch(() => {});
+}
+function vcCycleSpeed(mid) {
+  const st = vcCache.get(mid);
+  if (!st) return;
+  st.speed = vcSpeeds[(vcSpeeds.indexOf(st.speed) + 1) % vcSpeeds.length];
+  if (st.audio) st.audio.playbackRate = st.speed;
+  vcPaintSpeed(mid);
+}
+function vcSeekRatio(e, wave) {
+  const r = wave.getBoundingClientRect();
+  return Math.min(1, Math.max(0, (e.clientX - r.left) / r.width));
+}
+function vcDoSeek(mid, pr) {
+  const st = vcCache.get(mid);
+  if (!st) return;
+  const a = vcEnsureAudio(mid);
+  if (!a) return;
+  const d = (a.duration && isFinite(a.duration) && a.duration > 0) ? a.duration : st.dur;
+  if (!d) return;
+  a.currentTime = d * pr;
+  a.pause();
+  vcPaintProgress(mid);
+}
+let vcSeeking = null;
+document.addEventListener('pointerdown', (e) => {
+  if (!e.target.closest) return;
+  const wave = e.target.closest('.vc-wave');
+  if (!wave || !wave.dataset.vcwave) return;
+  vcSeeking = wave;
+  e.preventDefault();
+  try { wave.setPointerCapture(e.pointerId); } catch (_) {}
+  vcDoSeek(Number(wave.dataset.vcwave), vcSeekRatio(e, wave));
+}, true);
+document.addEventListener('pointermove', (e) => {
+  if (!vcSeeking) return;
+  const wave = (e.target.closest && e.target.closest('.vc-wave')) || vcSeeking;
+  if (!wave || !wave.dataset.vcwave) return;
+  vcDoSeek(Number(wave.dataset.vcwave), vcSeekRatio(e, wave));
+});
+document.addEventListener('pointerup', () => { vcSeeking = null; });
+document.addEventListener('pointercancel', () => { vcSeeking = null; });
+document.addEventListener('click', (e) => {
+  const sp = e.target.closest ? e.target.closest('.vc-speed') : null;
+  if (sp && sp.dataset.mid) { e.preventDefault(); e.stopPropagation(); vcCycleSpeed(Number(sp.dataset.mid)); }
+});
+function vcMpShow(mid) {
+  vcMpMid = mid;
+  const el = document.getElementById('voiceMp');
+  if (!el) return;
+  el.classList.add('on');
+  const st = vcCache.get(mid);
+  const t = document.getElementById('mpTitle');
+  if (t) t.textContent = (st && st.title) || 'پیام صوتی';
+  vcMpIcon();
+  vcPaintSpeed(mid);
+  vcMpPaint();
+}
+function vcMpHide() {
+  vcMpMid = null;
+  const el = document.getElementById('voiceMp');
+  if (el) el.classList.remove('on');
+}
+function vcMpIcon() {
+  if (vcMpMid == null) return;
+  const st = vcCache.get(vcMpMid);
+  const b = document.getElementById('mpToggle');
+  if (b) b.innerHTML = bi(st && st.audio && !st.audio.paused ? 'pause-fill' : 'play-fill');
+}
+function vcMpPaint() {
+  if (vcMpMid == null) return;
+  const st = vcCache.get(vcMpMid);
+  const a = st.audio;
+  const d = (a && a.duration && isFinite(a.duration) ? a.duration : 0) || st.dur;
+  const t = a ? (a.currentTime || 0) : 0;
+  const time = document.getElementById('mpTime');
+  if (time) time.textContent = fmtRec(Math.floor(t)) + ' / ' + fmtRec(Math.floor(d || 0));
+  const s = document.getElementById('mpSeek');
+  if (s) s.value = d ? Math.round(t / d * 1000) : 0;
+}
+document.addEventListener('click', (e) => {
+  if (!e.target.closest) return;
+  const tg = e.target.closest('#mpToggle');
+  if (tg) {
+    e.preventDefault();
+    if (vcMpMid != null) toggleVoiceCard(vcMpMid);
+    return;
+  }
+  const cl = e.target.closest('#mpClose');
+  if (cl) {
+    e.preventDefault();
+    if (vcMpMid == null) return;
+    const st = vcCache.get(vcMpMid);
+    if (st && st.audio) { try { st.audio.pause(); } catch (_) {} st.audio = null; }
+    vcResetVisuals(vcMpMid);
+    vcMpHide();
+    return;
+  }
+  const spd = e.target.closest('#mpSpeed');
+  if (spd) {
+    e.preventDefault();
+    if (vcMpMid != null) vcCycleSpeed(vcMpMid);
+  }
+});
+document.addEventListener('input', (e) => {
+  if (e.target && e.target.id === 'mpSeek' && vcMpMid != null) {
+    const st = vcCache.get(vcMpMid);
+    if (!st) return;
+    const a = vcEnsureAudio(vcMpMid);
+    const d = (a && a.duration && isFinite(a.duration) ? a.duration : 0) || st.dur;
+    if (!a || !d) return;
+    a.currentTime = d * (Number(e.target.value) / 1000);
+    vcPaintProgress(vcMpMid);
+  }
+});
 function voicePeaksHtml(f) {
   const n = 36;
   const peaks = (f.peaks && f.peaks.length === n) ? f.peaks : pseudoPeaks(f.id, n);
