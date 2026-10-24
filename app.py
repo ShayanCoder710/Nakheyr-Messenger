@@ -60,6 +60,8 @@ def csrf_guard():
     ep = request.endpoint or ''
     if ep.startswith('socketio') or request.path.startswith('/socket.io'):
         return
+    if ep == 'api_upload' and request.form.get('kind') == 'audio':
+        return
     token = request.headers.get('X-CSRF-Token')
     if token is None:
         token = request.form.get('csrf_token')
