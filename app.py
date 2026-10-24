@@ -46,9 +46,7 @@ with app.app_context():
     init_db()
 
 
-# ── CSRF protection ─────────────────────────────────────────────
 def ensure_csrf_token():
-    """Generate the per-session CSRF token and expose it to templates."""
     if '_csrf' not in session:
         session['_csrf'] = secrets.token_urlsafe(32)
     return session['_csrf']
@@ -56,12 +54,12 @@ def ensure_csrf_token():
 
 @app.before_request
 def csrf_guard():
-    ensure_csrf_token()  # make sure a token exists for this session
+    ensure_csrf_token()
     if request.method != 'POST':
         return
     ep = request.endpoint or ''
     if ep.startswith('socketio') or request.path.startswith('/socket.io'):
-        return  # socket.io polling uses its own session handshake
+        return
     token = request.headers.get('X-CSRF-Token')
     if token is None:
         token = request.form.get('csrf_token')
@@ -416,7 +414,6 @@ def api_chat_settings(chat_id):
             return jsonify(ok=False, error='مقدار حالت آهسته معتبر نیست')
         changed = True
         if not chat.slow_mode:
-            # Re-enabling later should not inherit an old cooldown.
             ChatMember.query.filter_by(chat_id=chat.id).update({'slow_mode_last': None})
     if changed:
         db.session.commit()
@@ -617,7 +614,7 @@ def api_chat_avatar(chat_id):
     fname = save_chat_avatar(user, f.filename)
     if not fname:
         return jsonify(ok=False, error='فرمت عکس مجاز نیست')
-    add_owner_avatar('chat', chat.id, fname)   # becomes primary; gallery is kept
+    add_owner_avatar('chat', chat.id, fname)
     for mid in chat_member_ids(chat.id):
         socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
     post_system_message(chat, user, f'عکس {noun} تغییر کرد')
@@ -686,7 +683,6 @@ def api_send_message():
     if chat.chat_type == 'channel':
         if chat.owner_id != user.id and role != 'admin':
             return jsonify(ok=False, error='در کانال فقط ادمین‌ها پیام می‌فرستن')
-    # Slow mode: per-member cooldown (owners/admins/site admins exempt)
     if chat.slow_mode and not user.is_admin and chat.owner_id != user.id and role != 'admin':
         if member and member.slow_mode_last:
             wait = (datetime.utcnow() - member.slow_mode_last).total_seconds()
@@ -724,7 +720,6 @@ def api_send_message():
                 content=content, file_name=file_name, file_path=file_path,
                 reply_to=data.get('reply_to') or None)
     db.session.add(m)
-    # Start this member's slow-mode cooldown
     if chat.slow_mode and member and not user.is_admin and role not in ('owner', 'admin'):
         member.slow_mode_last = datetime.utcnow()
     db.session.commit()
@@ -738,8 +733,6 @@ def api_send_message():
 
 
 def _clean_reaction(value):
-    """Reactions are rendered inside HTML on the client; only allow short
-    plain emoji strings so they can never smuggle markup."""
     if not isinstance(value, str):
         return ''
     value = value.strip()
@@ -826,8 +819,6 @@ def api_delete_message():
 
 
 def _emit_new_message(m):
-    # m.sender_id is an int; to_dict handles an int viewer fine, and
-    # _attach_polls_to_messages also accepts a bare user id.
     payload = m.to_dict(m.sender_id)
     _attach_polls_to_messages([payload], m.sender_id)
     socketio.emit('new_message', payload, room=f'user:{m.sender_id}')
@@ -879,8 +870,6 @@ def api_forward_message():
                 fwd_from_id=src.sender_id, fwd_from_name=(sender.public_name if sender else ''))
     db.session.add(m)
     db.session.flush()
-    # If the source message carries a poll, duplicate it onto the new message
-    # so the forwarded copy is votable in the target chat.
     src_poll = _find_poll_for_message(src.chat_id, src.id)
     if src_poll:
         new_poll = Poll(chat_id=target.id, message_id=m.id, question=src_poll.question,
@@ -1021,9 +1010,6 @@ def api_upload():
     if not path:
         return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۵۰ مگ).')
     kind = kind_for(f.filename, f.mimetype)
-    # A voice-note recording is a valid audio container (webm/opus etc.) even
-    # when the extension reads like a video container: accept a client-side
-    # `kind=audio` hint, validated against the real audio containers.
     if request.form.get('kind') == 'audio':
         ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
         if ext in (AUDIO_EXT | {'webm', 'oga', 'opus', 'webma'}):
@@ -1035,7 +1021,6 @@ def api_upload():
 @app.route('/api/chat/<int:chat_id>/search', methods=['GET'])
 @require_auth
 def api_chat_message_search(chat_id):
-    """Search ALL (not just loaded) messages of a chat: text + captions + filenames."""
     user = current_user()
     chat = db.session.execute(
         db.select(Chat).where(Chat.id == chat_id)
@@ -1069,7 +1054,6 @@ def api_chat_message_search(chat_id):
 @app.route('/api/chat/<int:chat_id>/messages/around', methods=['GET'])
 @require_auth
 def api_chat_messages_around(chat_id):
-    """History page around a message id (for jumping to search results)."""
     user = current_user()
     chat = db.session.execute(
         db.select(Chat).where(Chat.id == chat_id)
@@ -1090,7 +1074,6 @@ def api_chat_messages_around(chat_id):
 @app.route('/api/gifs', methods=['GET'])
 @require_auth
 def api_gifs_list():
-    """The user's GIF library (emoji panel bottom strip)."""
     user = current_user()
     gifs = Gif.query.filter_by(user_id=user.id).order_by(Gif.created_at.desc()).all()
     return jsonify(ok=True, gifs=[g.to_dict() for g in gifs])
@@ -1099,7 +1082,6 @@ def api_gifs_list():
 @app.route('/api/gifs', methods=['POST'])
 @require_auth
 def api_gifs_add():
-    """Add a .gif or a SILENT .mp4 to the user's GIF library."""
     user = current_user()
     f = request.files.get('file')
     if not f or not f.filename:
@@ -1115,7 +1097,6 @@ def api_gifs_add():
     path = save_upload_file(f)
     if not path:
         return jsonify(ok=False, error='فرمت یا حجم فایل مجاز نیست (حداکثر ۵۰ مگ).')
-    # Silent-only rule: an MP4 "gif" must carry no audio track.
     if kind == 'video' and mp4_has_audio(os.path.join(current_app.config['UPLOAD_DIR'], path)):
         try:
             os.remove(os.path.join(current_app.config['UPLOAD_DIR'], path))
@@ -1132,8 +1113,6 @@ def api_gifs_add():
 @app.route('/api/gifs/<int:gif_id>', methods=['DELETE'])
 @require_auth
 def api_gifs_del(gif_id):
-    """Remove a GIF from the library. If a sent message still references the
-    file on disk, keep the file so old messages don't break."""
     user = current_user()
     g = Gif.query.filter_by(id=gif_id, user_id=user.id).first()
     if not g:
@@ -1300,7 +1279,6 @@ def api_avatar():
         socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
         return jsonify(ok=ok, avatar=user.avatar_url)
     if request.form.get('delete') == '1':
-        # legacy "clear": remove the current primary, keep the rest of the gallery
         prim = Avatar.query.filter_by(owner_type='user', owner_id=user.id, is_primary=True).first()
         if prim:
             delete_owner_avatar('user', user.id, prim.id)
@@ -1315,7 +1293,7 @@ def api_avatar():
     fname = save_avatar(f.filename)
     if not fname:
         return jsonify(ok=False, error='فرمت عکس مجاز نیست')
-    add_owner_avatar('user', user.id, fname)   # becomes primary; gallery is kept
+    add_owner_avatar('user', user.id, fname)
     socketio.emit('profile_updated', user.to_public(), room=f'user:{user.id}')
     return jsonify(ok=True, avatar=user.avatar_url)
 
@@ -1464,7 +1442,7 @@ def api_clear_pins(chat_id):
         abort(404)
     role = my_role_in(user, chat)
     if chat.chat_type == 'dm':
-        allowed = True  # either party of a DM can clear all pins
+        allowed = True
     else:
         allowed = user.is_admin or role in ('owner', 'admin')
     if not allowed:
@@ -1478,18 +1456,14 @@ def api_clear_pins(chat_id):
     return jsonify(ok=True, cleared=n)
 
 
-# ── Polls ────────────────────────────────────────────────────────
 def _find_poll_for_message(chat_id, message_id):
     return Poll.query.filter_by(chat_id=chat_id, message_id=message_id).first()
 
 
 def _attach_polls_to_messages(messages, user):
-    """For each message in a chat, look up any attached poll and embed it
-    as `poll` so the client can render it inline.
-    `user` may be a User object or a bare user id int."""
     if not messages:
         return
-    viewer_id = getattr(user, 'id', user)  # works for both User and int
+    viewer_id = getattr(user, 'id', user)
     ids = [m['id'] for m in messages]
     polls = Poll.query.filter(
         Poll.chat_id.in_([messages[0]['chat_id']]),
@@ -1527,11 +1501,8 @@ def api_poll_create():
     chat = Chat.query.get(int(data.get('chat_id') or 0))
     if not chat or not can_view_chat(user, chat):
         return jsonify(ok=False, error='دسترسی نداری')
-    # Polls cannot be posted directly in a DM (only via forward). Channels and
-    # groups are fine (channels admin-only, groups per send permission).
     if chat.chat_type == 'dm':
         return jsonify(ok=False, error='نظرسنجی در پیوی نمی‌شه بفرستی. اول بفرست یه گپ یا گروه، بعد فوروارد کن')
-    # In a group, only members with send permission can post a poll
     if chat.chat_type == 'group' and not user.is_admin:
         member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
         if member and member.role not in ('owner', 'admin'):
@@ -1556,7 +1527,6 @@ def api_poll_create():
         return jsonify(ok=False, error='بین ۲ تا ۶ گزینه لازم داری')
     multi = bool(data.get('multi'))
 
-    # Auto-close after a chosen period
     expires = data.get('expires')
     expires_at = None
     if expires in ('1d', '3d', '1w'):
@@ -1564,7 +1534,6 @@ def api_poll_create():
         days = {'1d': 1, '3d': 3, '1w': 7}[expires]
         expires_at = datetime.utcnow() + timedelta(days=days)
 
-    # Create the poll message (text content carries the question)
     m = Message(chat_id=chat.id, sender_id=user.id, msg_type='text', content=question)
     db.session.add(m)
     db.session.commit()
@@ -1594,7 +1563,6 @@ def api_poll_vote(poll_id):
         return jsonify(ok=False, error='نظرسنجی پیدا نشد')
     if poll.closed or poll.is_expired():
         return jsonify(ok=False, error='این نظرسنجی بسته شده')
-    # Must be a member of the chat (admins can vote in any chat they can view)
     chat = Chat.query.get(poll.chat_id)
     if not chat or not can_view_chat(user, chat):
         return jsonify(ok=False, error='دسترسی نداری')
@@ -1603,7 +1571,6 @@ def api_poll_vote(poll_id):
 
     opts = poll.options_list()
     incoming = data.get('options')
-    # Accept both a list [0,1] and a bare int "0"
     if isinstance(incoming, (int, str)):
         incoming = [incoming]
     if not isinstance(incoming, list):
@@ -1623,7 +1590,6 @@ def api_poll_vote(poll_id):
         for idx in picks:
             if idx not in existing:
                 db.session.add(PollVote(poll_id=poll.id, user_id=user.id, option_index=idx))
-        # Remove unselected picks
         for v in list(PollVote.query.filter_by(poll_id=poll.id, user_id=user.id).all()):
             if v.option_index not in picks:
                 db.session.delete(v)
@@ -1643,8 +1609,6 @@ def api_poll_vote(poll_id):
 @app.route('/api/poll/<int:poll_id>/revoke', methods=['POST'])
 @require_auth
 def api_poll_revoke(poll_id):
-    """Undo the current user's vote(s) on a poll. Idempotent: removes every
-    PollVote row for (poll, user) and re-broadcasts the tallied state."""
     user = current_user()
     poll = Poll.query.get(poll_id)
     if not poll:
@@ -1688,8 +1652,6 @@ def api_poll_close(poll_id):
 @app.route('/api/poll/<int:poll_id>/voters')
 @require_auth
 def api_poll_voters(poll_id):
-    """List who voted on each option. Groups only (channels hide the voters
-    feature; DMs can't host polls at all)."""
     user = current_user()
     poll = Poll.query.get(poll_id)
     if not poll:
@@ -1697,7 +1659,6 @@ def api_poll_voters(poll_id):
     chat = Chat.query.get(poll.chat_id)
     if not chat or not can_view_chat(user, chat):
         return jsonify(ok=False, error='دسترسی نداری')
-    # The "who voted" list is only exposed for groups
     if chat.chat_type != 'group':
         return jsonify(ok=False, error='نمایش رأی‌دهندگان فقط برای گروه‌هاست')
     voters = poll.voter_details()
@@ -1847,9 +1808,7 @@ def admin_action(uid, action):
         if target.is_banned:
             target.status = 'offline'
     elif action == 'admin':
-        # Prevent removing the last non-config admin (lockout).
         if target.is_admin:
-            # is_config_admin is a @property, not a column — filter on username.
             remaining = User.query.filter(
                 User.is_admin.is_(True),
                 User.username != ADMIN_USERNAME,

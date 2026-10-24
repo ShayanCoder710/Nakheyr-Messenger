@@ -4,9 +4,9 @@ CD.joined = window.JOINED !== false;
 
 let currentChat = window.CURRENT_CHAT;
 let composerChatId = window.CURRENT_CHAT || null;
-let pendingFiles = [];   // attachment queue: {id, file?, name, size, status, progress, path, kind, url, asFile, vid, xhr, forceKind}
+let pendingFiles = [];   
 let _pfSeq = 0;
-let recState = null;     // active voice recording: {rec, stream, chunks, mime, secs, int}
+let recState = null;     
 let pendingReply = null;
 let selectedIds = new Set();
 let selecting = false;
@@ -14,9 +14,6 @@ let typingTimers = {};
 let typingSent = false;
 let typingSelfTimer = null;
 
-/* Theme: the server renders html[data-theme] (no flash on load); toggling
-   in settings re-applies it. "auto" is resolved by CSS via
-   prefers-color-scheme, so system changes switch it live with no JS. */
 function applyTheme(t) {
   const v = (t === 'light' || t === 'auto') ? t : 'dark';
   document.documentElement.dataset.theme = v;
@@ -87,8 +84,6 @@ function getMember(id) {
     const m = CD.members.find(x => x.id === id);
     if (m) return m;
   }
-  // Sender is no longer a member (kicked/left/deleted): keep the name a
-  // string — a numeric display_name crashes avBox and the whole boot.
   return { display_name: 'کاربر', username: '', avatar: '', status: 'offline' };
 }
 
@@ -123,7 +118,7 @@ function canPinMsg(m) {
   if (m.sender_id === window.ME.id) return true;
   if (window.ME.is_admin) return true;
   if (['owner', 'admin'].includes(myRole())) return true;
-  return !!(CD.chat && CD.chat.chat_type === 'dm'); // in a DM either party can pin
+  return !!(CD.chat && CD.chat.chat_type === 'dm'); 
 }
 
 function lastSenderOf(mid) {
@@ -197,11 +192,6 @@ function faNum(n) {
   return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
 }
 
-/* Telegram-style poll card:
-   - before voting: plain tappable option rows
-   - after voting / when closed: percentage track under every option,
-     the voter's picks get the accent border + accent fill
-   - footer: vote count + «لغو رای» (undo) + admin actions        */
 function pollHtml(p) {
   const total = p.total || 0;
   const voters = (p.voters !== undefined && p.voters !== null) ? p.voters : 0;
@@ -256,8 +246,6 @@ function renderMsg(m) {
     body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'gif') {
-    // Silent animated media: a .gif (image element) or a silent .mp4 "gif"
-    // (Telegram-style: autoplay, muted, looping, no controls in-bubble).
     if (/\.mp4$/i.test(m.file_name || '')) {
       body = `<div class="vid-wrap"><video class="vid" src="${url}" muted loop autoplay playsinline preload="metadata"></video>`
         + `<button class="vid-expand" title="نمایش بزرگ" data-media="gif" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
@@ -280,7 +268,6 @@ function renderMsg(m) {
         + `<a class="btn sm ghost" href="${url}" target="_blank" rel="noopener">${bi('box-arrow-up-right')} باز کردن</a></div>`;
     }
   } else {
-    // A poll message: show the question as text + the interactive card
     if (m.poll) {
       body = `${pollHtml(m.poll)}`;
     } else {
@@ -351,8 +338,6 @@ function renderAllMessages() {
   if (msgs.length) {
     let lastRaw = null;
     msgs.forEach(m => {
-      // One bad message must never kill the whole boot (loadPinned,
-      // conv list, etc. all run after this loop).
       try {
         const raw = dayKey(m.created_at);
         if (raw !== lastRaw) {
@@ -432,9 +417,6 @@ function attachMore() {
   });
 }
 
-// Prepend an older page (from /api/messages/<chat>?before=) into #msgsBody.
-// Shared by the scroll-to-load-older handler and jump-to-pinned. Keeps day
-// separators consistent and updates module-level oldestId.
 function prependOlder(j) {
   const bodyEl = document.getElementById('msgsBody');
   const topEl = document.createElement('div');
@@ -458,8 +440,6 @@ function prependOlder(j) {
   oldestId = j.messages[0].id;
 }
 
-// Scroll a message row into view (centered) and flash it. If the row is not in the
-// DOM yet (an old message), load older pages until it is, then scroll.
 function flashMsg(row) {
   row.scrollIntoView({ behavior: 'smooth', block: 'center' });
   row.classList.add('flash');
@@ -483,7 +463,6 @@ async function jumpToMessage(mid) {
   }
   row = document.querySelector(`.mrow[data-mid="${mid}"]`);
   if (row) flashMsg(row);
-  // else: pinned message is older than the loaded history we can reach; leave the view as-is.
 }
 
 function shortSnippet(m) {
@@ -724,7 +703,6 @@ document.getElementById('deleteModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) { document.getElementById('deleteModal').classList.remove('show'); _delAction = null; }
 });
 
-/* ── Polls ────────────────────────────────────────────────────── */
 function _pollRowNum(n) {
   const fa = ['۱','۲','۳','۴','۵','۶'];
   return fa[n - 1] || n;
@@ -765,8 +743,6 @@ function openPollModal() {
   document.getElementById('pollQuestion').focus();
 }
 document.getElementById('btnPoll').onclick = () => {
-  // In a DM (private chat), a poll cannot be created — it can only be
-  // forwarded into the DM. Show a hint instead of opening the modal.
   if (CD.chat && CD.chat.chat_type === 'dm') {
     toast('نظرسنجی تو پیوی نمی‌شه بفرستی. اول تو یه گروه یا کانال بساز، بعد فوروارد کن', 'error');
     return;
@@ -783,7 +759,6 @@ document.getElementById('pollOptions').addEventListener('click', e => {
   box.remove();
   _renumberPollRows();
 });
-// auto-expiry segmented control
 document.getElementById('pollExpiry').addEventListener('click', e => {
   const b = e.target.closest('button[data-exp]');
   if (!b) return;
@@ -806,14 +781,12 @@ document.getElementById('pollCreate').onclick = async () => {
   } else if (r.error) toast(r.error, 'error');
 };
 
-/* Poll vote / close / revoke clicks (event delegation) */
 document.addEventListener('click', e => {
   const revBtn = e.target.closest('[data-pollrevoke]');
   if (revBtn) {
     e.preventDefault();
     api('/api/poll/' + revBtn.dataset.pollrevoke + '/revoke', {}).then(j => {
       if (!j.ok) toast(j.error || 'نمی‌شود پس گرفت', 'error');
-      // on success the poll_revoke socket event re-renders the card on every client
     });
     return;
   }
@@ -834,7 +807,6 @@ document.addEventListener('click', e => {
   }
 });
 
-/* Poll voters modal (groups only, closed polls, admins/owner/creator) */
 function openPollVotersModal(pid) {
   api('/api/poll/' + pid + '/voters').then(j => {
     if (!j.ok) { toast(j.error || 'امکان نمایش رأی‌دهندگان نیست', 'error'); return; }
@@ -861,10 +833,6 @@ document.getElementById('pollVotersModal').addEventListener('click', e => {
     document.getElementById('pollVotersModal').classList.remove('show');
   }
 });
-// Telegram-style: tapping an option votes right away — single-choice
-// switches the pick, multi-choice toggles it; an empty toggle set undoes
-// the whole vote. The card re-renders from the poll_vote/poll_revoke
-// socket events (no optimistic local state needed).
 document.addEventListener('click', e => {
   const opt = e.target.closest('[data-pollopt]');
   if (!opt) return;
@@ -892,7 +860,6 @@ document.addEventListener('click', e => {
   }
 });
 
-// Poll modal: ESC to close
 document.getElementById('pollModal').addEventListener('click', e => {
   if (e.target === e.currentTarget) e.target.classList.remove('show');
 });
@@ -970,8 +937,6 @@ async function openChat(id, opts) {
   document.getElementById('msgInput').disabled = !canPost;
   document.getElementById('btnAttach').style.visibility = canPost ? 'visible' : 'hidden';
   document.getElementById('channelHint').style.display = canPost ? 'none' : 'flex';
-  // Restore the saved draft for this chat (keep locally typed text when the
-  // same chat is re-opened in place).
   const savedDraft = typeof j.draft === 'string' ? j.draft : '';
   if (+composerChatId !== +id) inputEl.value = savedDraft;
   composerChatId = +id;
@@ -1089,7 +1054,7 @@ document.addEventListener('click', e => {
   const conv = e.target.closest('.conv');
   if (conv) {
     conv.classList.remove('pulsing');
-    void conv.offsetWidth; // restart animation
+    void conv.offsetWidth; 
     conv.classList.add('pulsing');
     openChat(conv.dataset.chatId);
     e.stopPropagation();
@@ -1199,7 +1164,7 @@ function buildEmojiPanel() {
   };
   const runSearch = () => {
     const q = (search.value || '').trim().toLowerCase();
-    if (epMode === 'gif') { renderGifGrid(); return; }  // gif mode: filter the library
+    if (epMode === 'gif') { renderGifGrid(); return; }  
     if (!q) { tabs.style.display = 'flex'; renderSet(current); return; }
     tabs.style.display = 'none';
     const found = searchEmojis(q);
@@ -1228,7 +1193,6 @@ function buildEmojiPanel() {
     if (first) insertEmoji(first.dataset.em);
   };
   renderSet(0);
-  // Bottom switcher: emoji | gif views inside the panel
   const swEm = document.getElementById('epSwEmoji');
   const swGif = document.getElementById('epSwGif');
   swEm.onclick = () => epSetMode('emoji');
@@ -1236,8 +1200,8 @@ function buildEmojiPanel() {
   epSetMode('emoji');
 }
 
-let epMode = 'emoji';      // 'emoji' | 'gif' — which view the panel's bottom switcher shows
-let epCurrentSet = 0;      // selected emoji category tab
+let epMode = 'emoji';      
+let epCurrentSet = 0;      
 
 function epSetMode(mode) {
   epMode = mode;
@@ -1266,18 +1230,14 @@ function renderEpCurrentSet() {
   tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.tab === epCurrentSet));
 }
 
-// —— GIF view (bottom switcher of the emoji panel): the user's own library of
-// silent animated media — .gif files and audio-free .mp4 "gifs" (Telegram-style).
-// Pick a tile → it lands in the composer as a pending attachment; the normal
-// send button sends it as a `gif` message.
 async function loadGifs() {
   if (CD.gifs !== undefined) return;
-  CD.gifs = null;               // loading sentinel → grid shows skeleton
+  CD.gifs = null;               
   renderGifGrid();
   try {
     const r = await fetch('/api/gifs').then(x => x.json());
     if (r && r.ok) CD.gifs = r.gifs || [];
-    else CD.gifs = undefined;   // failure → retry on next open
+    else CD.gifs = undefined;   
   } catch (e) { CD.gifs = undefined; }
   renderGifGrid();
 }
@@ -1285,7 +1245,6 @@ function renderGifGrid() {
   const grid = document.getElementById('epGifGrid');
   if (!grid) return;
   if (CD.gifs === undefined || CD.gifs === null) {
-    // Still loading (or a failed first load): shimmer skeleton, not an empty state.
     grid.innerHTML = Array.from({ length: 6 }, () =>
       `<div class="ep-giftile ep-gifskel" aria-hidden="true"><div class="skel-shimmer"></div></div>`).join('')
       + `<span class="ep-gifempty">در حال بارگذاری گیف‌ها…</span>`;
@@ -1296,8 +1255,6 @@ function renderGifGrid() {
   const q = (search && search.value || '').trim().toLowerCase();
   const all = CD.gifs || [];
   const gifs = q ? all.filter(g => (g.name || '').toLowerCase().includes(q)) : all;
-  // Tile names/url/kinds come from the server-side gif library (filenames are
-  // sanitized to [A-Za-z0-9_.-] on upload); esc() keeps markup out of attrs.
   const tiles = gifs.map(g => {
     const media = g.kind === 'video'
       ? `<video src="${esc(g.url)}" muted loop autoplay playsinline preload="metadata"></video>`
@@ -1341,7 +1298,6 @@ function delGifFromGrid(gid) {
 function sendGifFromTile(gid) {
   const g = (CD.gifs || []).find(x => x.id === +gid);
   if (!g) return;
-  // Same shape the upload flow produces: composer preview + normal send.
   pendingFiles.push({ id: ++_pfSeq, path: g.url.slice('/files/'.length), name: g.name + (g.kind === 'video' ? '.mp4' : '.gif'),
                       kind: 'gif', url: g.url, asFile: false, vid: g.kind === 'video',
                       status: 'ready', progress: 100, size: 0 });
@@ -1355,7 +1311,7 @@ function hideEmojiPanel() {
   if (p) p.style.display = 'none';
   const s = document.getElementById('epSearch');
   if (s) s.value = '';
-  epSetMode('emoji'); // panel reopens on the emoji view
+  epSetMode('emoji'); 
   const b = document.getElementById('btnEmoji');
   if (b) b.classList.remove('active');
 }
@@ -1480,13 +1436,11 @@ async function sendText(caption) {
   const input = document.getElementById('msgInput');
   if (input.disabled) return;
   const text = (caption !== undefined ? caption : input.value).trim();
-  // Next ready attachment in the queue (uploads keep queuing while it waits).
   const item = pendingFiles.find(f => f.status === 'ready');
   if (!text && !item) return;
   sending = true;
   const body = { chat_id: chatId, content: text };
   if (item) {
-    // User can force-send images/videos as a plain downloadable file.
     body.msg_type = item.asFile ? 'file' : item.kind;
     body.file_path = item.path;
     body.file_name = item.name;
@@ -1510,30 +1464,22 @@ async function sendText(caption) {
         pendingReply = null;
         renderAttachPreview();
         document.getElementById('replyPreview').style.display = 'none';
-        // Keep the composer focused so the mobile keyboard stays up between
-        // messages (Telegram behavior). Refocusing right after a user gesture
-        // is within the activation window, so iOS/Android keep it open.
         input.focus({ preventScroll: true });
         try { input.setSelectionRange(0, 0); } catch (_) {}
       }
       refreshConvList();
-      // Multi-file send: chain the remaining ready attachments, one message
-      // each, keeping the same caption (Telegram multi-attach behavior).
       if (caption === undefined) {
         setTimeout(() => {
           if (currentChat !== chatId) return;
           if (pendingFiles.some(f => f.status === 'ready')) {
             sendText(text);
           } else {
-            // Chain finished: clear the caption input + draft.
             input.value = '';
             input.style.height = 'auto';
             flushDraftFor(chatId, '');
           }
         }, 250);
       } else {
-        // Chained send: when this was the last item, the input was already
-        // cleared by the first send — flush the draft once at chain end.
         if (!pendingFiles.some(f => f.status === 'ready')) flushDraftFor(chatId, '');
       }
     } else toast(r.error, 'error');
@@ -1594,7 +1540,6 @@ async function doForward(chatId) {
 }
 
 function deleteRow(mid) {
-  // Animate out (fade + collapse) then remove from DOM.
   const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`);
   if (!wrapper) return;
   const row = wrapper.classList.contains('mrow') ? wrapper : wrapper.querySelector('.mrow');
@@ -1711,7 +1656,6 @@ function selectAllMine() {
   syncSelection();
 }
 
-/* Long-press on a conversation item (mobile) → same menu as right-click. */
 let _convLpTimer = null;
 const convSections = document.getElementById('convSections');
 if (convSections) {
@@ -1744,8 +1688,6 @@ function localDeleteMid(mid) {
   if ((CD.pins || []).some(p => +p.id === +mid)) loadPinned();
 }
 
-// Multiple pins per chat: sync the flag, bubble class and pin-tag on every
-// visible row so pin/unpin/clear updates rows in place.
 function syncPinRows(ids) {
   const set = new Set((ids || []).map(Number));
   (CD.initialMessages || []).forEach(x => { x.pinned = set.has(+x.id); });
@@ -1900,9 +1842,8 @@ async function loadPinned() {
   if (!currentChat) return;
   const my = ++pinSeq;
   const r = await fetch('/api/chat/' + currentChat + '/pinned');
-  if (!r.ok || my !== pinSeq) return; // a newer fetch superseded this one
+  if (!r.ok || my !== pinSeq) return; 
   const j = await r.json();
-  // API returns {m, sender} pairs — normalize to {id, m, sender} for the UI.
   CD.pins = (j.pins || []).map(p => ({ id: p.m.id, m: p.m, sender: p.sender }));
   syncPinRows(CD.pins.map(p => p.id));
   renderPinnedBar();
@@ -1948,7 +1889,6 @@ function openAttachMenu() {
   const mh = attachMenu.offsetHeight;
   const isMobile = window.matchMedia('(max-width: 860px)').matches;
   if (isMobile) {
-    // CSS centers it (left:50% + translateX); we only pick the vertical spot
     attachMenu.style.top = Math.max(12, r.top - mh - 12) + 'px';
     return;
   }
@@ -1997,8 +1937,6 @@ function renderAttachPreview() {
     pv.innerHTML = '';
     return;
   }
-  // Queue view: one row per attachment — uploads show a progress bar + cancel,
-  // ready items show a thumb + name + "as file" toggle + remove.
   const rows = pendingFiles.map(f => {
     if (f.status === 'uploading') {
       return `<div class="ap-item uploading" id="apItem${f.id}">
@@ -2012,7 +1950,6 @@ function renderAttachPreview() {
       ? `<img src="${esc(f.url)}" alt="">`
       : `<span class="ap-ic">${apItemIcon(f)}</span>`;
     const size = f.size ? `<small>${fmtSize(f.size)}</small>` : '';
-    // For images, videos and silent MP4 "gifs" the user can choose to send it as a plain downloadable file.
     const asFileBtn = ['image', 'video', 'gif'].includes(f.kind)
       ? `<button class="ap-asfile ${f.asFile ? 'on' : ''}" data-asfile="${f.id}" title="ارسال به‌عنوان فایل (دانلود)">${bi('download')} فایل</button>`
       : '';
@@ -2025,9 +1962,6 @@ function renderAttachPreview() {
   pv.classList.add('show');
 }
 
-// —— Attachment queue (multi-file, Telegram-style). Each item uploads with a
-// progress bar; ready items wait in the composer preview; the send button
-// chains them one message at a time (caption repeats on every message).
 function removePendingFile(id, silent) {
   const it = pendingFiles.find(f => f.id === id);
   if (it && it.xhr && it.status === 'uploading') { try { it.xhr.abort(); } catch (_) {} }
@@ -2081,7 +2015,6 @@ function enqueueFiles(list, opts) {
   }
   renderAttachPreview();
 }
-// Kept for existing call sites (drag&drop / paste): the single-file shape.
 function handleFiles(file, opts) { enqueueFiles([file], opts); }
 
 document.getElementById('fileInput').onchange = e => {
@@ -2133,11 +2066,6 @@ document.getElementById('msgInput').addEventListener('paste', e => {
   }
 });
 
-// —— Voice notes (Telegram-style recorder). MediaRecorder → webm/opus (Chrome,
-// Firefox, Android) or m4a (Safari) → uploaded as an `audio` message.
-// The recording bar replaces the composer preview while active: live timer +
-// cancel (X) / stop-and-queue (check). Needs a secure context (localhost or
-// https) for getUserMedia.
 document.getElementById('btnMic').onclick = e => {
   e.stopPropagation();
   if (recState) return;
@@ -2280,7 +2208,6 @@ document.getElementById('mvDelete').onclick = async () => {
   if (MV.onDeleted) MV.onDeleted();
 };
 
-// Tag an avatar element so a click opens that owner's avatar slideshow.
 function setAvatarData(el, src, name, ownerType, ownerId) {
   if (src) {
     el.dataset.media = 'image'; el.dataset.src = src; el.dataset.name = name || '';
@@ -2296,7 +2223,6 @@ function canManageChatAvatar(chatId) {
   if (window.ME.is_admin) return true;
   return currentChat === chatId && !!(CD.role && ['owner', 'admin'].includes(CD.role));
 }
-// Open one owner's (user/chat) avatar collection as a prev/next slideshow.
 async function openAvatarSlideshow(ownerType, ownerId, ownerName, primarySrc) {
   const ep = ownerType === 'user' ? '/api/user/' + ownerId + '/avatars' : '/api/chat/' + ownerId + '/avatars';
   let list = [];
@@ -2316,7 +2242,6 @@ async function openAvatarSlideshow(ownerType, ownerId, ownerName, primarySrc) {
     onDeleted: () => syncOwnerPrimary(ownerType, ownerId),
   });
 }
-// After a delete, re-point every visible avatar of that owner at the new primary.
 function syncOwnerPrimary(ownerType, ownerId) {
   const ep = ownerType === 'user' ? '/api/avatar/all' : '/api/chat/' + ownerId + '/avatars';
   fetch(ep).then(r => r.json()).then(j => {
@@ -2714,7 +2639,6 @@ function openSettings() {
     if (vis.querySelector('.cs-note')) vis.querySelector('.cs-note').style.display = 'none';
   }
   segSelect(vis, c.is_public ? 'public' : 'private');
-  // Slow mode UI
   const slowSeg = document.getElementById('csSlow');
   const slowWrap = document.getElementById('csSlowWrap');
   if (slowWrap && slowSeg) {
@@ -2743,7 +2667,7 @@ function openSettings() {
 }
 
 document.getElementById('chatHeadId').onclick = (e) => {
-  if (e.target.closest('#chatHeadAvatar[data-media]')) return; // photo opens in media viewer
+  if (e.target.closest('#chatHeadAvatar[data-media]')) return; 
   if (CD.chat && CD.chat.chat_type === 'dm' && CD.chat.peer) {
     openDmInfo();
     return;
@@ -2769,8 +2693,6 @@ function closeChatSearch() {
   _srchMatches = []; _srchIdx = -1;
   clearChatSearchMarks();
 }
-// Searches the WHOLE chat on the server (not just the loaded window) and
-// jumps to results, loading surrounding history on demand.
 async function runChatSearch() {
   const q = document.getElementById('chatSearchInput').value.trim().toLowerCase();
   clearChatSearchMarks();
@@ -2785,12 +2707,11 @@ async function runChatSearch() {
     const mySeq = ++_srchSeq;
     try {
       const r = await fetch(`/api/chat/${currentChat}/search?q=${encodeURIComponent(q)}`).then(x => x.json());
-      if (mySeq !== _srchSeq) return; // a newer query replaced this one
+      if (mySeq !== _srchSeq) return; 
       if (!r || !r.ok) { cnt.textContent = 'خطا'; return; }
       _srchMatches = r.matches || [];
       if (!_srchMatches.length) { cnt.textContent = 'پیدا نشد'; return; }
       cnt.textContent = '۱/' + _srchMatches.length;
-      // Mark rows already in the DOM; others get marked when we jump to them.
       _srchMatches.forEach(m => {
         const row = document.querySelector(`.mrow[data-mid="${m.id}"]`);
         if (row) row.classList.add('search-hit');
@@ -2815,8 +2736,6 @@ async function goToMatch(i) {
   }
   document.getElementById('chatSearchCount').textContent = (_srchIdx + 1) + '/' + _srchMatches.length;
 }
-// Load a history window around a (possibly unseen) message id and render it
-// into the message list at the right position. Returns the target .mrow.
 async function loadAround(mid) {
   if (!currentChat) return null;
   let r;
@@ -2835,7 +2754,7 @@ async function loadAround(mid) {
     }
     const wrap = document.createElement('div');
     wrap.id = 'm' + m.id;
-    wrap.innerHTML = renderMsg(m); // m comes from our own API (to_dict) — safe markup via renderMsg
+    wrap.innerHTML = renderMsg(m); 
     if (anchor) body.insertBefore(wrap, anchor); else body.appendChild(wrap);
   }
   const target = body.querySelector(`.mrow[data-mid="${mid}"]`);
@@ -2896,7 +2815,7 @@ document.getElementById('csAvInput').addEventListener('change', e => {
 
 document.getElementById('csAvClear').onclick = async () => {
   const fd = new FormData();
-  fd.append('delete', '1');   // remove current primary, keep the rest of the gallery
+  fd.append('delete', '1');   
   const r = await fetch('/api/chat/' + currentChat + '/avatar', { method: 'POST', body: fd }).then(x => x.json());
   if (r.ok) {
     toast('آواتار اصلی گپ حذف شد');
@@ -2915,7 +2834,6 @@ document.getElementById('csAvClear').onclick = async () => {
   } else toast(r.error, 'error');
 };
 
-/* ── Chat avatar gallery (multiple, for group/channel managers) ── */
 async function loadChatAvGrid(chatId) {
   const g = document.getElementById('csAvGrid');
   if (!g) return;
@@ -3191,7 +3109,7 @@ document.getElementById('pmAvatarBtn').onclick = async () => {
 
 document.getElementById('pmAvClear').onclick = async () => {
   const fd = new FormData();
-  fd.append('delete', '1');   // remove the current primary, keep the rest
+  fd.append('delete', '1');   
   const r = await fetch('/api/avatar', { method: 'POST', body: fd }).then(x => x.json());
   if (r.ok) {
     toast('عکس اصلی حذف شد');
@@ -3207,7 +3125,6 @@ document.getElementById('pmAvClear').onclick = async () => {
   } else toast(r.error, 'error');
 };
 
-/* ── My avatar gallery (multiple profiles) ─────────────────── */
 async function loadMyAvatarGrid() {
   const j = await fetch('/api/avatar/all').then(r => r.json()).catch(() => ({ ok: false, avatars: [] }));
   renderMyAvGrid((j.ok && j.avatars) || []);
@@ -3415,8 +3332,6 @@ document.addEventListener('click', e => {
 document.addEventListener('scroll', () => document.getElementById('ctxMenu').classList.remove('show'), true);
 window.addEventListener('blur', () => document.getElementById('ctxMenu').classList.remove('show'));
 
-/* Telegram-style single-message action menu (shared by right-click and
-   long-press). Multi-select is a deliberate item inside the menu. */
 function openMsgActions(mid, x, y) {
   const m = (CD.initialMessages || []).find(x => x.id === mid) || {};
   const mine = m.sender_id === window.ME.id;
@@ -3458,8 +3373,6 @@ function openMsgActions(mid, x, y) {
   showCtxMenu(x, y, items);
 }
 
-/* Chat-list context menu (shared by right-click and long-press on mobile).
-   Extracted so touch users get the exact same actions as mouse users. */
 function openConvActions(conv, x, y) {
   const chatId = +conv.dataset.chatId;
   const type = conv.dataset.type;
@@ -3771,7 +3684,6 @@ S.on('poll_vote', d => {
   if (d.chat_id !== currentChat) return;
   const card = document.querySelector(`.poll-card[data-pollid="${d.poll_id}"]`);
   if (!card) return;
-  // Re-render the poll card from the fresh data
   const m = (CD.initialMessages || []).find(x => x.poll && x.poll.id === d.poll_id);
   if (m) {
     m.poll = {
@@ -3782,7 +3694,6 @@ S.on('poll_vote', d => {
       question: m.poll.question, options: m.poll.options,
       expires_at: m.poll.expires_at, created_by: m.poll.created_by,
     };
-    // my_votes is per-viewer: only the voter's own screen updates its selection.
     if (d.voter && d.voter.id === window.ME.id) m.poll.my_votes = d.my_votes;
   }
   card.outerHTML = (m && m.poll) ? pollHtml(m.poll) : '';
@@ -3798,7 +3709,6 @@ S.on('poll_revoke', d => {
     m.poll.total = d.total;
     m.poll.voters = d.voters;
     m.poll.closed = d.closed;
-    // Only the revoker's own view clears its selection; everyone else keeps theirs.
     if (d.voter && d.voter.id === window.ME.id) m.poll.my_votes = [];
   }
   card.outerHTML = (m && m.poll) ? pollHtml(m.poll) : '';

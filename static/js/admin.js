@@ -276,7 +276,6 @@ document.addEventListener('keydown', e => {
   }
 });
 
-// scroll-spy for side nav + bottom tabs
 const navLinks = Array.from(document.querySelectorAll('.admin-nav a[href^="#"]'));
 const tabLinks = Array.from(document.querySelectorAll('.admin-tab'));
 const sections = navLinks.map(a => document.getElementById(a.getAttribute('href').slice(1)));

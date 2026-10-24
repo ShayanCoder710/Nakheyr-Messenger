@@ -1,5 +1,3 @@
-/* Emoji data for the composer panel: quick reactions, category sets, and
-   Persian/English search keywords. Loaded before chat.js. */
 const EMOJIS = ['👍', '❤️', '😂', '🤣', '😊', '😍', '🥰', '😘', '😎', '🤔', '🤯', '😱', '😭', '😢', '😡', '🤬', '🙏', '👏', '🔥', '💯', '🎉', '✨', '🤗', '👌', '😅', '🥹', '😴', '🤝', '💪', '🥳', '😇', '🙌', '😅', '🤩', '😮', '🫡', '🥺', '😌'];
 
 const EMOJI_SETS = [
@@ -18,7 +16,6 @@ const EMOJI_SETS = [
   { icon: '🚩', emojis: ['🏁','🚩','🎌','🏴','🏳','🏳️‍🌈','🏳️‍⚧️','🇮🇷','🇹🇷','🇦🇪','🇸🇦','🇪🇬','🇵🇰','🇬🇷','🇬🇪','🇦🇯','🇰🇼','🇶🇦','🇧🇭','🇴🇲','🇾🇪','🇵🇸','🇮🇶','🇱🇧','🇯🇴','🇩🇪','🇫🇷','🇬🇧','🇺🇸','🇨🇳','🇯🇵','🇷🇺','🇺🇦','🇪🇸','🇮🇹','🇳🇱','🇧🇷','🇲🇽','🇮🇳','🇮🇩','🇲🇾','🇸🇬','🇦🇺','🇨🇦','🇬🇭','🇰🇪','🇿🇦'] },
 ];
 
-/* Search keywords keyed by emoji (lowercase Persian + English). */
 const EMOJI_KEYWORDS = {
   '😀': 'خنده شاد خوشحال happy smile grin', '😃': 'خنده شاد smile open', '😄': 'خنده شاد laugh',
   '😁': 'خنده دندان grin', '😆': 'خنده بلند laugh', '😅': 'خنده عرق nervous sweat',

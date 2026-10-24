@@ -18,13 +18,10 @@ DOC_EXT = {'pdf', 'txt', 'md', 'csv', 'json', 'xml', 'log', 'rtf', 'doc', 'docx'
            'xls', 'xlsx', 'ods', 'ppt', 'pptx', 'odp', 'epub'}
 ARCHIVE_EXT = {'zip', 'rar', '7z', 'tar', 'gz', 'tgz', 'bz2', 'xz', 'cab', 'iso', 'jar', 'war'}
 CODE_EXT = {
-    # وب
     'html', 'htm', 'xhtml', 'css', 'scss', 'sass', 'less', 'styl', 'vue', 'svelte', 'astro',
     'js', 'mjs', 'cjs', 'ts', 'mts', 'cts', 'jsx', 'tsx', 'jsonc', 'json5', 'webmanifest',
-    # اسکریپتی
     'py', 'pyw', 'pyi', 'rb', 'rbw', 'php', 'phtml', 'pl', 'pm', 'lua', 'r', 'rmd', 'jl',
     'tcl', 'awk', 'sed', 'vbs', 'vba', 'ps1', 'psm1',
-    # کامپایل‌شده
     'c', 'h', 'cc', 'cpp', 'cxx', 'c++', 'hh', 'hpp', 'hxx', 'cs', 'go', 'rs', 'java',
     'kt', 'kts', 'scala', 'sc', 'swift', 'm', 'mm', 'dart', 'nim', 'zig', 'v', 'd',
     'f', 'f90', 'f95', 'for', 'pas', 'pp', 'groovy', 'gradle', 'clj', 'cljs', 'cljc',
@@ -32,22 +29,17 @@ CODE_EXT = {
     'fs', 'fsx', 'fsi', 'asm', 's', 'sol', 'mat', 'stan', 'pde', 'ino', 'qml', 'vala', 'vapi',
     'hx', 'glsl', 'hlsl', 'wgsl', 'frag', 'vert', 'jsp', 'asp', 'aspx', 'cfm', 'ejs', 'hbs',
     'pug', 'jade', 'njk', 'liquid', 'twig', 'mustache', 'haml', 'slim', 'erb', 'astro',
-    # شل و ابزارها
     'sh', 'bash', 'zsh', 'fish', 'ksh', 'csh', 'bat', 'cmd', 'mk', 'cmake',
     'tf', 'tfvars', 'hcl', 'bicep', 'nginx',
-    # کانفیگ و داده
     'yml', 'yaml', 'toml', 'ini', 'cfg', 'conf', 'properties', 'json', 'xml', 'env',
     'sql', 'graphql', 'gql', 'proto', 'prisma', 'avsc',
-    # مستندات متنی
     'tex', 'bib', 'rst', 'adoc', 'asciidoc', 'org', 'ipynb', 'gitignore', 'gitattributes',
     'editorconfig', 'dockerignore',
 }
-# فایل‌های معروف بدون پسوند
 CODE_NAMES = {'makefile', 'dockerfile', 'jenkinsfile', 'rakefile', 'gemfile', 'procfile',
               'vagrantfile', 'justfile', 'brewfile', 'cmakelists', 'license', 'readme',
               'changelog', 'authors', 'notice', 'todo'}
 ALLOWED_EXT = IMAGE_EXT | VIDEO_EXT | AUDIO_EXT | DOC_EXT | ARCHIVE_EXT | CODE_EXT
-# فرمت‌هایی که نباید مستقیم (same-origin) اجرا شوند → به‌صورت دانلود فرستاده می‌شوند
 INLINE_UNSAFE_EXT = {'html', 'htm', 'xhtml', 'svg', 'js', 'mjs', 'cjs', 'xml'}
 AVATAR_EXT = IMAGE_EXT - {'svg'}
 MAX_FILE_MB = 50
@@ -159,7 +151,6 @@ RESERVED_USERNAMES = {
 
 
 def username_taken(name, user_id=None, chat_id=None):
-    """True if `name` is already used by another user OR another chat."""
     name = (name or '').lower()
     if not name:
         return False
@@ -204,7 +195,6 @@ def _ensure_chat_usernames():
 
 
 def _ensure_poll_tables():
-    """Create poll tables if they do not exist (manual DDL mirror of the ORM)."""
     from sqlalchemy import text
     with db.engine.begin() as conn:
         conn.execute(text("""
@@ -234,7 +224,6 @@ def _ensure_poll_tables():
               INDEX ix_poll_votes_user_id (user_id)
             ) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci
         """))
-        # Column added after initial deploy: auto-close time
         has_col = conn.execute(text(
             "SELECT COUNT(*) FROM information_schema.columns "
             "WHERE table_schema = DATABASE() AND table_name = 'polls' AND column_name = 'expires_at'"
@@ -284,8 +273,6 @@ def require_admin(fn):
 
 def save_avatar(filename):
     ext = filename.rsplit('.', 1)[-1].lower() if '.' in filename else ''
-    # SVG is allowed as a chat file, but never as an avatar: it is served
-    # from our origin and can carry script when opened directly.
     if ext not in AVATAR_EXT:
         return ''
     user = current_user()
@@ -297,12 +284,6 @@ def save_avatar(filename):
 
 
 def mp4_has_audio(path):
-    """Pure-Python check whether an MP4/MOV file contains an audio track.
-
-    Walks the ISO-BMFF box tree to `moov` -> (any `trak`) -> `mdia` -> `hdlr`
-    and looks for handler type `soun` (sound). Used to reject MP4s with audio
-    as "gifs" (Telegram-style silent animated media). Returns False when no
-    `moov` is found (not a playable MP4) or on any read/parse error."""
     import struct
     try:
         with open(path, 'rb') as fh:
@@ -312,8 +293,6 @@ def mp4_has_audio(path):
     n = len(data)
 
     def box_bounds(off):
-        """Return (type, body_start, box_end) or None. body_start is just past
-        the box header; box_end is where the next sibling begins."""
         if off + 8 > n:
             return None
         btype = data[off + 4:off + 8]
@@ -325,7 +304,7 @@ def mp4_has_audio(path):
             size = struct.unpack('>Q', data[off + 8:off + 16])[0]
             hdr = 16
         elif size == 0:
-            size = n - off  # box extends to EOF
+            size = n - off
         size = max(size, hdr)
         return btype, off + hdr, off + size
 
@@ -358,7 +337,6 @@ def mp4_has_audio(path):
             break
         btype, body, end = bt
         if btype == b'moov':
-            # walk moov's direct children for audio tracks
             o2 = body
             while o2 + 8 <= end:
                 t2 = box_bounds(o2)
@@ -508,7 +486,6 @@ def save_chat_avatar(owner, filename):
 
 
 def list_owner_avatars(owner_type, owner_id):
-    """Newest-first list of an owner's avatar gallery rows."""
     return (Avatar.query
             .filter_by(owner_type=owner_type, owner_id=owner_id)
             .order_by(Avatar.created_at.desc(), Avatar.id.desc())
@@ -516,9 +493,6 @@ def list_owner_avatars(owner_type, owner_id):
 
 
 def recompute_owner_primary(owner_type, owner_id):
-    """Point the owner's `.avatar` column at the current primary avatar
-    (falling back to the newest), or '' when it has none. Keeps every
-    existing renderer in sync without touching them."""
     avs = list_owner_avatars(owner_type, owner_id)
     prim = next((a.path for a in avs if a.is_primary), None)
     if prim is None:
@@ -533,7 +507,6 @@ def recompute_owner_primary(owner_type, owner_id):
 
 
 def add_owner_avatar(owner_type, owner_id, filename):
-    """Register a freshly-saved avatar file and make it the new primary."""
     a = Avatar(owner_type=owner_type, owner_id=owner_id, path=filename,
                is_primary=True, created_at=datetime.utcnow())
     db.session.add(a)
@@ -546,7 +519,6 @@ def add_owner_avatar(owner_type, owner_id, filename):
 
 
 def set_owner_avatar_primary(owner_type, owner_id, avatar_id):
-    """Mark one of the owner's avatars as the primary (mirrored to .avatar)."""
     Avatar.query.filter(Avatar.owner_type == owner_type, Avatar.owner_id == owner_id,
                        Avatar.is_primary.is_(True)).update({'is_primary': False})
     a = Avatar.query.get(avatar_id)
@@ -558,8 +530,6 @@ def set_owner_avatar_primary(owner_type, owner_id, avatar_id):
 
 
 def delete_owner_avatar(owner_type, owner_id, avatar_id):
-    """Remove one avatar (file + row). If it was primary, the newest
-    remaining becomes primary. Returns True on success."""
     a = Avatar.query.get(avatar_id)
     if not a or a.owner_type != owner_type or a.owner_id != owner_id:
         return False
@@ -577,13 +547,10 @@ def delete_owner_avatar(owner_type, owner_id, avatar_id):
 
 
 def owner_avatar_gallery(owner_type, owner_id):
-    """Newest-first JSON-serializable gallery for the owner."""
     return [a.to_dict() for a in list_owner_avatars(owner_type, owner_id)]
 
 
 def _backfill_avatars():
-    """Give existing users/chats an Avatar row for the single primary they
-    already have, so it shows up in the gallery too. Idempotent."""
     for u in User.query.filter(User.avatar.isnot(None), User.avatar != '').all():
         if not Avatar.query.filter_by(owner_type='user', owner_id=u.id, path=u.avatar).first():
             db.session.add(Avatar(owner_type='user', owner_id=u.id, path=u.avatar,
@@ -807,8 +774,6 @@ def admin_stats():
 
 
 def delete_user_account(uid, reassign_to=None):
-    """Permanently remove a user and their data. DMs are deleted entirely,
-    the user's messages elsewhere are removed, and owned chats are reassigned."""
     chat_ids = [cid for (cid,) in db.session.query(ChatMember.chat_id).filter_by(user_id=uid).all()]
     dm_chat_ids = []
     if chat_ids:

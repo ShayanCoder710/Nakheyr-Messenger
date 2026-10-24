@@ -90,7 +90,7 @@ class Chat(db.Model):
     avatar = db.Column(db.String(120), default='')
     owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     is_public = db.Column(db.Boolean, default=True)
-    slow_mode = db.Column(db.Integer, default=0)  # seconds between messages (0 = off)
+    slow_mode = db.Column(db.Integer, default=0)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     members = db.relationship('ChatMember', backref='chat', lazy=True, cascade='all, delete-orphan')
     messages = db.relationship('Message', backref='chat', lazy=True, cascade='all, delete-orphan')
@@ -284,8 +284,6 @@ class Report(db.Model):
 
 
 class Poll(db.Model):
-    """A poll attached to a message. The poll is a separate row so that
-    votes can be tallied and re-voted without touching the message row."""
     __tablename__ = 'polls'
     __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
 
@@ -293,10 +291,10 @@ class Poll(db.Model):
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
     message_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=False, index=True)
     question = db.Column(db.String(300), default='')
-    options = db.Column(db.Text, default='[]')   # JSON: ["label1", "label2", ...]
-    multi = db.Column(db.Boolean, default=False)  # allow multiple answers
+    options = db.Column(db.Text, default='[]')
+    multi = db.Column(db.Boolean, default=False)
     closed = db.Column(db.Boolean, default=False)
-    expires_at = db.Column(db.DateTime, nullable=True)  # auto-close at this time (None = never)
+    expires_at = db.Column(db.DateTime, nullable=True)
     created_by = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -315,7 +313,6 @@ class Poll(db.Model):
         self.options = json.dumps(data or [])
 
     def counts(self):
-        """Return {option_index: vote_count} for every option."""
         from collections import Counter
         c = Counter(v.option_index for v in self.votes)
         return {i: c.get(i, 0) for i in range(len(self.options_list()))}
@@ -326,7 +323,6 @@ class Poll(db.Model):
     def to_dict(self, viewer_id=None):
         counts = self.counts()
         total = sum(counts.values())
-        # Number of unique people who voted (not total selections)
         voter_ids = {v.user_id for v in self.votes}
         my = sorted(v.option_index for v in self.votes if v.user_id == viewer_id) if viewer_id else []
         return {
@@ -346,7 +342,6 @@ class Poll(db.Model):
         }
 
     def voter_details(self):
-        """List of {user, picks} for each user who voted (for group view)."""
         from collections import defaultdict
         picks = defaultdict(list)
         for v in self.votes:
@@ -380,10 +375,6 @@ class PollVote(db.Model):
 
 
 class Avatar(db.Model):
-    """Every avatar image an owner (user or chat) has uploaded. The owner's
-    `.avatar` column always mirrors the *primary* one so existing rendering
-    (lists, chat heads, dm modal) keeps working unchanged; this table holds
-    the full gallery for the multi-avatar slideshow and delete UI."""
     __tablename__ = 'avatars'
     __table_args__ = (
         db.UniqueConstraint('owner_type', 'owner_id', 'path', name='uq_avatar'),
@@ -391,9 +382,9 @@ class Avatar(db.Model):
     )
 
     id = db.Column(db.Integer, primary_key=True)
-    owner_type = db.Column(db.String(10), nullable=False, index=True)   # 'user' | 'chat'
+    owner_type = db.Column(db.String(10), nullable=False, index=True)
     owner_id = db.Column(db.Integer, nullable=False, index=True)
-    path = db.Column(db.String(120), nullable=False)                   # filename in AVATAR_DIR
+    path = db.Column(db.String(120), nullable=False)
     is_primary = db.Column(db.Boolean, default=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
@@ -413,17 +404,14 @@ class Avatar(db.Model):
 
 
 class Gif(db.Model):
-    """User-owned GIF library shown in the emoji panel's bottom strip.
-    Each entry points at a file already stored under UPLOAD_DIR (via the
-    regular upload pipeline); the user can re-send any of them at will."""
     __tablename__ = 'gifs'
     __table_args__ = ({'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},)
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
     name = db.Column(db.String(160), default='')
-    file_path = db.Column(db.String(200), nullable=False)   # 'user_id/fname' under UPLOAD_DIR
-    kind = db.Column(db.String(10), default='gif', nullable=False)  # 'gif' (.gif) | 'video' (silent .mp4)
+    file_path = db.Column(db.String(200), nullable=False)
+    kind = db.Column(db.String(10), default='gif', nullable=False)
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
 
     @property
