@@ -609,7 +609,7 @@ b, strong { font-weight: 800; }
 
 .voice-card {
   display: flex; align-items: center; gap: 10px; padding: 9px 12px; min-width: 220px; max-width: 300px;
-  background: var(--panel-2); border-radius: 14px; user-select: none;
+  background: var(--panel-2); border-radius: 14px; user-select: none; direction: ltr;
 }
 .voice-card.sent { background: var(--green-soft); }
 .voice-card .vc-play {
@@ -618,7 +618,7 @@ b, strong { font-weight: 800; }
 }
 .voice-card .vc-play:hover { filter: brightness(1.1); }
 .voice-card .vc-play:active { transform: scale(.94); }
-.voice-card .vc-play .bi-ic { width: 14px; height: 14px; transform: scaleX(-1); }
+.voice-card .vc-play .bi-ic { width: 14px; height: 14px; }
 .voice-card .vc-wave { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; height: 26px; overflow: hidden; }
 .voice-card .vc-wave i { flex: none; width: 2px; height: 10px; border-radius: 99px; background: var(--green); opacity: .25; }
 .voice-card .vc-wave i.on { opacity: 1; }
@@ -1137,16 +1137,16 @@ b, strong { font-weight: 800; }
 .ap-item .ap-asfile .bi-ic { width: 13px; height: 13px; }
 .ap-item .ap-asfile:hover { border-color: var(--accent-2); color: var(--accent-2); }
 .ap-item .ap-asfile.on { background: var(--accent-soft); border-color: transparent; color: var(--accent-2); }
-.ap-voice { gap: 12px; padding: 8px 12px; }
+.ap-voice { gap: 12px; padding: 8px 12px; direction: ltr; }
 .ap-voice .ap-play { flex: none; width: 40px; height: 40px; border-radius: 50%; border: none; cursor: pointer; display: grid; place-items: center; background: var(--green); color: #fff; transition: .15s ease; }
 .ap-voice .ap-play:hover { filter: brightness(1.1); }
 .ap-voice .ap-play:active { transform: scale(.94); }
-.ap-voice .ap-play .bi-ic { width: 15px; height: 15px; transform: scaleX(-1); }
+.ap-voice .ap-play .bi-ic { width: 15px; height: 15px; }
 .ap-vwave { flex: 1; min-width: 0; display: flex; align-items: center; gap: 2px; height: 30px; overflow: hidden; }
 .ap-vwave i { flex: none; width: 2.5px; min-width: 2.5px; border-radius: 99px; background: var(--muted); opacity: .4; }
 .ap-vwave i.on { background: var(--green); opacity: 1; }
 .ap-vtime { flex: none; font-family: 'JetBrains Mono', monospace; font-size: 12px; font-weight: 700; color: var(--muted); min-width: 40px; text-align: left; direction: ltr; }
-.rec-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 20px; background: var(--card); box-shadow: 0 8px 24px -8px rgba(0, 0, 0, .3); user-select: none; }
+.rec-bar { display: flex; align-items: center; gap: 12px; padding: 10px 12px; border-radius: 20px; background: var(--card); box-shadow: 0 8px 24px -8px rgba(0, 0, 0, .3); user-select: none; direction: ltr; }
 .rec-bar .rec-state { flex: none; display: flex; align-items: center; gap: 8px; }
 .rec-bar .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--accent-2, #d93a3d); flex: none; animation: recPulse 1.2s ease-in-out infinite; }
 .rec-bar .rec-time { font-family: 'JetBrains Mono', monospace; font-size: 14px; font-weight: 700; min-width: 42px; text-align: left; direction: ltr; }
