@@ -110,11 +110,13 @@
       </div>
       <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
       <div class="voice-mp" id="voiceMp">
-        <button class="mp-toggle" id="mpToggle" type="button" title="پخش/توقف">{{ bi('play-fill') }}</button>
-        <div class="mp-info"><b id="mpTitle">پیام صوتی</b><small id="mpTime">0:00 / 0:00</small></div>
-        <input class="mp-seek" id="mpSeek" type="range" min="0" max="1000" value="0" dir="ltr" title="جابجایی">
-        <button class="mp-speed" id="mpSpeed" type="button" title="سرعت پخش">1x</button>
-        <button class="mp-close" id="mpClose" type="button" title="بستن پخش">{{ bi('x-lg') }}</button>
+        <div class="mp-card">
+          <button class="mp-toggle" id="mpToggle" type="button" title="پخش/توقف">{{ bi('play-fill') }}</button>
+          <div class="mp-info"><b id="mpTitle">پیام صوتی</b><small id="mpTime">0:00 / 0:00</small></div>
+          <span class="mp-wave" id="mpWave" title="برای جابه‌جایی کلیک یا بکشید"></span>
+          <button class="mp-speed" id="mpSpeed" type="button" title="سرعت پخش">1x</button>
+          <button class="mp-close" id="mpClose" type="button" title="بستن پخش">{{ bi('x-lg') }}</button>
+        </div>
       </div>
       <div class="msgs" id="msgs">
         <div id="msgsBody" style="display:contents"></div>

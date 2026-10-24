@@ -259,13 +259,14 @@ function renderMsg(m) {
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'audio') {
     const vcMine = m.sender_id === window.ME.id;
+    const vcTitle = vcMine ? 'پیام صوتی من' : ((m.sender_id ? getMember(m.sender_id) : null) ? (getMember(m.sender_id).display_name || 'پیام صوتی') : 'پیام صوتی');
     body = `<div class="voice-card ${vcMine ? 'sent' : ''}" data-mid="${m.id}" data-vurl="${esc(url)}" dir="ltr">
       <button class="vc-play" title="پخش">${bi('play-fill')}</button>
       <span class="vc-wave" data-vcwave="${m.id}" title="برای جابه‌جایی کلیک یا بکشید">${vcWaveHtml(m.id)}</span>
       <button class="vc-speed" data-mid="${m.id}" title="سرعت پخش">1x</button>
       <span class="vc-times"><span class="vc-cur">0:00</span><span class="vc-dur">…</span></span>
     </div>`;
-    ensureVoiceMeta(m, vcMine ? 'پیام صوتی من' : 'پیام صوتی');
+    ensureVoiceMeta(m, vcTitle);
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'file') {
     body = `<div class="file-card"><div class="fi">${bi(fileIcon(m.file_name))}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
@@ -2166,27 +2167,37 @@ function vcDoSeek(mid, pr) {
   const d = (a.duration && isFinite(a.duration) && a.duration > 0) ? a.duration : st.dur;
   if (!d) return;
   a.currentTime = d * pr;
-  a.pause();
   vcPaintProgress(mid);
 }
 let vcSeeking = null;
 document.addEventListener('pointerdown', (e) => {
   if (!e.target.closest) return;
-  const wave = e.target.closest('.vc-wave');
-  if (!wave || !wave.dataset.vcwave) return;
-  vcSeeking = wave;
+  let el = e.target.closest('.vc-wave');
+  let mid = null;
+  if (el && el.dataset.vcwave) mid = Number(el.dataset.vcwave);
+  else { el = e.target.closest('.mp-wave'); if (el && vcMpMid != null) mid = vcMpMid; }
+  if (!el || mid == null) return;
+  const st = vcCache.get(mid);
+  vcSeeking = { el, mid, resume: !!(st && st.audio && !st.audio.paused) };
+  if (st && st.audio) { try { st.audio.pause(); } catch (_) {} }
   e.preventDefault();
-  try { wave.setPointerCapture(e.pointerId); } catch (_) {}
-  vcDoSeek(Number(wave.dataset.vcwave), vcSeekRatio(e, wave));
+  try { el.setPointerCapture(e.pointerId); } catch (_) {}
+  vcDoSeek(mid, vcSeekRatio(e, el));
 }, true);
 document.addEventListener('pointermove', (e) => {
   if (!vcSeeking) return;
-  const wave = (e.target.closest && e.target.closest('.vc-wave')) || vcSeeking;
-  if (!wave || !wave.dataset.vcwave) return;
-  vcDoSeek(Number(wave.dataset.vcwave), vcSeekRatio(e, wave));
+  vcDoSeek(vcSeeking.mid, vcSeekRatio(e, vcSeeking.el));
 });
-document.addEventListener('pointerup', () => { vcSeeking = null; });
-document.addEventListener('pointercancel', () => { vcSeeking = null; });
+function vcSeekEnd() {
+  if (!vcSeeking) return;
+  if (vcSeeking.resume) {
+    const st = vcCache.get(vcSeeking.mid);
+    if (st && st.audio) st.audio.play().catch(() => {});
+  }
+  vcSeeking = null;
+}
+document.addEventListener('pointerup', vcSeekEnd);
+document.addEventListener('pointercancel', vcSeekEnd);
 document.addEventListener('click', (e) => {
   const sp = e.target.closest ? e.target.closest('.vc-speed') : null;
   if (sp && sp.dataset.mid) { e.preventDefault(); e.stopPropagation(); vcCycleSpeed(Number(sp.dataset.mid)); }
@@ -2199,6 +2210,8 @@ function vcMpShow(mid) {
   const st = vcCache.get(mid);
   const t = document.getElementById('mpTitle');
   if (t) t.textContent = (st && st.title) || 'پیام صوتی';
+  const w = document.getElementById('mpWave');
+  if (w) w.innerHTML = vcWaveHtml(mid);
   vcMpIcon();
   vcPaintSpeed(mid);
   vcMpPaint();
@@ -2222,8 +2235,12 @@ function vcMpPaint() {
   const t = a ? (a.currentTime || 0) : 0;
   const time = document.getElementById('mpTime');
   if (time) time.textContent = fmtRec(Math.floor(t)) + ' / ' + fmtRec(Math.floor(d || 0));
-  const s = document.getElementById('mpSeek');
-  if (s) s.value = d ? Math.round(t / d * 1000) : 0;
+  const w = document.getElementById('mpWave');
+  if (w) {
+    const bars = w.children;
+    const cut = d ? Math.round(t / d * bars.length) : 0;
+    for (let i = 0; i < bars.length; i++) bars[i].classList.toggle('on', i < cut);
+  }
 }
 document.addEventListener('click', (e) => {
   if (!e.target.closest) return;
@@ -2247,17 +2264,6 @@ document.addEventListener('click', (e) => {
   if (spd) {
     e.preventDefault();
     if (vcMpMid != null) vcCycleSpeed(vcMpMid);
-  }
-});
-document.addEventListener('input', (e) => {
-  if (e.target && e.target.id === 'mpSeek' && vcMpMid != null) {
-    const st = vcCache.get(vcMpMid);
-    if (!st) return;
-    const a = vcEnsureAudio(vcMpMid);
-    const d = (a && a.duration && isFinite(a.duration) ? a.duration : 0) || st.dur;
-    if (!a || !d) return;
-    a.currentTime = d * (Number(e.target.value) / 1000);
-    vcPaintProgress(vcMpMid);
   }
 });
 function voicePeaksHtml(f) {
