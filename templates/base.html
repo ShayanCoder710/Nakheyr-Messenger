@@ -31,6 +31,24 @@
     }
     return orig.apply(window, arguments);
   };
+  const X = window.XMLHttpRequest;
+  if (X && !X.__csrfPatched) {
+    const oOpen = X.prototype.open;
+    const oSend = X.prototype.send;
+    X.prototype.open = function (method) {
+      this.__csrfMethod = String(method || '').toUpperCase();
+      return oOpen.apply(this, arguments);
+    };
+    X.prototype.send = function () {
+      if (this.__csrfMethod === 'POST') {
+        try {
+          this.setRequestHeader('X-CSRF-Token', window.CSRF_TOKEN);
+        } catch (_) {}
+      }
+      return oSend.apply(this, arguments);
+    };
+    X.__csrfPatched = true;
+  }
 })();
 </script>
 <script>
