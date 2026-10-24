@@ -458,20 +458,31 @@ def api_members(chat_id):
                 return jsonify(ok=False, error='دسترسی نداری')
             if chat.owner_id == target:
                 return jsonify(ok=False, error='صاحب گروه قابل اخراج نیست')
+            if not ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first():
+                return jsonify(ok=False, error='این کاربر عضو این گپ نیست')
             tuser = User.query.get(target)
             tname = tuser.public_name if tuser else 'کاربر'
             ChatMember.query.filter_by(chat_id=chat.id, user_id=target).delete()
             db.session.commit()
             noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
             post_system_message(chat, user, f'«{tname}» توسط «{user.public_name}» از {noun} حذف شد')
+            socketio.emit('you_were_removed',
+                          {'chat_id': chat.id, 'name': chat.name, 'by': user.public_name},
+                          room=f'user:{target}')
+            for mid in chat_member_ids(chat.id):
+                socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
             return jsonify(ok=True)
         if action == 'leave':
             if chat.owner_id == user.id:
                 return jsonify(ok=False, error='صاحب نمی‌تونه گروه رو ترک کنه. اول مالکیت رو منتقل کن.')
+            if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+                return jsonify(ok=False, error='تو این گپ عضو نیستی')
             ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).delete()
             db.session.commit()
             noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
             post_system_message(chat, user, f'«{user.public_name}» از {noun} خارج شد')
+            for mid in chat_member_ids(chat.id):
+                socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
             return jsonify(ok=True)
         if action == 'promote':
             if role != 'owner':
@@ -808,6 +819,10 @@ def api_delete_message():
     if not allowed and m.msg_type == 'system':
         schat = Chat.query.get(m.chat_id)
         allowed = bool(schat) and (schat.owner_id == user.id or my_role_in(user, schat) == 'admin')
+    if allowed and m.sender_id == user.id and not user.is_admin:
+        schat = Chat.query.get(m.chat_id)
+        if schat and schat.chat_type != 'dm' and not my_role_in(user, schat):
+            allowed = False
     if not allowed:
         return jsonify(ok=False, error='دسترسی نداری')
     m.deleted = True
@@ -1379,7 +1394,8 @@ def api_pin_message():
     if chat.chat_type == 'dm':
         allowed = can_view_chat(user, chat)
     else:
-        allowed = user.is_admin or role in ('owner', 'admin') or m.sender_id == user.id
+        allowed = user.is_admin or role in ('owner', 'admin') or \
+            (m.sender_id == user.id and role is not None)
     if not allowed:
         return jsonify(ok=False, error='دسترسی نداری')
     new_pin = not m.pinned

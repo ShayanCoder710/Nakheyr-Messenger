@@ -3676,6 +3676,7 @@ S.on('chat_meta', d => {
   if (d.id === currentChat && CD.chat) {
     CD.chat = { ...CD.chat, ...d };
     setHead();
+    loadMembers(currentChat);
   }
   refreshConvList();
 });
@@ -3729,6 +3730,13 @@ S.on('chat_deleted', d => {
     closeChatPane();
   }
   refreshConvList();
+});
+
+S.on('you_were_removed', d => {
+  const label = d.name || 'گپ';
+  toast(d.by ? `تو توسط ${d.by} از «${label}» حذف شدی` : `تو از «${label}» حذف شدی`, 'error');
+  refreshConvList();
+  if (currentChat === d.chat_id) closeChatPane();
 });
 
 S.on('profile_updated', p => {
