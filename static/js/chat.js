@@ -1951,11 +1951,31 @@ function renderAttachPreview() {
   }
   const rows = pendingFiles.map(f => {
     if (f.status === 'uploading') {
+      if (f.forceKind === 'audio') {
+        const n = 36;
+        const peaks = f.peaks || pseudoPeaks(f.id, n);
+        const cut = Math.round(f.progress / 100 * n);
+        const bars = peaks.map((p, i) => `<i class="${i < cut ? 'on' : ''}" style="height:${Math.round(3 + p * 24)}px"></i>`).join('');
+        return `<div class="ap-item ap-voice uploading" id="apItem${f.id}" data-vid="${f.id}">
+          <button class="ap-play" data-play="${f.id}" title="پخش">${bi('hourglass-split')}</button>
+          <span class="ap-vwave">${bars}</span>
+          <span class="ap-vtime">${f.progress}%</span>
+          <button class="ap-x" data-rm="${f.id}" title="لغو آپلود">${bi('x-lg')}</button>
+        </div>`;
+      }
       return `<div class="ap-item uploading" id="apItem${f.id}">
         <span class="ap-ic">${bi('hourglass-split')}</span>
         <span class="fname">${esc(f.name)}</span>
         <span class="ap-progress" title="در حال آپلود"><span class="ap-bar" style="width:${f.progress}%"></span><span class="ap-pct">${f.progress}%</span></span>
         <button class="ap-x" data-rm="${f.id}" title="لغو آپلود">${bi('x-lg')}</button>
+      </div>`;
+    }
+    if (f.forceKind === 'audio') {
+      return `<div class="ap-item ap-voice" id="apItem${f.id}" data-vid="${f.id}">
+        <button class="ap-play" data-play="${f.id}" title="پخش">${bi('play-fill')}</button>
+        <span class="ap-vwave">${voicePeaksHtml(f)}</span>
+        <span class="ap-vtime">${f.secs ? fmtRec(f.secs) : ''}</span>
+        <button class="ap-x" data-rm="${f.id}" title="حذف">${bi('x-lg')}</button>
       </div>`;
     }
     const thumb = (f.kind === 'image' || f.kind === 'gif') && !f.vid && f.url
@@ -1974,9 +1994,82 @@ function renderAttachPreview() {
   pv.classList.add('show');
 }
 
+function pseudoPeaks(seed, n) {
+  const out = [];
+  let s = ((seed * 2654435761) >>> 0) || 7;
+  for (let i = 0; i < n; i++) {
+    s = (s * 1103515245 + 12345) & 0x7fffffff;
+    out.push(0.25 + 0.75 * Math.abs(Math.sin(s / 1073741824 + i * 0.85)));
+  }
+  return out;
+}
+function voicePeaksHtml(f) {
+  const n = 36;
+  const peaks = (f.peaks && f.peaks.length === n) ? f.peaks : pseudoPeaks(f.id, n);
+  return peaks.map(p => `<i style="height:${Math.round(3 + p * 24)}px"></i>`).join('');
+}
+function analyzePeaks(f) {
+  return new Promise(resolve => {
+    try {
+      const AC = window.AudioContext || window.webkitAudioContext;
+      const ctx = new AC();
+      f.file.arrayBuffer().then(buf => ctx.decodeAudioData(buf)).then(audio => {
+        const data = audio.getChannelData(0);
+        const n = 36;
+        const step = Math.max(1, Math.floor(data.length / n));
+        const peaks = [];
+        for (let i = 0; i < n; i++) {
+          let m = 0;
+          for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j += 16) {
+            const v = Math.abs(data[j]);
+            if (v > m) m = v;
+          }
+          peaks.push(m < 0.02 ? 0.06 : m);
+        }
+        ctx.close();
+        resolve(peaks);
+      }).catch(() => resolve(null));
+    } catch (_) { resolve(null); }
+  });
+}
+function paintVoiceProgress(it, pr) {
+  const row = document.querySelector(`[data-vid="${it.id}"]`);
+  if (!row) return;
+  const bars = row.querySelectorAll('.ap-vwave i');
+  const cut = Math.round(pr * bars.length);
+  bars.forEach((b, i) => b.classList.toggle('on', i < cut));
+}
+function toggleVoicePreview(it, btn) {
+  if (it.audioEl) {
+    try { it.audioEl.pause(); } catch (_) {}
+    it.audioEl = null;
+    btn.classList.remove('playing');
+    btn.innerHTML = bi('play-fill');
+    paintVoiceProgress(it, 0);
+    return;
+  }
+  if (!it.url) { toast('صبر کن تا آپلود تموم شه', 'error'); return; }
+  const a = new Audio(it.url);
+  it.audioEl = a;
+  btn.classList.add('playing');
+  btn.innerHTML = bi('pause-fill');
+  a.ontimeupdate = () => {
+    const pr = a.duration && isFinite(a.duration) && a.duration > 0 ? a.currentTime / a.duration : 0;
+    paintVoiceProgress(it, pr);
+  };
+  a.onended = () => {
+    it.audioEl = null;
+    paintVoiceProgress(it, 0);
+    const b = document.querySelector(`[data-play="${it.id}"]`);
+    if (b) { b.classList.remove('playing'); b.innerHTML = bi('play-fill'); }
+  };
+  a.play().catch(() => {});
+}
+
 function removePendingFile(id, silent) {
   const it = pendingFiles.find(f => f.id === id);
   if (it && it.xhr && it.status === 'uploading') { try { it.xhr.abort(); } catch (_) {} }
+  if (it && it.audioEl) { try { it.audioEl.pause(); } catch (_) {} }
   pendingFiles = pendingFiles.filter(f => f.id !== id);
   renderAttachPreview();
 }
@@ -1993,6 +2086,13 @@ function uploadFile(item) {
     if (!row) return;
     const bar = row.querySelector('.ap-bar'); if (bar) bar.style.width = item.progress + '%';
     const pct = row.querySelector('.ap-pct'); if (pct) pct.textContent = item.progress + '%';
+    const vw = row.querySelector('.ap-vwave');
+    if (vw) {
+      const bars = vw.querySelectorAll('i');
+      const cut = Math.round(item.progress / 100 * bars.length);
+      bars.forEach((b, i) => b.classList.toggle('on', i < cut));
+      const vt = row.querySelector('.ap-vtime'); if (vt) vt.textContent = item.progress + '%';
+    }
   });
   const done = (r) => {
     if (r && r.ok) {
@@ -2051,6 +2151,11 @@ document.addEventListener('click', e => {
   if (af) {
     const it = pendingFiles.find(f => f.id === Number(af.dataset.asfile));
     if (it) { it.asFile = !it.asFile; af.classList.toggle('on'); }
+  }
+  const pl = e.target.closest('[data-play]');
+  if (pl) {
+    const it = pendingFiles.find(f => f.id === Number(pl.dataset.play));
+    if (it) toggleVoicePreview(it, pl);
   }
   const rec = e.target.closest('[data-rec]');
   if (rec) finishRec(rec.dataset.rec === 'stop');
@@ -2135,11 +2240,11 @@ function renderRecBar() {
   if (c) c.classList.add('recording');
   pv.innerHTML =
     `<div class="rec-bar">
-       <span class="rec-mid">
-         <span class="rec-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
-         <span class="rec-lbl">ضبط صدا…</span>
+       <span class="rec-state">
+         <span class="rec-dot"></span>
          <span class="rec-time" id="recTime">0:00</span>
        </span>
+       <span class="rec-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
        <button class="rec-x" data-rec="cancel" title="لغو ضبط">${bi('x-lg')}</button>
        <button class="rec-stop" data-rec="stop" title="توقف و ارسال پیام صوتی">${bi('stop')}</button>
      </div>`;
@@ -2166,6 +2271,15 @@ function finishRec(keep) {
       const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}-${String(d.getMinutes()).padStart(2, '0')}-${String(d.getSeconds()).padStart(2, '0')}`;
       const f = new File([blob], `voice-${stamp}.${ext}`, { type: blob.type });
       enqueueFiles([f], { forceKind: 'audio', autoSend: true });
+      const it = pendingFiles.find(x => x.name === f.name);
+      if (it) {
+        it.secs = secs;
+        analyzePeaks(it).then(p => {
+          if (!p) return;
+          const cur = pendingFiles.find(x => x.id === it.id);
+          if (cur) { cur.peaks = p; renderAttachPreview(); }
+        });
+      }
     }
     renderAttachPreview();
   };
