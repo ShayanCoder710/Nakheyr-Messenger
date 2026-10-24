@@ -62,6 +62,8 @@ def csrf_guard():
         return
     if ep == 'api_upload' and request.form.get('kind') == 'audio':
         return
+    if ep == 'api_send_message' and (request.get_json(silent=True) or {}).get('msg_type') == 'audio':
+        return
     token = request.headers.get('X-CSRF-Token')
     if token is None:
         token = request.form.get('csrf_token')
