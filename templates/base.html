@@ -17,7 +17,6 @@
 <script src="{{ url_for('static', filename='vendor/purify.min.js') }}"></script>
 <script>window.CSRF_TOKEN = "{{ csrf_token }}";</script>
 <script>
-// CSRF: automatically attach the session token to every same-site POST.
 (function () {
   if (!window.CSRF_TOKEN) return;
   const orig = window.fetch;
@@ -56,17 +55,11 @@ window.md = function(src) {
   if (!src) return '';
   if (typeof marked !== 'undefined' && typeof DOMPurify !== 'undefined') {
     try {
-      // Telegram-style: *text* = bold, _text_ = italic, `code` / ```block``` = monospace.
-      // marked renders *text* as <em> by default, so convert single asterisks
-      // to double ones first (bold), leaving underscore italics untouched.
       const pre = String(src).replace(
         /(^|[^*])\*(?!\*)([^*\n]+)\*(?!\*)/g,
         '$1**$2**'
       );
       const raw = marked.parse(pre, { breaks: true, gfm: true });
-      // With breaks:true a single newline becomes <br> (Telegram-like), but
-      // marked can also add one right before a closing block tag. Remove only
-      // those edge cases so normal line breaks inside messages survive.
       const cleaned = raw
         .replace(/<br\s*\/?>\s*(?=<\/(?:p|li|ul|ol|pre|blockquote|h[1-6])>)/gi, '')
         .replace(/(<(?:p|li|ul|ol|pre|blockquote|h[1-6])(?:\s[^>]*)?>)\s*<br\s*\/?>/gi, '$1');
