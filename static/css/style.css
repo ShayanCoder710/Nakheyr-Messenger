@@ -1097,7 +1097,7 @@ b, strong { font-weight: 800; }
   border-top: 1px solid var(--line);
   backdrop-filter: blur(16px); -webkit-backdrop-filter: blur(16px);
 }
-.attach-preview { display: none; padding: 8px 14px 6px; }
+.attach-preview { display: none; padding: 8px 0 6px; }
 .attach-preview.show { display: flex; flex-direction: column; gap: 6px; align-items: stretch; }
 .attach-preview img { width: 44px; height: 44px; object-fit: cover; border-radius: 12px; border: 1px solid var(--line-2); }
 .attach-preview .fname { font-size: 12px; color: var(--muted); }
@@ -1116,6 +1116,10 @@ b, strong { font-weight: 800; }
 .ap-item .ap-x { flex: none; width: 26px; height: 26px; border-radius: 50%; display: grid; place-items: center; color: var(--muted); cursor: pointer; transition: .15s ease; }
 .ap-item .ap-x:hover { color: var(--danger, #d93a3d); background: var(--panel); }
 .ap-item .ap-x .bi-ic { font-size: 13px; }
+.ap-item .ap-asfile { flex: none; display: inline-flex; align-items: center; gap: 4px; padding: 4px 10px; border-radius: 99px; border: 1px solid var(--line-2); background: var(--panel); color: var(--muted); font-size: 11px; font-weight: 700; cursor: pointer; transition: .15s ease; }
+.ap-item .ap-asfile .bi-ic { width: 13px; height: 13px; }
+.ap-item .ap-asfile:hover { border-color: var(--accent-2); color: var(--accent-2); }
+.ap-item .ap-asfile.on { background: var(--accent-soft); border-color: transparent; color: var(--accent-2); }
 .rec-bar { display: flex; align-items: center; gap: 10px; padding: 8px 12px; border-radius: 14px; background: var(--panel-2); border: 1px solid var(--line-2); user-select: none; }
 .rec-dot { width: 10px; height: 10px; border-radius: 50%; background: var(--danger, #d93a3d); animation: recPulse 1s ease-in-out infinite; flex: none; }
 @keyframes recPulse { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: .35; transform: scale(.75); } }
@@ -1127,6 +1131,7 @@ b, strong { font-weight: 800; }
 .rec-bar .rec-ok { background: var(--accent); color: #fff; }
 .rec-bar .rec-ok:hover { filter: brightness(1.1); }
 .rec-bar .bi-ic { font-size: 15px; }
+.composer.recording .composer-row { display: none; }
 
 .member-list { position: absolute; top: 56px; left: 12px; z-index: 60; display: none; width: min(360px, 90vw); max-height: 70vh; overflow-y: auto; background: var(--card); border: 1px solid var(--line-2); border-radius: 18px; box-shadow: var(--shadow); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px); }
 .member-list.show { display: block; }
@@ -1626,7 +1631,7 @@ table.data { width: 100%; border-collapse: collapse; }
   .scroll-down { right: 14px; bottom: 72px; width: 40px; height: 40px; }
   .members-strip { padding: 8px 10px; }
   .composer { padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 0; }
-  .attach-preview { padding: 8px 10px 6px; }
+  .attach-preview { padding: 6px 0 4px; }
   .composer-row { gap: 6px; }
   .send-btn { width: 44px; height: 44px; }
   .composer-input { min-height: 44px; padding: 10px 15px; }

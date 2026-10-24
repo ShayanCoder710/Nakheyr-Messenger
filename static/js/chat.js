@@ -881,6 +881,7 @@ function setActiveConv(id) {
 }
 
 function closeChatPane(syncUrl) {
+  if (recState) finishRec(false);
   flushDraft();
   currentChat = null;
   document.getElementById('msgsPane').classList.remove('open');
@@ -897,6 +898,7 @@ function setChatted(on) {
 document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
 async function openChat(id, opts) {
+  if (recState) finishRec(false);
   const inputEl = document.getElementById('msgInput');
   if (composerChatId) {
     flushDraftFor(composerChatId, inputEl ? inputEl.value : '');
@@ -1442,7 +1444,10 @@ async function sendText(caption) {
   }
   const text = (caption !== undefined ? caption : input.value).trim();
   const item = pendingFiles.find(f => f.status === 'ready');
-  if (!text && !item) return;
+  if (!text && !item) {
+    if (pendingFiles.some(f => f.status === 'uploading')) toast('صبر کن تا آپلود تموم شه', 'error');
+    return;
+  }
   sending = true;
   const body = { chat_id: chatId, content: text };
   if (item) {
@@ -1936,6 +1941,8 @@ function apItemIcon(f) {
 }
 function renderAttachPreview() {
   const pv = document.getElementById('attachPreview');
+  const c = document.querySelector('.composer');
+  if (c) c.classList.remove('recording');
   if (recState) { renderRecBar(); return; }
   if (!pendingFiles.length) {
     pv.classList.remove('show');
@@ -2083,6 +2090,10 @@ document.getElementById('btnMic').onclick = e => {
   startRec();
 };
 async function startRec() {
+  if (!currentChat) {
+    toast('اول یک گپ رو باز کن', 'error');
+    return;
+  }
   if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia || typeof MediaRecorder === 'undefined') {
     toast('مرورگر شما ضبط صدا را پشتیبانی نمی‌کند', 'error');
     return;
@@ -2107,6 +2118,8 @@ async function startRec() {
   recState = { rec, stream, mime, chunks: [], secs: 0, started: Date.now() };
   rec.ondataavailable = e => { if (e.data && e.data.size) recState.chunks.push(e.data); };
   rec.start(250);
+  const msgInp = document.getElementById('msgInput');
+  if (msgInp) msgInp.blur();
   recState.int = setInterval(() => {
     if (!recState) return;
     recState.secs = Math.floor((Date.now() - recState.started) / 1000);
@@ -2118,6 +2131,8 @@ async function startRec() {
 function fmtRec(s) { return Math.floor(s / 60) + ':' + String(s % 60).padStart(2, '0'); }
 function renderRecBar() {
   const pv = document.getElementById('attachPreview');
+  const c = document.querySelector('.composer');
+  if (c) c.classList.add('recording');
   pv.innerHTML =
     `<div class="rec-bar">
        <span class="rec-dot" title="در حال ضبط"></span>
