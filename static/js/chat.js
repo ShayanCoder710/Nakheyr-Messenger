@@ -258,8 +258,13 @@ function renderMsg(m) {
       + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'audio') {
-    body = `<div class="audio-card"><div class="fi">${bi('headphones')}</div><div class="ac-body"><b>${fname}</b>`
-      + `<audio class="aud" src="${url}" controls preload="metadata"></audio></div></div>`;
+    const vcMine = m.sender_id === window.ME.id;
+    body = `<div class="voice-card ${vcMine ? 'sent' : ''}" data-mid="${m.id}" data-vurl="${esc(url)}">
+      <button class="vc-play" title="پخش">${bi('play-fill')}</button>
+      <span class="vc-wave">${vcWaveHtml(m.id)}</span>
+      <span class="vc-times"><span class="vc-cur">0:00</span><span class="vc-dur">…</span></span>
+    </div>`;
+    ensureVoiceMeta(m);
     if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
   } else if (m.msg_type === 'file') {
     body = `<div class="file-card"><div class="fi">${bi(fileIcon(m.file_name))}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
@@ -882,6 +887,7 @@ function setActiveConv(id) {
 
 function closeChatPane(syncUrl) {
   if (recState) finishRec(false);
+  vcCache.forEach(st => { if (st.audio) { try { st.audio.pause(); } catch (_) {} st.audio = null; } });
   flushDraft();
   currentChat = null;
   document.getElementById('msgsPane').classList.remove('open');
@@ -2003,6 +2009,87 @@ function pseudoPeaks(seed, n) {
   }
   return out;
 }
+const vcCache = new Map();
+function vcWaveHtml(mid) {
+  const st = vcCache.get(mid);
+  const peaks = (st && st.peaks) ? st.peaks : pseudoPeaks(mid, 36);
+  return peaks.map(p => `<i style="height:${Math.round(2 + p * 22)}px"></i>`).join('');
+}
+function vcPaint(mid) {
+  const st = vcCache.get(mid);
+  const card = document.querySelector(`.voice-card[data-mid="${mid}"]`);
+  if (!st || !card) return;
+  if (st.peaks) card.querySelector('.vc-wave').innerHTML = vcWaveHtml(mid);
+  const dur = card.querySelector('.vc-dur');
+  if (dur && st.dur) dur.textContent = fmtRec(Math.round(st.dur));
+}
+function ensureVoiceMeta(m) {
+  if (!m || !m.file_url || vcCache.has(m.id)) return;
+  if (vcCache.size > 200) {
+    for (const k of vcCache.keys()) {
+      const old = vcCache.get(k);
+      if (!old || !old.audio) { vcCache.delete(k); break; }
+    }
+  }
+  const st = { url: m.file_url, peaks: null, dur: 0, audio: null };
+  vcCache.set(m.id, st);
+  fetch(m.file_url).then(r => r.arrayBuffer()).then(buf => {
+    const AC = window.AudioContext || window.webkitAudioContext;
+    const ctx = new AC();
+    return ctx.decodeAudioData(buf).then(dec => {
+      st.dur = dec.duration;
+      const data = dec.getChannelData(0);
+      const n = 36;
+      const step = Math.max(1, Math.floor(data.length / n));
+      st.peaks = [];
+      for (let i = 0; i < n; i++) {
+        let mx = 0;
+        for (let j = i * step; j < Math.min(data.length, (i + 1) * step); j += 32) {
+          const v = Math.abs(data[j]);
+          if (v > mx) mx = v;
+        }
+        st.peaks.push(mx < 0.02 ? 0.06 : mx);
+      }
+      ctx.close();
+      vcPaint(m.id);
+    });
+  }).catch(() => {});
+}
+function toggleVoiceCard(mid) {
+  const st = vcCache.get(mid);
+  if (!st) return;
+  const card = document.querySelector(`.voice-card[data-mid="${mid}"]`);
+  if (!card) return;
+  const btn = card.querySelector('.vc-play');
+  if (st.audio && !st.audio.paused) {
+    st.audio.pause();
+    btn.innerHTML = bi('play-fill');
+    return;
+  }
+  if (!st.audio) {
+    const a = new Audio(st.url);
+    st.audio = a;
+    a.ontimeupdate = () => {
+      const pr = a.duration && isFinite(a.duration) && a.duration > 0 ? a.currentTime / a.duration : 0;
+      const bars = card.querySelectorAll('.vc-wave i');
+      const cut = Math.round(pr * bars.length);
+      bars.forEach((b, i) => b.classList.toggle('on', i < cut));
+      const cur = card.querySelector('.vc-cur');
+      if (cur) cur.textContent = fmtRec(Math.floor(a.currentTime));
+    };
+    a.onended = () => {
+      st.audio = null;
+      card.querySelectorAll('.vc-wave i').forEach(b => b.classList.remove('on'));
+      const cur = card.querySelector('.vc-cur');
+      if (cur) cur.textContent = '0:00';
+      btn.innerHTML = bi('play-fill');
+    };
+    a.play().catch(() => {});
+  } else {
+    st.audio.play().catch(() => {});
+  }
+  btn.innerHTML = bi('pause-fill');
+}
 function voicePeaksHtml(f) {
   const n = 36;
   const peaks = (f.peaks && f.peaks.length === n) ? f.peaks : pseudoPeaks(f.id, n);
@@ -2157,6 +2244,11 @@ document.addEventListener('click', e => {
     const it = pendingFiles.find(f => f.id === Number(pl.dataset.play));
     if (it) toggleVoicePreview(it, pl);
   }
+  const vc = e.target.closest('.vc-play');
+  if (vc) {
+    const card = vc.closest('.voice-card');
+    if (card) toggleVoiceCard(Number(card.dataset.mid));
+  }
   const rec = e.target.closest('[data-rec]');
   if (rec) finishRec(rec.dataset.rec === 'stop');
 });
@@ -2246,7 +2338,7 @@ function renderRecBar() {
        </span>
        <span class="rec-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i><i></i></span>
        <button class="rec-x" data-rec="cancel" title="لغو ضبط">${bi('x-lg')}</button>
-       <button class="rec-stop" data-rec="stop" title="توقف و ارسال پیام صوتی">${bi('stop')}</button>
+       <button class="rec-stop" data-rec="stop" title="توقف و ارسال پیام صوتی"><span class="rec-ring"></span><span class="rec-ring r2"></span>${bi('stop')}</button>
      </div>`;
   pv.classList.add('show');
 }
