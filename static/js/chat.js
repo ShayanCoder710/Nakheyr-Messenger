@@ -936,6 +936,8 @@ async function openChat(id, opts) {
   const canPost = !(j.chat.chat_type === 'channel' && CD.role !== 'owner' && CD.role !== 'admin' && !window.ME.is_admin);
   document.getElementById('msgInput').disabled = !canPost;
   document.getElementById('btnAttach').style.visibility = canPost ? 'visible' : 'hidden';
+  document.getElementById('btnMic').style.visibility = canPost ? 'visible' : 'hidden';
+  document.getElementById('btnPoll').style.visibility = canPost ? 'visible' : 'hidden';
   document.getElementById('channelHint').style.display = canPost ? 'none' : 'flex';
   const savedDraft = typeof j.draft === 'string' ? j.draft : '';
   if (+composerChatId !== +id) inputEl.value = savedDraft;
@@ -1434,7 +1436,10 @@ async function sendText(caption) {
   if (sending || !currentChat) return;
   const chatId = currentChat;
   const input = document.getElementById('msgInput');
-  if (input.disabled) return;
+  if (input.disabled) {
+    if (pendingFiles.some(f => f.status === 'ready')) toast('تو این گپ نمی‌تونی پیام بفرستی', 'error');
+    return;
+  }
   const text = (caption !== undefined ? caption : input.value).trim();
   const item = pendingFiles.find(f => f.status === 'ready');
   if (!text && !item) return;
@@ -1988,7 +1993,12 @@ function uploadFile(item) {
       item.path = r.file_path; item.kind = r.kind; item.url = r.file_url;
       item.name = r.file_name || item.name;
       renderAttachPreview();
-      document.getElementById('msgInput').focus();
+      if (item.autoSend) {
+        item.autoSend = false;
+        sendText(undefined);
+      } else {
+        document.getElementById('msgInput').focus();
+      }
     } else {
       toast((r && r.error) || 'آپلود ناموفق بود', 'error');
       removePendingFile(item.id, true);
@@ -1996,7 +2006,7 @@ function uploadFile(item) {
   };
   item.xhr.onload = () => { let r = null; try { r = JSON.parse(item.xhr.responseText); } catch (_) {} done(r); };
   item.xhr.onerror = () => { toast('آپلود ناموفق بود', 'error'); removePendingFile(item.id, true); };
-  item.xhr.onabort = () => { /* cancelled by the user */ renderAttachPreview(); };
+  item.xhr.onabort = () => { renderAttachPreview(); };
   item.xhr.send(fd);
 }
 function enqueueFiles(list, opts) {
@@ -2009,6 +2019,7 @@ function enqueueFiles(list, opts) {
       id: ++_pfSeq, file: f, name: f.name, size: f.size,
       status: 'uploading', progress: 0, asFile: false, xhr: null,
       forceKind: opts && opts.forceKind,
+      autoSend: !!(opts && opts.autoSend),
     };
     pendingFiles.push(item);
     uploadFile(item);
@@ -2113,7 +2124,7 @@ function renderRecBar() {
        <span class="rec-time" id="recTime">0:00</span>
        <span class="rec-lbl">ضبط صدا…</span>
        <button class="rec-x" data-rec="cancel" title="لغو ضبط">${bi('x-lg')}</button>
-       <button class="rec-ok" data-rec="stop" title="توقف و گذاشتن در صف ارسال">${bi('check')}</button>
+       <button class="rec-ok" data-rec="stop" title="ارسال پیام صوتی">${bi('check')}</button>
      </div>`;
   pv.classList.add('show');
 }
@@ -2137,8 +2148,7 @@ function finishRec(keep) {
       const d = new Date();
       const stamp = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}-${String(d.getHours()).padStart(2, '0')}-${String(d.getMinutes()).padStart(2, '0')}-${String(d.getSeconds()).padStart(2, '0')}`;
       const f = new File([blob], `voice-${stamp}.${ext}`, { type: blob.type });
-      enqueueFiles([f], { forceKind: 'audio' });
-      toast('پیام صوتی آماده ارسال است');
+      enqueueFiles([f], { forceKind: 'audio', autoSend: true });
     }
     renderAttachPreview();
   };
