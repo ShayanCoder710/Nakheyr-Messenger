@@ -2135,10 +2135,13 @@ function renderRecBar() {
   if (c) c.classList.add('recording');
   pv.innerHTML =
     `<div class="rec-bar">
-       <button class="rec-stop" data-rec="stop" title="توقف و ارسال پیام صوتی">${bi('stop')}</button>
-       <span class="rec-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i></span>
-       <span class="rec-info"><span class="rec-lbl">ضبط صدا…</span><span class="rec-time" id="recTime">0:00</span></span>
+       <span class="rec-mid">
+         <span class="rec-wave" aria-hidden="true"><i></i><i></i><i></i><i></i><i></i><i></i></span>
+         <span class="rec-lbl">ضبط صدا…</span>
+         <span class="rec-time" id="recTime">0:00</span>
+       </span>
        <button class="rec-x" data-rec="cancel" title="لغو ضبط">${bi('x-lg')}</button>
+       <button class="rec-stop" data-rec="stop" title="توقف و ارسال پیام صوتی">${bi('stop')}</button>
      </div>`;
   pv.classList.add('show');
 }
