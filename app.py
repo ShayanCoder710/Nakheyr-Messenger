@@ -41,6 +41,7 @@ app.config['TEMPLATES_AUTO_RELOAD'] = True
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins='*')
+USER_SOCKETS = {}
 
 with app.app_context():
     init_db()
@@ -1010,6 +1011,8 @@ def api_chat_prefs(chat_id):
     if 'archived' in data:
         m.archived = bool(data['archived'])
     db.session.commit()
+    socketio.emit('conv_prefs', {'chat_id': chat.id, 'muted': bool(m.muted),
+                                  'archived': bool(m.archived)}, room=f'user:{user.id}')
     return jsonify(ok=True, muted=bool(m.muted), archived=bool(m.archived))
 
 
@@ -1039,6 +1042,8 @@ def api_mark_read():
                               room=f'user:{mid}')
     elif changed:
         db.session.commit()
+    socketio.emit('chat_read', {'chat_id': chat.id, 'last_id': last_read_id},
+                  room=f'user:{user.id}')
     return jsonify(ok=True)
 
 
@@ -1965,38 +1970,55 @@ def on_connect():
     if not user:
         emit('auth_required')
         return
-    bump_online(user)
+    first = not USER_SOCKETS.get(user.id)
+    USER_SOCKETS.setdefault(user.id, set()).add(request.sid)
     join_room(f'user:{user.id}')
-    seen = set()
     for c in user_chats(user.id):
         join_room(f'chat:{c.id}')
-        if not user.show_online:
-            continue
-        for mid in chat_member_ids(c.id):
-            if mid != user.id and mid not in seen:
-                seen.add(mid)
-                emit('presence_update', {'user_id': user.id, 'status': 'online'},
-                     room=f'user:{mid}')
-
-
-@socketio.on('disconnect')
-def on_disconnect():
-    user = current_user()
-    if user:
-        user.status = 'offline'
-        user.last_seen = datetime.utcnow()
-        try:
-            db.session.commit()
-        except Exception:
-            db.session.rollback()
+    if not user.show_online:
+        if first:
+            bump_online(user)
+        return
+    bump_online(user)
+    if first:
         seen = set()
         for c in user_chats(user.id):
             for mid in chat_member_ids(c.id):
                 if mid != user.id and mid not in seen:
                     seen.add(mid)
-                    emit('presence_update', {'user_id': user.id, 'status': 'offline',
-                                              'last_seen': user.last_seen.isoformat()},
+                    emit('presence_update', {'user_id': user.id, 'status': 'online'},
                          room=f'user:{mid}')
+
+
+@socketio.on('disconnect')
+def on_disconnect():
+    user = current_user()
+    if not user:
+        return
+    conns = USER_SOCKETS.get(user.id)
+    if conns:
+        conns.discard(request.sid)
+        if conns:
+            user.last_seen = datetime.utcnow()
+            try:
+                db.session.commit()
+            except Exception:
+                db.session.rollback()
+            return
+    user.status = 'offline'
+    user.last_seen = datetime.utcnow()
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+    seen = set()
+    for c in user_chats(user.id):
+        for mid in chat_member_ids(c.id):
+            if mid != user.id and mid not in seen:
+                seen.add(mid)
+                emit('presence_update', {'user_id': user.id, 'status': 'offline',
+                                          'last_seen': user.last_seen.isoformat()},
+                     room=f'user:{mid}')
 
 
 @socketio.on('typing')

@@ -4057,8 +4057,25 @@ S.on('new_message', m => {
     api('/api/mark-read', { chat_id: m.chat_id });
   } else {
     updateConvPreview(m);
+    bumpUnread(m.chat_id);
   }
 });
+
+function bumpUnread(chatId) {
+  const el = document.querySelector('.conv[data-chat-id="' + chatId + '"]');
+  if (!el) return;
+  let pill = el.querySelector('.unread-pill');
+  const n = parseInt(el.dataset.unread || '0', 10) + 1;
+  el.dataset.unread = String(n);
+  if (!pill) {
+    const row2 = el.querySelector('.row2');
+    if (!row2) return;
+    pill = document.createElement('span');
+    pill.className = 'unread-pill';
+    row2.appendChild(pill);
+  }
+  pill.textContent = String(n);
+}
 
 S.on('reaction', d => {
   const m = (CD.initialMessages || []).find(x => x.id === d.message_id);
@@ -4126,6 +4143,23 @@ S.on('read_recept', d => {
     const mid = +t.dataset.mid;
     if (mid <= lastId) t.innerHTML = tickIcon(true);
   });
+});
+
+S.on('chat_read', d => {
+  if (!d || !d.chat_id) return;
+  const el = document.querySelector('.conv[data-chat-id="' + d.chat_id + '"]');
+  if (!el) return;
+  el.dataset.unread = '0';
+  el.querySelectorAll('.unread-pill').forEach(p => p.remove());
+});
+
+S.on('conv_prefs', d => {
+  if (!d || !d.chat_id) return;
+  const el = document.querySelector('.conv[data-chat-id="' + d.chat_id + '"]');
+  if (!el) { refreshConvList(); return; }
+  el.dataset.muted = d.muted ? '1' : '0';
+  el.dataset.archived = d.archived ? '1' : '0';
+  el.classList.toggle('muted', !!d.muted);
 });
 
 S.on('typing', d => {
