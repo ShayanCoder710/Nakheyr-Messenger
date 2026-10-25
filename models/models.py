@@ -23,6 +23,7 @@ class User(db.Model):
     is_banned = db.Column(db.Boolean, default=False)
     read_receipts = db.Column(db.Boolean, default=True)
     show_online = db.Column(db.Boolean, default=True, nullable=False)
+    session_ver = db.Column(db.Integer, default=0, nullable=False)
     theme = db.Column(db.String(10), default='dark', nullable=False)
     status = db.Column(db.String(10), default='offline')
     last_seen = db.Column(db.DateTime, default=datetime.utcnow)

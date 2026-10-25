@@ -2,7 +2,7 @@ import os
 import re
 import hmac
 import secrets
-from datetime import datetime
+from datetime import datetime, timedelta
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
@@ -38,6 +38,9 @@ app.config['MAX_CONTENT_LENGTH'] = 60 * 1024 * 1024
 app.config['UPLOAD_DIR'] = UPLOAD_DIR
 app.config['AVATAR_DIR'] = AVATAR_DIR
 app.config['TEMPLATES_AUTO_RELOAD'] = True
+app.config['PERMANENT_SESSION_LIFETIME'] = timedelta(days=30)
+app.config['SESSION_COOKIE_HTTPONLY'] = True
+app.config['SESSION_COOKIE_SAMESITE'] = 'Lax'
 
 db.init_app(app)
 socketio = SocketIO(app, cors_allowed_origins='*')
@@ -151,6 +154,8 @@ def login():
             flash('اکانت شما توسط ادمین مسدود شده است.', 'error')
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         session['user_id'] = user.id
+        session['session_ver'] = user.session_ver or 0
+        session.permanent = True
         bump_online(user)
         flash(f'خوش برگشتی {user.public_name}!', 'success')
         return redirect(safe_next(request.form.get('next')) or url_for('home'))
@@ -182,6 +187,8 @@ def register():
         db.session.add(user)
         db.session.commit()
         session['user_id'] = user.id
+        session['session_ver'] = user.session_ver or 0
+        session.permanent = True
         bump_online(user)
         flash(f'خوش اومدی {display}!', 'success')
         return redirect(url_for('home'))
@@ -194,6 +201,7 @@ def logout():
     if user:
         user.status = 'offline'
         user.last_seen = datetime.utcnow()
+        user.session_ver = (user.session_ver or 0) + 1
         db.session.commit()
     session.clear()
     return redirect(url_for('login'))
@@ -1292,7 +1300,9 @@ def api_password():
     if new == current:
         return jsonify(ok=False, error='رمز جدید باید با رمز فعلی فرق کنه')
     user.set_password(new)
+    user.session_ver = (user.session_ver or 0) + 1
     db.session.commit()
+    session['session_ver'] = user.session_ver
     return jsonify(ok=True)
 
 

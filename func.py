@@ -128,6 +128,7 @@ def _ensure_columns():
         ('users', 'show_online', "BOOLEAN NOT NULL DEFAULT 1"),
         ('users', 'theme', "VARCHAR(10) NOT NULL DEFAULT 'dark'"),
         ('gifs', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'gif'"),
+        ('users', 'session_ver', "INTEGER NOT NULL DEFAULT 0"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -241,6 +242,10 @@ def current_user():
     user = User.query.get(uid)
     if not user:
         session.pop('user_id', None)
+        return None
+    if user.session_ver is not None and session.get('session_ver') != user.session_ver:
+        session.pop('user_id', None)
+        session.pop('session_ver', None)
         return None
     return user
 
