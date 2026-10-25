@@ -691,6 +691,9 @@ def unread_counts(user):
                 prefix = f'{sender.public_name} · '
             else:
                 prefix = ''
+            if (last.msg_type != 'system' and last.sender_id != uid and user.username
+                    and ('@' + user.username).lower() in (last.content or '').lower()):
+                prefix = '@شما · '
             last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
         peer_id = None

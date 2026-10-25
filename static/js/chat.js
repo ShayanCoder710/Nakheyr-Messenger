@@ -13,6 +13,7 @@ let selecting = false;
 let typingTimers = {};
 let typingSent = false;
 let typingSelfTimer = null;
+let mentionCache = null;
 
 function applyTheme(t) {
   const v = (t === 'light' || t === 'auto') ? t : 'dark';
@@ -234,6 +235,31 @@ function pollHtml(p) {
   </div>`;
 }
 
+function mentionSet() {
+  const cid = CD.chat ? CD.chat.id : null;
+  if (!mentionCache || mentionCache.cid !== cid) {
+    const set = new Set();
+    if (window.ME && window.ME.username) set.add(window.ME.username.toLowerCase());
+    (CD.members || []).forEach(u => { if (u && u.username) set.add(u.username.toLowerCase()); });
+    mentionCache = { cid, set };
+  }
+  return mentionCache.set;
+}
+
+function mentionify(html) {
+  if (!html || html.indexOf('@') < 0) return html;
+  const known = mentionSet();
+  const parts = String(html).split(/(<[^>]*>)/g);
+  return parts.map(seg => {
+    if (!seg || seg.charAt(0) === '<') return seg;
+    return seg.replace(/(^|[^@A-Za-z0-9_.])@([A-Za-z0-9_]{2,32})/g, (all, pre, un) => {
+      if (!known.has(un.toLowerCase())) return all;
+      const mine = un.toLowerCase() === ((window.ME && window.ME.username) || '').toLowerCase();
+      return pre + `<span class="mention${mine ? ' me' : ''}" data-un="${un}" role="link" tabindex="0">@${un}</span>`;
+    });
+  }).join('');
+}
+
 function renderMsg(m) {
   if (m.deleted) return '';
   if (m.msg_type === 'system') {
@@ -247,7 +273,7 @@ function renderMsg(m) {
   let body = '';
   if (m.msg_type === 'image') {
     body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
-    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
   } else if (m.msg_type === 'gif') {
     if (/\.mp4$/i.test(m.file_name || '')) {
       body = `<div class="vid-wrap"><video class="vid" src="${url}" muted loop autoplay playsinline preload="metadata"></video>`
@@ -255,11 +281,11 @@ function renderMsg(m) {
     } else {
       body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
     }
-    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
   } else if (m.msg_type === 'video') {
     body = `<div class="vid-wrap"><video class="vid" src="${url}" controls preload="metadata" playsinline></video>`
       + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
-    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
   } else if (m.msg_type === 'audio') {
     const vcMine = m.sender_id === window.ME.id;
     const vcTitle = vcMine ? 'پیام صوتی من' : ((m.sender_id ? getMember(m.sender_id) : null) ? (getMember(m.sender_id).display_name || 'پیام صوتی') : 'پیام صوتی');
@@ -270,7 +296,7 @@ function renderMsg(m) {
       <span class="vc-times"><span class="vc-cur">0:00</span><span class="vc-dur">…</span></span>
     </div>`;
     ensureVoiceMeta(m, vcTitle);
-    if (m.content) body += `<div class="txt">${esc(m.content)}</div>`;
+    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
   } else if (m.msg_type === 'file') {
     body = `<div class="file-card"><div class="fi">${bi(fileIcon(m.file_name))}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
     if (m.file_url) {
@@ -281,7 +307,7 @@ function renderMsg(m) {
     if (m.poll) {
       body = `${pollHtml(m.poll)}`;
     } else {
-      body = `<div class="txt md">${md(m.content)}</div>`;
+      body = `<div class="txt md">${mentionify(md(m.content))}</div>`;
     }
   }
 
@@ -299,6 +325,7 @@ function renderMsg(m) {
   const fwd = m.fwd_from_name ? `<div class="fwd-tag">${bi('share')} فوروارد شده از <b>${esc(m.fwd_from_name)}</b></div>` : '';
   const pinTag = m.pinned ? `<span class="pin-tag">${bi('pin-angle-fill')} پین شده</span>` : '';
   const title = (!mine && sender.title) ? ` <span class="member-title" title="لقب در این گروه">${esc(sender.title)}</span>` : '';
+  const mentionMe = !mine && m.msg_type !== 'system' && m.content && (window.ME && window.ME.username) && m.content.toLowerCase().indexOf('@' + window.ME.username.toLowerCase()) >= 0;
   const isDm = !!(CD.chat && CD.chat.chat_type === 'dm');
   const isChannel = !!(CD.chat && CD.chat.chat_type === 'channel');
   const showSender = !mine && !isDm && !isChannel && newGroup;
@@ -306,7 +333,7 @@ function renderMsg(m) {
   const html = `
     <div class="mrow ${mineRow ? 'mine-row' : ''} ${newGroup ? 'who' : ''}" data-mid="${m.id}">
       ${(!mine && !isChannel) ? (groupTail ? `<span class="av-click" data-profile-user="${esc(sender.username || '')}">${avBox(sender.display_name, sender.avatar, sender.status === 'online', 'sm')}</span>` : '<div class="avatar sm ghost"></div>') : ''}
-      <div class="bubble ${(!isChannel && mine) ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''}">
+      <div class="bubble ${(!isChannel && mine) ? 'me' : ''} ${isMedia ? 'has-img' : ''} ${imgOnly ? 'img-only' : ''} ${m.pinned ? 'pinned' : ''} ${!newGroup ? 'compact' : ''} ${mentionMe ? 'has-mention' : ''}">
         ${showSender ? `<div class="sender-line">${esc(sender.display_name)}${title}</div>` : ''}
         ${fwd}${reply}${body}
         <div class="m-meta">
@@ -535,9 +562,12 @@ function updateConvPreview(m) {
   const sys = m.msg_type === 'system';
   const mine = m.sender_id === window.ME.id;
   let prefix = '';
+  const mentionedMe = !sys && !mine && m.content && window.ME && window.ME.username &&
+    m.content.toLowerCase().indexOf('@' + window.ME.username.toLowerCase()) >= 0;
+  if (mentionedMe) prefix = '@شما · ';
   if (!sys && el.dataset.type !== 'dm') {
     if (mine) prefix = 'شما · ';
-    else {
+    else if (!mentionedMe) {
       const mm = (CD.members || []).find(x => x.id === m.sender_id);
       if (!mm) { refreshConvList(); return; }
       prefix = (mm.display_name || 'کاربر') + ' · ';
@@ -953,6 +983,7 @@ function setChatted(on) {
 document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
 async function openChat(id, opts) {
+  closeMentionMenu();
   if (recState) finishRec(false);
   const inputEl = document.getElementById('msgInput');
   if (composerChatId) {
@@ -1431,6 +1462,12 @@ function doReact(mid, emoji) {
 }
 
 document.addEventListener('click', e => {
+  const men = e.target.closest('.mention[data-un]');
+  if (men) {
+    e.preventDefault();
+    window.location.href = '/profile/' + encodeURIComponent(men.dataset.un);
+    return;
+  }
   const avc = e.target.closest('[data-profile-user]');
   if (avc) {
     const uname = avc.dataset.profileUser;
@@ -1493,6 +1530,7 @@ async function sendText(caption) {
   if (sending || !currentChat) return;
   const chatId = currentChat;
   const input = document.getElementById('msgInput');
+  closeMentionMenu();
   if (input.disabled) {
     if (pendingFiles.some(f => f.status === 'ready')) toast('تو این گپ نمی‌تونی پیام بفرستی', 'error');
     return;
@@ -1925,7 +1963,33 @@ async function loadPinned() {
 
 document.getElementById('btnSend').onclick = sendText;
 document.getElementById('msgInput').addEventListener('keydown', e => {
-  if (e.key === 'Enter' && !e.shiftKey) {
+  if (mentionOpen) {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      if (mentionMatches.length > 1) {
+        mentionSel = (mentionSel + 1) % mentionMatches.length;
+        renderMentionList();
+      }
+      return;
+    }
+    if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      if (mentionMatches.length > 1) {
+        mentionSel = (mentionSel - 1 + mentionMatches.length) % mentionMatches.length;
+        renderMentionList();
+      }
+      return;
+    }
+    if (e.key === 'Enter' || e.key === 'Tab') {
+      e.preventDefault();
+      completeMention(mentionSel);
+      return;
+    }
+    if (e.key === 'Escape') {
+      closeMentionMenu();
+    }
+  }
+  if (e.key === 'Enter' && !e.shiftKey && !mentionOpen) {
     e.preventDefault();
     sendText();
   }
@@ -1940,6 +2004,7 @@ document.getElementById('msgInput').addEventListener('input', function () {
   this.style.height = Math.min(this.scrollHeight, 140) + 'px';
   if (!currentChat) return;
   queueDraftSave();
+  openMentionMenu(this);
   if (!typingSent) {
     S.emit('typing', { chat_id: currentChat });
     typingSent = true;
@@ -1951,6 +2016,12 @@ document.getElementById('msgInput').addEventListener('input', function () {
       S.emit('stop_typing', { chat_id: currentChat });
     }
   }, 3000);
+});
+document.getElementById('msgInput').addEventListener('blur', () => {
+  setTimeout(() => { if (mentionOpen && !document.activeElement.closest?.('#mentionMenu')) closeMentionMenu(); }, 180);
+});
+document.addEventListener('click', e => {
+  if (mentionOpen && !e.target.closest('#mentionMenu')) closeMentionMenu();
 });
 
 document.getElementById('btnAttach').onclick = e => { e.stopPropagation(); toggleAttachMenu(); };
@@ -1975,6 +2046,93 @@ function toggleAttachMenu() {
 document.addEventListener('click', e => {
   if (!e.target.closest('#attachMenu') && !e.target.closest('#btnAttach')) closeAttachMenu();
 });
+
+const mentionMenu = document.getElementById('mentionMenu');
+const mentionList = document.getElementById('mentionList');
+let mentionOpen = false;
+let mentionSel = 0;
+let mentionMatches = [];
+let mentionTok = null;
+
+function mentionTokenAt(input, pos) {
+  const before = input.value.slice(0, pos);
+  const mm = before.match(/(?:^|\s)@([A-Za-z0-9_]{0,24})$/);
+  if (!mm) return null;
+  return { start: pos - mm[1].length - 1, partial: mm[1] };
+}
+
+function closeMentionMenu() {
+  if (!mentionMenu) return;
+  mentionOpen = false;
+  mentionMenu.classList.remove('show');
+  if (mentionList) mentionList.innerHTML = '';
+  mentionMatches = [];
+  mentionTok = null;
+}
+
+function renderMentionList() {
+  mentionList.innerHTML = mentionMatches.map((u, i) =>
+    `<div class="mn-item${i === mentionSel ? ' cur' : ''}" data-mi="${i}" role="menuitem">${avBox(u.display_name, u.avatar, false, 'sm')}` +
+    `<div class="mn-txt"><b>${esc(u.display_name || u.username || '')}</b><small>@${esc(u.username || '')}</small></div></div>`
+  ).join('');
+  mentionList.querySelectorAll('.mn-item').forEach(el => {
+    el.addEventListener('mousedown', e => {
+      e.preventDefault();
+      completeMention(+el.dataset.mi);
+    });
+  });
+}
+
+function positionMentionMenu(input) {
+  const r = input.getBoundingClientRect();
+  const mw = mentionMenu.offsetWidth, mh = mentionMenu.offsetHeight;
+  let left = Math.max(8, Math.min(r.left, window.innerWidth - mw - 8));
+  let top = r.top - mh - 8;
+  if (top < 8) top = Math.min(r.bottom + 8, window.innerHeight - mh - 8);
+  mentionMenu.style.left = left + 'px';
+  mentionMenu.style.top = top + 'px';
+}
+
+function openMentionMenu(input) {
+  if (!currentChat || !CD.chat || CD.chat.chat_type === 'dm' || !(CD.members || []).length) {
+    closeMentionMenu();
+    return;
+  }
+  const pos = input.selectionStart != null ? input.selectionStart : input.value.length;
+  const tok = mentionTokenAt(input, pos);
+  if (!tok) {
+    closeMentionMenu();
+    return;
+  }
+  const q = tok.partial.toLowerCase();
+  mentionMatches = (CD.members || [])
+    .filter(u => u && u.username && (u.username.toLowerCase().startsWith(q) || String(u.display_name || '').toLowerCase().includes(q)))
+    .slice(0, 8);
+  if (!mentionMatches.length) {
+    closeMentionMenu();
+    return;
+  }
+  mentionSel = 0;
+  mentionTok = tok;
+  renderMentionList();
+  mentionOpen = true;
+  mentionMenu.classList.add('show');
+  positionMentionMenu(input);
+}
+
+function completeMention(idx) {
+  const input = document.getElementById('msgInput');
+  const u = mentionMatches[idx];
+  if (!u || !mentionTok) return;
+  const v = input.value;
+  const cursor = input.selectionStart != null ? input.selectionStart : mentionTok.start + 1 + mentionTok.partial.length;
+  input.value = v.slice(0, mentionTok.start) + '@' + u.username + ' ' + v.slice(cursor);
+  const caret = mentionTok.start + '@' + u.username.length + 1;
+  input.setSelectionRange(caret, caret);
+  closeMentionMenu();
+  input.focus();
+  queueDraftSave();
+}
 attachMenu.querySelectorAll('[data-attach]').forEach(it => {
   it.addEventListener('click', () => {
     const kind = it.dataset.attach;
