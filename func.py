@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
-from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Avatar
+from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Avatar, Poll, PollVote, Gif
 from config import ADMIN_USERNAME
 from sqlalchemy.orm import joinedload
 
@@ -749,10 +749,17 @@ def avatar_html(user, size=''):
     cls = f'avatar {size}'.strip()
     if isinstance(user, dict):
         av = user.get('avatar', '')
-        initial = escape((user.get('display_name') or '?').strip()[:1])
-        inner = f'<img src="{escape(av)}" alt="">' if av else initial
+        name = (user.get('display_name') or '?').strip()
+        initial = escape(name[:1])
+        alt = escape(name).replace('"', '&quot;')
+        url = escape(av).replace('"', '&quot;')
+        inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if av else initial
         return f'<div class="{cls}">{inner}</div>'
-    inner = f'<img src="{escape(user.avatar_url)}" alt="">' if user.avatar else escape((user.public_name or '?').strip()[:1])
+    name = (user.public_name or '?').strip()
+    initial = escape(name[:1])
+    alt = escape(name).replace('"', '&quot;')
+    url = escape(user.avatar_url).replace('"', '&quot;')
+    inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if user.avatar else initial
     return f'<div class="{cls}">{inner}</div>'
 
 
@@ -788,6 +795,12 @@ def delete_user_account(uid, reassign_to=None):
             {'message_id': None}, synchronize_session=False)
         HiddenMessage.query.filter(HiddenMessage.message_id.in_(msg_ids)).delete(
             synchronize_session=False)
+        poll_ids = [p[0] for p in db.session.query(Poll.id).filter(
+            Poll.message_id.in_(msg_ids)).all()]
+        if poll_ids:
+            PollVote.query.filter(PollVote.poll_id.in_(poll_ids)).delete(
+                synchronize_session=False)
+            Poll.query.filter(Poll.id.in_(poll_ids)).delete(synchronize_session=False)
     if dm_chat_ids:
         HiddenMessage.query.filter(HiddenMessage.chat_id.in_(dm_chat_ids)).delete(
             synchronize_session=False)
@@ -799,6 +812,12 @@ def delete_user_account(uid, reassign_to=None):
         db.session.flush()
     Message.query.filter_by(sender_id=uid).delete(synchronize_session=False)
     ChatMember.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    PollVote.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    Poll.query.filter_by(created_by=uid).update(
+        {'created_by': None}, synchronize_session=False)
+    Gif.query.filter_by(user_id=uid).delete(synchronize_session=False)
+    db.session.execute(
+        db.text("DELETE FROM hangman_games WHERE host_id = :uid"), {"uid": uid})
     Block.query.filter(db.or_(Block.user_id == uid, Block.blocked_user_id == uid)).delete(
         synchronize_session=False)
     Report.query.filter(db.or_(Report.reporter_id == uid, Report.reported_id == uid)).delete(

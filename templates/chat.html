@@ -124,6 +124,9 @@
       <button class="scroll-down" id="scrollDown" title="آخرین پیام‌ها" aria-label="آخرین پیام‌ها">
         {{ bi('chevron-down') }}
       </button>
+      <button class="scroll-up" id="jumpFirst" title="رفتن به اولین پیام" aria-label="رفتن به اولین پیام">
+        {{ bi('arrow-up-circle') }}
+      </button>
       <div class="typing-bar" id="typingBar"></div>
       <div class="channel-hint" id="channelHint" style="display:none"><span>{{ bi('lock') }} در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
       <div class="channel-hint slow-hint" id="slowModeHint" style="display:none"></div>
@@ -264,6 +267,7 @@
     </div>
     <div class="row">
       <button class="btn ghost" id="csClose">بستن</button>
+      <button class="btn danger" id="csWipe" style="display:none">{{ bi('trash') }} پاک کردن همه پیام‌ها</button>
       <button class="btn danger" id="csLeave" style="display:none">خروج از گپ</button>
       <button class="btn danger" id="csDelete" style="display:none">حذف گپ</button>
       <button class="btn primary" id="csSave">ذخیره تغییرات</button>

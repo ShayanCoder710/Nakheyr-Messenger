@@ -237,7 +237,10 @@ function pollHtml(p) {
 function renderMsg(m) {
   if (m.deleted) return '';
   if (m.msg_type === 'system') {
-    return `<div class="sys-msg" data-mid="${m.id}"><span>${esc(m.content)}</span></div>`;
+    if (m.sender_id) {
+      return `<div class="sys-msg" data-mid="${m.id}"><span>${esc(m.content)}</span></div>`;
+    }
+    return `<div class="sys-msg sys-app" data-mid="${m.id}"><span><i class="sys-app-av">${bi('rocket')}</i>نخیر · ${esc(m.content)}</span></div>`;
   }
   const url = esc(m.file_url || '');
   const fname = esc(m.file_name || '');
@@ -378,20 +381,63 @@ function scrollToBottom(force) {
 
 function updateScrollBtn() {
   const btn = document.getElementById('scrollDown');
+  const up = document.getElementById('jumpFirst');
   const el = document.getElementById('msgs');
   if (!btn || !el) return;
   const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
   btn.classList.toggle('show', dist > 220);
+  if (up) up.classList.toggle('show', currentChat && el.scrollTop <= 40);
+}
+
+function updateFirstBtn() {
+  const up = document.getElementById('jumpFirst');
+  const el = document.getElementById('msgs');
+  if (up && el) up.classList.toggle('show', !!currentChat && el.scrollTop <= 40);
+}
+
+let firstLoading = false;
+function syncJumpFirstPos() {
+  const up = document.getElementById('jumpFirst');
+  const msgs = document.getElementById('msgs');
+  if (!up || !msgs) return;
+  if (msgs.offsetWidth === 0) return;
+  up.style.top = (msgs.offsetTop + 8) + 'px';
+}
+async function jumpToFirst() {
+  if (!currentChat || firstLoading) return;
+  const el = document.getElementById('msgs');
+  if (!el || el.scrollTop > 60) return;
+  firstLoading = true;
+  const up = document.getElementById('jumpFirst');
+  up.classList.add('busy');
+  try {
+    const j = await (await fetch('/api/messages/' + currentChat + '?first=1')).json();
+    if (j.messages && j.messages.length) {
+      j.messages = j.messages.filter(m => !document.getElementById('m' + m.id));
+      if (j.messages.length) {
+        prependOlder(j);
+      }
+    }
+    el.scrollTo({ top: 0, behavior: 'smooth' });
+    const topRow = document.getElementById('msgsBody').querySelector('.mrow');
+    if (topRow) flashMsg(topRow);
+  } catch (_) {}
+  firstLoading = false;
+  up.classList.remove('busy');
 }
 
 (function initScrollDown() {
   const el = document.getElementById('msgs');
   const btn = document.getElementById('scrollDown');
   if (!el || !btn) return;
+  const up = document.getElementById('jumpFirst');
   el.addEventListener('scroll', updateScrollBtn, { passive: true });
   new MutationObserver(updateScrollBtn).observe(el, { childList: true, subtree: true });
   btn.addEventListener('click', () => { el.scrollTop = el.scrollHeight; updateScrollBtn(); });
-  window.addEventListener('resize', updateScrollBtn);
+  if (up) up.addEventListener('click', jumpToFirst);
+  window.addEventListener('resize', () => { updateScrollBtn(); syncJumpFirstPos(); });
+  if (typeof ResizeObserver === 'function') new ResizeObserver(syncJumpFirstPos).observe(el);
+  syncJumpFirstPos();
   updateScrollBtn();
 })();
 
@@ -577,7 +623,7 @@ function setHead() {
       else subText += ' · برای ورود دعوت شو';
     }
   }
-  headAv.innerHTML = (av ? '<img src="' + av + '" alt="">' : (displayName || '؟').charAt(0));
+  headAv.innerHTML = (av ? '<span class="av-init">' + esc((displayName || '؟').charAt(0)) + '</span><img src="' + av + '" alt="' + esc(displayName || '') + '">' : (displayName || '؟').charAt(0));
   const oType = (c.chat_type === 'dm') ? 'user' : 'chat';
   const oId = (c.chat_type === 'dm') ? (c.peer ? c.peer.id : null) : c.id;
   setAvatarData(headAv, av, displayName || '', oType, oId);
@@ -646,6 +692,8 @@ document.querySelectorAll('.modal').forEach(mod => {
 document.addEventListener('keydown', e => {
   if (e.key === 'Escape') {
     document.querySelectorAll('.modal.show, .report-modal.show').forEach(m => m.classList.remove('show'));
+    document.getElementById('ctxMenu').classList.remove('show');
+    closeAttachMenu();
     hidePicker();
     cancelSelect();
     const cs = document.getElementById('chatSearch');
@@ -827,7 +875,7 @@ function openPollVotersModal(pid) {
         const u = v.user || {};
         const picks = (v.picks || []).join('، ');
         return `<div class="pv-row">
-          <span class="avatar sm">${u.avatar ? '<img src="' + esc(u.avatar) + '" alt="">' : esc((u.display_name || '?').charAt(0))}</span>
+          <span class="avatar sm" data-name="${esc(u.display_name || '?')}">${u.avatar ? '<span class="av-init">' + esc((u.display_name || '?').charAt(0)) + '</span><img src="' + esc(u.avatar) + '" alt="' + esc(u.display_name || '') + '">' : esc((u.display_name || '?').charAt(0))}</span>
           <div class="pv-id"><b>${esc(u.display_name || 'کاربر')}</b><small>${esc(picks || '—')}</small></div>
         </div>`;
       }).join('');
@@ -982,7 +1030,7 @@ function renderConvItem(it) {
   if (it.is_notes) {
     av = `<div class="avatar conv-av" style="border-radius:14px">${bi('bookmark')}</div>`;
   } else if (it.avatar) {
-    av = `<div class="avatar conv-av" style="border-radius:14px"><img src="${it.avatar}" alt=""></div>`;
+    av = `<div class="avatar conv-av" style="border-radius:14px"><span class="av-init">${esc((it.name || '؟').charAt(0))}</span><img src="${it.avatar}" alt="${esc(it.name || '')}"></div>`;
   } else {
     av = `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
   }
@@ -1008,7 +1056,7 @@ function loadConvList() {
   fetch('/api/conversations').then(r => r.json()).then(j => {
     if (seq !== convSeq) return;
     const byCat = { dm: [], group: [], channel: [], notes: [], archive: [] };
-    j.conversations.forEach(it => {
+    (j.conversations || []).forEach(it => {
       if (it.archived && !it.is_notes) { byCat.archive.push(it); return; }
       const cat = it.is_notes ? 'notes' : it.chat_type;
       byCat[cat] = byCat[cat] || [];
@@ -1473,6 +1521,7 @@ async function sendText(caption) {
         if (i > -1) pendingFiles.splice(i, 1);
       }
       if (currentChat === chatId) {
+        if (r.wiped) wipeChatDom();
         appendMsg(r.message);
         if (caption === undefined) {
           input.value = '';
@@ -1579,6 +1628,14 @@ function hideForMe(mid) {
   const i = arr.findIndex(x => x.id === mid);
   if (i > -1) arr.splice(i, 1);
   api('/api/message/hide', { message_id: mid }).then(j => { if (!j.ok) toast(j.error || 'حذف نشد', 'error'); });
+}
+
+function wipeChatDom() {
+  CD.initialMessages = [];
+  CD.pins = [];
+  oldestId = null;
+  document.getElementById('msgsBody').innerHTML = '';
+  renderPinnedBar();
 }
 
 function clearHistory(chatId) {
@@ -1724,7 +1781,7 @@ function localSetPin(mid, pinned) {
   CD.pins = (CD.pins || []).filter(p => +p.id !== +mid);
   if (pinned) {
     const m = (CD.initialMessages || []).find(x => x.id === mid);
-    if (m) { m.pinned = true; CD.pins.unshift({ id: mid, m, sender: getMember(m.sender_id) }); }
+    if (m) { m.pinned = true; CD.pins.unshift({ id: mid, m, sender: m.sender_id ? getMember(m.sender_id) : null }); }
   }
   syncPinRows(CD.pins.map(p => p.id));
   loadPinned();
@@ -1795,7 +1852,7 @@ function renderPinnedBar() {
   const p = CD.pins[0];
   const moreChip = CD.pins.length > 1
     ? `<span class="pin-count" title="${CD.pins.length} پیام پین شده">${CD.pins.length}</span>` : '';
-  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${pinThumb(p.m)}<span class="pin-bar-text"><b>${esc((p.sender || {}).display_name || 'کاربر')}</b><span>${esc(pinSnippet(p.m))}</span></span>${moreChip}<button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
+  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${pinThumb(p.m)}<span class="pin-bar-text"><b>${esc(p.sender ? (p.sender.display_name || 'کاربر') : 'نخیر')}</b><span>${esc(pinSnippet(p.m))}</span></span>${moreChip}<button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
   bar.style.display = 'flex';
   bar.querySelector('.pin-bar-text').onclick = () => {
     if (CD.pins.length > 1) openPinsModal();
@@ -1825,7 +1882,7 @@ function openPinsModal() {
     const t = p.m.created_at ? fmtTime(p.m.created_at) : '';
     return `<div class="pin-item" data-pid="${p.id}">
       <span class="pin-item-ic">${bi(ic)}</span>
-      <span class="pin-item-body"><b>${esc((p.sender || {}).display_name || 'کاربر')}</b><span>${esc(pinSnippet(p.m))}</span><em>${esc(t)}</em></span>
+      <span class="pin-item-body"><b>${esc(p.sender ? (p.sender.display_name || 'کاربر') : 'نخیر')}</b><span>${esc(pinSnippet(p.m))}</span><em>${esc(t)}</em></span>
       <button class="pin-item-btn" data-jump="${p.id}" title="رفتن به پیام">${bi('chevron-down')}</button>
       <button class="pin-item-btn danger" data-unpin="${p.id}" title="لغو پین">${bi('pin-angle')}</button>
     </div>`;
@@ -1903,17 +1960,11 @@ const attachBtn = document.getElementById('btnAttach');
 function openAttachMenu() {
   attachMenu.classList.add('show');
   const r = attachBtn.getBoundingClientRect();
-  const mh = attachMenu.offsetHeight;
-  const isMobile = window.matchMedia('(max-width: 860px)').matches;
-  if (isMobile) {
-    attachMenu.style.top = Math.max(12, r.top - mh - 12) + 'px';
-    return;
-  }
-  const mw = attachMenu.offsetWidth;
+  const mw = attachMenu.offsetWidth, mh = attachMenu.offsetHeight;
   let left = r.left + r.width / 2 - mw / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
   let top = r.top - mh - 10;
-  if (top < 8) top = r.bottom + 10;
+  if (top < 8) top = Math.min(r.bottom + 10, window.innerHeight - mh - 8);
   attachMenu.style.left = left + 'px';
   attachMenu.style.top = top + 'px';
 }
@@ -2040,7 +2091,8 @@ function ensureVoiceMeta(m, title) {
     vcCache.set(m.id, { url: m.file_url, peaks: null, dur: 0, audio: null, speed: 1, title: title || 'پیام صوتی' });
   }
   const st = vcCache.get(m.id);
-  if (!st.audio) {
+  if (!st.peaks && !st._fetching) {
+    st._fetching = true;
     fetch(m.file_url).then(r => r.arrayBuffer()).then(buf => {
       const AC = window.AudioContext || window.webkitAudioContext;
       const ctx = new AC();
@@ -2061,7 +2113,7 @@ function ensureVoiceMeta(m, title) {
         ctx.close();
         vcPaint(m.id);
       });
-    }).catch(() => {});
+    }).catch(() => { st._fetching = false; });
   }
 }
 function vcSpeedLabel(s) { return (s === 1 ? '1' : s) + 'x'; }
@@ -3068,6 +3120,10 @@ function openSettings() {
   loadMembers(c.id);
   const leave = document.getElementById('csLeave');
   leave.style.display = (c.chat_type !== 'dm' && role && role !== 'owner') ? 'inline-flex' : 'none';
+  const wipe = document.getElementById('csWipe');
+  const canWipe = c.chat_type === 'group' && (role === 'owner' || role === 'admin' || window.ME.is_admin);
+  wipe.style.display = canWipe ? 'inline-flex' : 'none';
+  wipe.dataset.chatId = c.id;
   const del = document.getElementById('csDelete');
   const canDel = (role === 'owner' || window.ME.is_admin) && c.chat_type !== 'dm';
   del.style.display = canDel ? 'inline-flex' : 'none';
@@ -3311,6 +3367,20 @@ document.getElementById('csSave').onclick = async () => {
     setHead();
     refreshConvList();
   } else toast(r.error, 'error');
+};
+
+document.getElementById('csWipe').onclick = () => {
+  const cid = +document.getElementById('csWipe').dataset.chatId || currentChat;
+  openConfirm('پاک کردن همه پیام‌ها',
+    'همه‌ی پیام‌های این گروه برای همه‌ی اعضا پاک می‌شه. این کار قابل بازگشت نیست. می‌تونی به‌جاش از همون کادر پیام، «حذف کل پیام ها» رو بفرستی', () => {
+      api('/api/chat/' + cid + '/clear', { for_everyone: true }).then(r => {
+        if (r.ok) {
+          toast('همه پیام‌ها پاک شد');
+          document.getElementById('chatSettingsModal').classList.remove('show');
+          refreshConvList();
+        } else toast(r.error || 'انجام نشد', 'error');
+      });
+    }, 'پاک شدن');
 };
 
 document.getElementById('csLeave').onclick = () => {
@@ -3724,8 +3794,11 @@ function showCtxMenu(x, y, items) {
   }).join('');
   menu.classList.add('show');
   const mw = menu.offsetWidth, mh = menu.offsetHeight;
-  menu.style.left = Math.min(x, window.innerWidth - mw - 8) + 'px';
-  menu.style.top = Math.min(y, window.innerHeight - mh - 8) + 'px';
+  let left = Math.max(8, Math.min(x, window.innerWidth - mw - 8));
+  let top = Math.max(8, Math.min(y, window.innerHeight - mh - 8));
+  if (mh > window.innerHeight - 16) top = 8;
+  menu.style.left = left + 'px';
+  menu.style.top = top + 'px';
 }
 
 document.getElementById('ctxMenu').addEventListener('click', e => {
@@ -4033,6 +4106,14 @@ S.on('chat_cleared', d => {
     CD.pins = [];
     renderAllMessages();
     renderPinnedBar();
+  }
+  refreshConvList();
+});
+
+S.on('chat_wiped', d => {
+  if (d.chat_id === currentChat) {
+    wipeChatDom();
+    if (d.message) appendMsg(d.message);
   }
   refreshConvList();
 });

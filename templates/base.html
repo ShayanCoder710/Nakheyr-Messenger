@@ -105,14 +105,41 @@ window.bi = function(name, cls) {
 window.avatarHtml = function(name, avatar, online, size) {
   const cls = ('avatar' + (size ? ' ' + size : '')).trim();
   const initial = (name || '?').trim().charAt(0);
+  const alt = esc(name || '').replace(/"/g, '&quot;');
+  const url = esc(avatar || '').replace(/"/g, '&quot;');
   const dot = avatar ? '' : (online === undefined ? '' : '<i class="dot ' + (online ? 'on' : 'off') + '"></i>');
-  return '<div class="' + cls + '">' + (avatar ? '<img src="' + avatar + '" alt="">' : initial) + dot + '</div>';
+  const inner = avatar ? '<span class="av-init">' + esc(initial) + '</span><img src="' + url + '" alt="' + alt + '">' : esc(initial);
+  return '<div class="' + cls + '">' + inner + dot + '</div>';
 };
 window.avatarInner = function(name, avatar, online) {
   const initial = esc((name || '?').trim().charAt(0));
+  const alt = esc(name || '').replace(/"/g, '&quot;');
+  const url = esc(avatar || '').replace(/"/g, '&quot;');
   const dot = avatar ? '' : (online === undefined ? '' : '<i class="dot ' + (online ? 'on' : 'off') + '"></i>');
-  return (avatar ? '<img src="' + avatar + '" alt="">' : initial) + dot;
+  return (avatar ? '<span class="av-init">' + initial + '</span><img src="' + url + '" alt="' + alt + '">' : initial) + dot;
 };
+document.addEventListener('error', function (e) {
+  const img = e.target;
+  if (!img || img.tagName !== 'IMG') return;
+  const host = img.closest ? img.closest('.avatar') : null;
+  if (host) {
+    if (img.dataset.fb) return;
+    img.dataset.fb = '1';
+    const initial = ((img.getAttribute('alt') || host.getAttribute('data-name') || '?').trim().charAt(0)) || '?';
+    const s = document.createElement('span');
+    s.className = 'av-init';
+    s.textContent = initial;
+    host.insertBefore(s, img);
+    img.remove();
+    return;
+  }
+  if (img.classList.contains('img')) {
+    const ph = document.createElement('div');
+    ph.className = 'media-missing';
+    ph.innerHTML = (window.bi ? bi('image') : '') + '<span>فایل در دسترس نیست</span>';
+    img.replaceWith(ph);
+  }
+}, true);
 window.copyText = function(text) {
   if (navigator.clipboard && navigator.clipboard.writeText) {
     return navigator.clipboard.writeText(text);

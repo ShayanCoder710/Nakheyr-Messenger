@@ -663,6 +663,12 @@ def api_chat_delete(chat_id):
             os.remove(p)
     member_ids = chat_member_ids(chat.id)
     HiddenMessage.query.filter_by(chat_id=chat.id).delete()
+    poll_ids = [p[0] for p in db.session.query(Poll.id).filter(Poll.chat_id == chat.id).all()]
+    if poll_ids:
+        PollVote.query.filter(PollVote.poll_id.in_(poll_ids)).delete(synchronize_session=False)
+        Poll.query.filter(Poll.id.in_(poll_ids)).delete(synchronize_session=False)
+    db.session.execute(
+        db.text("DELETE FROM hangman_games WHERE chat_id = :cid"), {"cid": chat.id})
     db.session.delete(chat)
     try:
         db.session.commit()
@@ -720,6 +726,23 @@ def api_send_message():
             if not p.get(need, False):
                 return jsonify(ok=False, error='اجازهٔ ارسال پیام در این گروه رو نداری')
     content = (data.get('content') or '').strip()
+    if chat.chat_type == 'group' and msg_type == 'text' and content == 'حذف کل پیام ها':
+        if not (user.is_admin or role in ('owner', 'admin')):
+            return jsonify(ok=False, error='فقط مالک یا ادمین گروه می‌تونه همه پیام‌ها رو حذف کنه')
+        wiped = Message.query.filter_by(chat_id=chat.id, deleted=False).all()
+        for m in wiped:
+            m.deleted = True
+            m.content = ''
+            m.pinned = False
+        db.session.flush()
+        m = Message(chat_id=chat.id, sender_id=None, msg_type='system',
+                    content='کل پیام‌های گروه شما حذف شد')
+        db.session.add(m)
+        db.session.commit()
+        payload = m.to_dict(user.id)
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_wiped', {'chat_id': chat.id, 'message': payload}, room=f'user:{mid}')
+        return jsonify(ok=True, message=payload, wiped=True, count=len(wiped))
     file_path = data.get('file_path') or ''
     file_name = (data.get('file_name') or '')[:160]
     if msg_type == 'text' and not content:
@@ -1733,15 +1756,20 @@ def api_messages(chat_id):
     if not chat or not can_view_chat(user, chat):
         abort(404)
     before = request.args.get('before', type=int)
+    first = bool(request.args.get('first'))
     hidden = [row[0] for row in db.session.execute(
         db.select(HiddenMessage.message_id).filter_by(user_id=user.id)
     ).all()]
     q = Message.query.filter_by(chat_id=chat.id, deleted=False)
     if hidden:
         q = q.filter(~Message.id.in_(hidden))
-    if before:
+    if first:
+        msgs = q.order_by(Message.id.asc()).limit(50).all()
+    elif before:
         q = q.filter(Message.id < before)
-    msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]
+        msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]
+    else:
+        msgs = q.order_by(Message.id.desc()).limit(50).all()[::-1]
     members = [{**m.user.to_public(), 'role': m.role, 'title': m.title or ''} for m in chat.members if m.user]
     membership = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
     joined = membership is not None or user.is_admin
