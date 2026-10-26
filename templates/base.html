@@ -48,6 +48,10 @@
     };
     X.__csrfPatched = true;
   }
+  document.addEventListener('error', e => {
+    const im = e.target;
+    if (im && im.tagName === 'IMG' && im.closest && im.closest('.avatar')) im.remove();
+  }, true);
 })();
 </script>
 <script>

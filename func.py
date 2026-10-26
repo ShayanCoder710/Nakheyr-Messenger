@@ -755,6 +755,7 @@ def bump_online(user):
 
 def avatar_html(user, size=''):
     from markupsafe import escape
+    import os as _os
     cls = f'avatar {size}'.strip()
     if isinstance(user, dict):
         av = user.get('avatar', '')
@@ -762,14 +763,26 @@ def avatar_html(user, size=''):
         initial = escape(name[:1])
         alt = escape(name).replace('"', '&quot;')
         url = escape(av).replace('"', '&quot;')
-        inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if av else initial
+        fname = av.rsplit('/', 1)[-1] if av else ''
+        inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if av and _avatar_file_ok(fname) else initial
         return f'<div class="{cls}">{inner}</div>'
     name = (user.public_name or '?').strip()
     initial = escape(name[:1])
     alt = escape(name).replace('"', '&quot;')
     url = escape(user.avatar_url).replace('"', '&quot;')
-    inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if user.avatar else initial
+    inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if user.avatar and _avatar_file_ok(user.avatar) else initial
     return f'<div class="{cls}">{inner}</div>'
+
+
+def _avatar_file_ok(fname):
+    import os
+    from flask import current_app
+    if not fname:
+        return False
+    try:
+        return os.path.isfile(os.path.join(current_app.config['AVATAR_DIR'], fname))
+    except Exception:
+        return True
 
 
 def admin_stats():
