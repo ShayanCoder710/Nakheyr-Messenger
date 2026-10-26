@@ -1465,7 +1465,8 @@ document.addEventListener('click', e => {
   const men = e.target.closest('.mention[data-un]');
   if (men) {
     e.preventDefault();
-    window.location.href = '/profile/' + encodeURIComponent(men.dataset.un);
+    const mUn = men.dataset.un;
+    if (mUn !== (window.ME && window.ME.username)) openDmByUsername(mUn);
     return;
   }
   const avc = e.target.closest('[data-profile-user]');
@@ -1473,7 +1474,7 @@ document.addEventListener('click', e => {
     const uname = avc.dataset.profileUser;
     if (uname && uname !== (window.ME && window.ME.username)) {
       e.preventDefault();
-      window.location.href = '/profile/' + encodeURIComponent(uname);
+      openDmByUsername(uname);
       return;
     }
   }
@@ -1481,7 +1482,7 @@ document.addEventListener('click', e => {
   if (memItem) {
     const mem = memberById(+memItem.dataset.mmember);
     if (mem && mem.username && mem.id !== window.ME.id) {
-      window.location.href = '/profile/' + encodeURIComponent(mem.username);
+      openDmByUsername(mem.username);
     }
     return;
   }
