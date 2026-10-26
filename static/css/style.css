@@ -1667,6 +1667,7 @@ table.data { width: 100%; border-collapse: collapse; }
     transition: opacity .22s ease, max-height .34s cubic-bezier(.4, 0, .2, 1),
                 padding .34s cubic-bezier(.4, 0, .2, 1);
   }
+  .sidebar .search-box:focus-within, .sidebar .search-box:has(.search-results.show) { overflow: visible; }
   .sidebar .side-head { transition: padding .32s ease, gap .32s ease; }
   .sidebar .side-head .avatar { transition: width .32s ease, height .32s ease; }
   .sidebar .conv { transition: padding .32s cubic-bezier(.4, 0, .2, 1), gap .32s cubic-bezier(.4, 0, .2, 1), background .14s ease; }
@@ -1726,6 +1727,7 @@ table.data { width: 100%; border-collapse: collapse; }
   .sidebar.search-open .search-box { display: block; animation: fadeIn .14s ease; }
   .search-box .search-ico { top: 20px; left: 21px; }
   .search-box .input { padding-left: 38px; }
+  .search-results { max-height: min(52vh, 340px); }
   .conv { padding: 9px 10px; }
   .msgs { padding: 14px 10px; }
   .scroll-down { right: 14px; bottom: 72px; width: 40px; height: 40px; }
