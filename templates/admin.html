@@ -68,7 +68,23 @@
       </div>
       <div class="report-list" id="reportList">
         {% for r in reports %}
-        <div class="report-item" data-rid="{{ r.id }}" data-uid="{{ r.reported_id }}" data-status="{{ r.status }}">
+        <div class="report-item" data-rid="{{ r.id }}" data-uid="{{ r.reported_id or 0 }}" data-kind="{{ r.target_type }}" data-status="{{ r.status }}">
+          {% if r.target_type == 'chat' %}
+          {{ avatar_html(r.reported_chat, 'sm') | safe if r.reported_chat else '<div class="avatar sm">؟</div>' }}
+          <div class="report-main">
+            <div class="report-top">
+              <b>{{ r.reported_chat.name if r.reported_chat else 'گپ حذف‌شده' }}</b>
+              <span class="report-kind">{{ 'کانال' if r.reported_chat and r.reported_chat.chat_type == 'channel' else 'گروه' }}</span>
+              <span class="report-status {{ 'st-open' if r.status == 'open' else 'st-closed' }}">{{ r.status | replace('open', 'باز') | replace('dismissed', 'رد شده') | replace('resolved', 'حل شده') }}</span>
+              <time>{{ r.created_at.strftime('%Y/%m/%d %H:%M') }}</time>
+            </div>
+            <p class="report-reason">{{ r.reason or 'بدون توضیح' }}</p>
+            <div class="report-meta">
+              توسط <a class="u-link" href="{{ url_for('profile', username=r.reporter.username) if r.reporter else '#' }}" title="پروفایل"> @{{ r.reporter.username if r.reporter else r.reporter_id }} </a>
+              {% if r.message_id %} · پیام #{{ r.message_id }}{% endif %}
+            </div>
+          </div>
+          {% else %}
           {{ avatar_html(r.reported, 'sm') | safe if r.reported else '<div class="avatar sm">؟</div>' }}
           <div class="report-main">
             <div class="report-top">
@@ -82,6 +98,7 @@
               {% if r.message_id %} · پیام #{{ r.message_id }}{% endif %}
             </div>
           </div>
+          {% endif %}
           <div class="report-actions">
             <button class="btn sm" data-act="view">{{ bi('chat-dots') }}<span>گفتگو</span></button>
             {% if r.status == 'open' %}

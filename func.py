@@ -766,7 +766,10 @@ def avatar_html(user, size=''):
         fname = av.rsplit('/', 1)[-1] if av else ''
         inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if av and _avatar_file_ok(fname) else initial
         return f'<div class="{cls}">{inner}</div>'
-    name = (user.public_name or '?').strip()
+    display_name = getattr(user, 'public_name', None)
+    if display_name is None:
+        display_name = getattr(user, 'name', None) or '?'
+    name = (display_name or '?').strip()
     initial = escape(name[:1])
     alt = escape(name).replace('"', '&quot;')
     url = escape(user.avatar_url).replace('"', '&quot;')

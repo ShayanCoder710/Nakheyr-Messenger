@@ -277,13 +277,16 @@ class Report(db.Model):
 
     id = db.Column(db.Integer, primary_key=True)
     reporter_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
-    reported_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
+    reported_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    target_type = db.Column(db.String(10), default='user')
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=True)
     message_id = db.Column(db.Integer, db.ForeignKey('messages.id'), nullable=True)
     reason = db.Column(db.String(300), default='')
     status = db.Column(db.String(10), default='open')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
     reporter = db.relationship('User', foreign_keys=[reporter_id])
     reported = db.relationship('User', foreign_keys=[reported_id])
+    reported_chat = db.relationship('Chat', foreign_keys=[chat_id])
 
 
 class Poll(db.Model):

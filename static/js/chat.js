@@ -693,9 +693,10 @@ function openReportFromBtn() {
   openReport({ id: +btn.dataset.target || 0, display_name: btn.dataset.name || 'کاربر' }, btn.dataset.msgid || '');
 }
 
-function openReport(target, messageId) {
+function openReport(target, messageId, chatId) {
   if (!target || !target.id) return;
-  window._reportTarget = target.id;
+  window._reportTarget = chatId ? 0 : target.id;
+  window._reportChatId = chatId || 0;
   window._reportMsgId = messageId;
   document.getElementById('reportTitle').textContent = 'گزارش از: ' + (target.display_name || target.username || 'کاربر');
   document.getElementById('reportReason').value = '';
@@ -952,7 +953,8 @@ document.getElementById('pollModal').addEventListener('click', e => {
 document.getElementById('btnSendReport').onclick = async () => {
   const reason = document.getElementById('reportReason').value.trim();
   if (!reason) return toast('دلیل رو بنویس', 'error');
-  const r = await api('/api/report', { user_id: +window._reportTarget, reason, message_id: window._reportMsgId || null });
+  const body = { user_id: +window._reportTarget || null, chat_id: +window._reportChatId || null, reason, message_id: window._reportMsgId || null };
+  const r = await api('/api/report', body);
   document.getElementById('reportModal').classList.remove('show');
   toast(r.ok ? 'گزارشتت ثبت شد. ادمین‌ها بررسی می‌کنن.' : r.error, r.ok ? 'success' : 'error');
 };
@@ -3339,6 +3341,10 @@ function openSettings() {
   const canDel = (role === 'owner' || window.ME.is_admin) && c.chat_type !== 'dm';
   del.style.display = canDel ? 'inline-flex' : 'none';
   del.dataset.chatId = c.id;
+  const rep = document.getElementById('csReport');
+  const canReport = c.chat_type !== 'dm' && !(role === 'owner' && !window.ME.is_admin);
+  rep.style.display = canReport ? 'inline-flex' : 'none';
+  rep.dataset.chatId = c.id;
   document.getElementById('chatSettingsModal').classList.add('show');
 }
 
@@ -3622,6 +3628,13 @@ document.getElementById('csDelete').onclick = () => {
         } else toast(r.error || 'حذف نشد', 'error');
       });
     }, 'حذف');
+};
+
+document.getElementById('csReport').onclick = () => {
+  const cid = +document.getElementById('csReport').dataset.chatId || currentChat;
+  const c = CD.chat || {};
+  const label = c.chat_type === 'channel' ? 'کانال' : 'گروه';
+  openReport({ id: cid, display_name: `${label} «${c.name || label}»` }, '', cid);
 };
 
 document.getElementById('sideProfileLink').addEventListener('click', e => {

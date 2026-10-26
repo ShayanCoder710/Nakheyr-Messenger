@@ -104,11 +104,12 @@ function handleReportAction(btn) {
   if (act !== 'dismiss' && act !== 'resolve') return;
 
   const target = item.querySelector('.report-top b').textContent.trim();
+  const kind = item.dataset.kind === 'chat';
   adminConfirm({
     title: act === 'dismiss' ? 'رد گزارش' : 'حل گزارش با مسدودسازی',
     text: act === 'dismiss'
       ? 'این گزارش به‌عنوان ردشده علامت می‌خورد.'
-      : 'کاربر «' + target + '» مسدود و گزارش حل می‌شود.',
+      : (kind ? 'صاحب گپ «' + target + '» مسدود و گزارش حل می‌شود.' : 'کاربر «' + target + '» مسدود و گزارش حل می‌شود.'),
     ok: act === 'dismiss' ? 'رد' : 'مسدودسازی',
     danger: true
   }).then(go => {

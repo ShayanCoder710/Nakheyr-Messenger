@@ -1408,6 +1408,10 @@ b, strong { font-weight: 800; }
 }
 .report-status.st-open { color: var(--accent-2); background: var(--accent-soft); border-color: rgba(229, 57, 59, .25); }
 .report-status.st-closed { color: var(--muted); background: var(--bg-3); }
+.report-kind {
+  font-size: 10px; font-weight: 700; border-radius: 999px; padding: 1px 8px;
+  color: var(--accent); background: color-mix(in srgb, var(--accent) 12%, transparent);
+}
 .report-reason {
   color: var(--muted); font-size: 13px; line-height: 1.6;
   background: rgba(0, 0, 0, .18); border-radius: 12px; padding: 8px 10px;

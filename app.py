@@ -1246,12 +1246,23 @@ def api_report():
         target = int(data.get('user_id') or 0)
     except (TypeError, ValueError):
         target = 0
+    try:
+        chat_target = int(data.get('chat_id') or 0)
+    except (TypeError, ValueError):
+        chat_target = 0
     reason = (data.get('reason') or '').strip()[:300]
-    reported = User.query.get(target)
-    if not target or not reported or reported.id == user.id:
-        return jsonify(ok=False, error='کاربر معتبر نیست')
     if not reason:
         return jsonify(ok=False, error='دلیل رو بنویس')
+    chat = None
+    reported = None
+    if chat_target and not target:
+        chat = Chat.query.get(chat_target)
+        if not chat or chat.chat_type == 'dm' or not can_view_chat(user, chat):
+            return jsonify(ok=False, error='گپ معتبر نیست')
+    else:
+        reported = User.query.get(target)
+        if not target or not reported or reported.id == user.id:
+            return jsonify(ok=False, error='کاربر معتبر نیست')
     message_id = data.get('message_id') or None
     if message_id:
         try:
@@ -1259,10 +1270,16 @@ def api_report():
         except (TypeError, ValueError):
             msg = None
         msg_chat = Chat.query.get(msg.chat_id) if msg else None
-        if not msg or msg.sender_id != reported.id or not msg_chat or not can_view_chat(user, msg_chat):
+        if not msg or not msg_chat or not can_view_chat(user, msg_chat):
+            return jsonify(ok=False, error='پیام گزارش معتبر نیست')
+        if reported and msg.sender_id != reported.id:
+            return jsonify(ok=False, error='پیام گزارش معتبر نیست')
+        if chat and msg_chat.id != chat.id:
             return jsonify(ok=False, error='پیام گزارش معتبر نیست')
         message_id = msg.id
-    db.session.add(Report(reporter_id=user.id, reported_id=target,
+    db.session.add(Report(reporter_id=user.id, reported_id=reported.id if reported else None,
+                          target_type='chat' if chat else 'user',
+                          chat_id=chat.id if chat else None,
                           message_id=message_id, reason=reason))
     db.session.commit()
     flash('گزارشتت ثبت شد. ادمین‌ها بررسی می‌کنن.', 'success')
@@ -2204,7 +2221,8 @@ def admin_panel():
     page = min(page, pages)
     users = uq.order_by(User.id.desc()).offset((page - 1) * ADMIN_PAGE_SIZE).limit(ADMIN_PAGE_SIZE).all()
 
-    rqc = Report.query.options(joinedload(Report.reporter), joinedload(Report.reported)).order_by(Report.id.desc())
+    rqc = Report.query.options(joinedload(Report.reporter), joinedload(Report.reported),
+                               joinedload(Report.reported_chat)).order_by(Report.id.desc())
     if rstatus == 'open':
         rqc = rqc.filter_by(status='open')
     reports = rqc.limit(100).all()
@@ -2291,7 +2309,28 @@ def admin_report_conversation(rid):
         Chat.members.any(ChatMember.user_id == r.reported_id),
     ).first()
     reporter = User.query.get(r.reporter_id)
-    reported = User.query.get(r.reported_id)
+    reported = User.query.get(r.reported_id) if r.reported_id else None
+    if r.target_type == 'chat':
+        target_chat = Chat.query.get(r.chat_id) if r.chat_id else None
+        reporter_name = reporter.public_name if reporter else ''
+        target_label = (f"{ 'کانال' if target_chat.chat_type == 'channel' else 'گروه' } «{ target_chat.name }»" if target_chat else 'گپ حذف‌شده')
+        out = []
+        if target_chat:
+            msgs = Message.query.filter_by(chat_id=target_chat.id) \
+                .order_by(Message.id.desc()).limit(200).all()
+            sender_ids = {m.sender_id for m in msgs if m.sender_id}
+            senders = {u.id: u.public_name for u in User.query.filter(User.id.in_(sender_ids)).all()} if sender_ids else {}
+            for m in msgs:
+                out.append({
+                    'id': m.id,
+                    'content': m.content,
+                    'msg_type': m.msg_type,
+                    'file_name': m.file_name,
+                    'deleted': bool(m.deleted),
+                    'created_at': m.created_at.strftime('%Y-%m-%d %H:%M'),
+                    'sender': senders.get(m.sender_id, 'کاربر'),
+                })
+        return jsonify(ok=True, messages=out, reporter=reporter_name, reported=target_label)
     names = {
         r.reporter_id: reporter.public_name if reporter else 'کاربر حذف‌شده',
         r.reported_id: reported.public_name if reported else 'کاربر حذف‌شده',
@@ -2327,7 +2366,11 @@ def admin_report(rid, action):
         return jsonify(ok=True, status='dismissed')
     if action == 'resolve':
         r.status = 'resolved'
-        target = User.query.get(r.reported_id)
+        if r.target_type == 'chat':
+            rchat = Chat.query.get(r.chat_id)
+            target = User.query.get(rchat.owner_id) if rchat else None
+        else:
+            target = User.query.get(r.reported_id)
         if target and not target.is_config_admin:
             target.is_banned = True
             target.status = 'offline'
