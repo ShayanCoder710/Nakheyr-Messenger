@@ -827,13 +827,13 @@ function openPollModal() {
   modal.classList.add('show');
   document.getElementById('pollQuestion').focus();
 }
-document.getElementById('btnPoll').onclick = () => {
+function openPollGuarded() {
   if (CD.chat && CD.chat.chat_type === 'dm') {
     toast('نظرسنجی تو پیوی نمی‌شه بفرستی. اول تو یه گروه یا کانال بساز، بعد فوروارد کن', 'error');
     return;
   }
   openPollModal();
-};
+}
 document.getElementById('pollCancel').onclick = () => document.getElementById('pollModal').classList.remove('show');
 document.getElementById('pollAddOpt').onclick = () => _addPollOption('');
 document.getElementById('pollOptions').addEventListener('click', e => {
@@ -1023,15 +1023,15 @@ async function openChat(id, opts) {
   document.getElementById('replyPreview').style.display = 'none';
   const canPost = !(j.chat.chat_type === 'channel' && CD.role !== 'owner' && CD.role !== 'admin' && !window.ME.is_admin);
   document.getElementById('msgInput').disabled = !canPost;
-  document.getElementById('btnAttach').style.visibility = canPost ? 'visible' : 'hidden';
-  document.getElementById('btnMic').style.visibility = canPost ? 'visible' : 'hidden';
-  document.getElementById('btnPoll').style.visibility = canPost ? 'visible' : 'hidden';
+  const endSlot = document.querySelector('.composer-end');
+  if (endSlot) endSlot.style.visibility = canPost ? 'visible' : 'hidden';
   document.getElementById('channelHint').style.display = canPost ? 'none' : 'flex';
   const savedDraft = typeof j.draft === 'string' ? j.draft : '';
   if (+composerChatId !== +id) inputEl.value = savedDraft;
   composerChatId = +id;
   inputEl.style.height = 'auto';
   inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
+  updateComposerSlot();
   renderSlowHint();
   renderAllMessages();
   attachMore();
@@ -1564,6 +1564,7 @@ async function sendText(caption) {
         if (caption === undefined) {
           input.value = '';
           input.style.height = 'auto';
+          updateComposerSlot();
         }
         pendingReply = null;
         renderAttachPreview();
@@ -1580,6 +1581,7 @@ async function sendText(caption) {
           } else {
             input.value = '';
             input.style.height = 'auto';
+            updateComposerSlot();
             flushDraftFor(chatId, '');
           }
         }, 250);
@@ -2002,6 +2004,7 @@ document.getElementById('msgInput').addEventListener('keydown', e => {
 document.getElementById('msgInput').addEventListener('input', function () {
   this.style.height = 'auto';
   this.style.height = Math.min(this.scrollHeight, 140) + 'px';
+  updateComposerSlot();
   if (!currentChat) return;
   queueDraftSave();
   openMentionMenu(this);
@@ -2024,13 +2027,18 @@ document.addEventListener('click', e => {
   if (mentionOpen && !e.target.closest('#mentionMenu')) closeMentionMenu();
 });
 
-document.getElementById('btnAttach').onclick = e => { e.stopPropagation(); toggleAttachMenu(); };
-
 const attachMenu = document.getElementById('attachMenu');
 const attachBtn = document.getElementById('btnAttach');
 function openAttachMenu() {
   attachMenu.classList.add('show');
   const r = attachBtn.getBoundingClientRect();
+  if (matchMedia('(max-width: 860px)').matches) {
+    const composer = document.querySelector('.composer');
+    attachMenu.style.top = '';
+    attachMenu.style.bottom = (composer ? window.innerHeight - composer.getBoundingClientRect().top + 10 : 20) + 'px';
+    return;
+  }
+  attachMenu.style.bottom = '';
   const mw = attachMenu.offsetWidth, mh = attachMenu.offsetHeight;
   let left = r.left + r.width / 2 - mw / 2;
   left = Math.max(8, Math.min(left, window.innerWidth - mw - 8));
@@ -2046,6 +2054,44 @@ function toggleAttachMenu() {
 document.addEventListener('click', e => {
   if (!e.target.closest('#attachMenu') && !e.target.closest('#btnAttach')) closeAttachMenu();
 });
+document.getElementById('btnAttach').onclick = e => {
+  e.stopPropagation();
+  if (clipLong) {
+    clipLong = false;
+    return;
+  }
+  toggleAttachMenu();
+};
+let clipTimer = null, clipStart = null, clipLong = false;
+attachBtn.addEventListener('pointerdown', e => {
+  if (e.pointerType === 'mouse' && e.button !== 0) return;
+  clipStart = [e.clientX, e.clientY];
+  clipLong = false;
+  clipTimer = setTimeout(() => {
+    clipTimer = null;
+    clipLong = true;
+    closeAttachMenu();
+    startVoiceRec();
+  }, 450);
+});
+attachBtn.addEventListener('pointermove', e => {
+  if (clipStart && Math.hypot(e.clientX - clipStart[0], e.clientY - clipStart[1]) > 10) {
+    if (clipTimer) clearTimeout(clipTimer);
+    clipTimer = null;
+    clipStart = null;
+  }
+});
+['pointerup', 'pointercancel', 'pointerleave'].forEach(ev => attachBtn.addEventListener(ev, () => {
+  if (clipTimer) clearTimeout(clipTimer);
+  clipTimer = null;
+  clipStart = null;
+}));
+function updateComposerSlot() {
+  const c = document.querySelector('.composer');
+  const inp = document.getElementById('msgInput');
+  if (!c || !inp) return;
+  c.classList.toggle('has-text', inp.value.trim().length > 0);
+}
 
 const mentionMenu = document.getElementById('mentionMenu');
 const mentionList = document.getElementById('mentionList');
@@ -2140,7 +2186,11 @@ attachMenu.querySelectorAll('[data-attach]').forEach(it => {
     const kind = it.dataset.attach;
     closeAttachMenu();
     if (kind === 'poll') {
-      document.getElementById('btnPoll').onclick();
+      openPollGuarded();
+      return;
+    }
+    if (kind === 'voice') {
+      startVoiceRec();
       return;
     }
     const input = document.getElementById('fileInput');
@@ -2669,11 +2719,10 @@ document.getElementById('msgInput').addEventListener('paste', e => {
   }
 });
 
-document.getElementById('btnMic').onclick = e => {
-  e.stopPropagation();
+function startVoiceRec() {
   if (recState) return;
   startRec();
-};
+}
 async function startRec() {
   if (!currentChat) {
     toast('اول یک گپ رو باز کن', 'error');
@@ -4151,6 +4200,7 @@ if (CD.chat) {
     input.value = initialDraft;
     input.style.height = 'auto';
     input.style.height = Math.min(input.scrollHeight, 140) + 'px';
+    updateComposerSlot();
   }
   renderAllMessages();
   loadPinned();

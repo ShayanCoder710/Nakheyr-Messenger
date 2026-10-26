@@ -146,15 +146,15 @@
         <div class="composer-row">
           <div class="composer-tools">
             <button class="icon-btn" id="btnEmoji" title="ایموجی">{{ bi('emoji-smile') }}</button>
-            <button class="icon-btn" id="btnAttach" title="ارسال عکس یا فایل">{{ bi('paperclip') }}</button>
-            <button class="icon-btn" id="btnMic" title="ضبط پیام صوتی" aria-label="ضبط پیام صوتی">{{ bi('mic') }}</button>
-            <button class="icon-btn" id="btnPoll" title="نظرسنجی" aria-label="نظرسنجی" type="button">{{ bi('bar-chart') }}</button>
           </div>
           <input type="file" id="fileInput" multiple hidden>
           <textarea class="composer-input" id="msgInput" rows="1" placeholder="پیام…"></textarea>
-          <button class="send-btn" id="btnSend" title="ارسال">
-            {{ bi('send-fill') }}
-          </button>
+          <div class="composer-end">
+            <button class="icon-btn comp-clip" id="btnAttach" title="پیوست، نظرسنجی و پیام صوتی" aria-label="پیوست‌ها">{{ bi('paperclip') }}</button>
+            <button class="send-btn" id="btnSend" title="ارسال">
+              {{ bi('send-fill') }}
+            </button>
+          </div>
         </div>
       </div>
     </section>
@@ -510,7 +510,11 @@
     <span class="am-ico">{{ bi('file-earmark') }}</span>
     <div class="am-txt">فایل<small>مستند، صوت، آرشیو، کد</small></div>
   </div>
-  <div class="am-item am-item-narrow" data-attach="poll" role="menuitem">
+  <div class="am-item" data-attach="voice" role="menuitem">
+    <span class="am-ico">{{ bi('mic') }}</span>
+    <div class="am-txt">پیام صوتی<small>ضبط کن و بفرست</small></div>
+  </div>
+  <div class="am-item" data-attach="poll" role="menuitem">
     <span class="am-ico">{{ bi('bar-chart') }}</span>
     <div class="am-txt">نظرسنجی<small>سؤال و گزینه‌ها رو بساز</small></div>
   </div>

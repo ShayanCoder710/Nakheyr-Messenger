@@ -200,7 +200,7 @@ html[data-theme="light"], html[data-theme="auto"] { color-scheme: light; }
 
 * { box-sizing: border-box; margin: 0; padding: 0; scrollbar-width: thin; scrollbar-color: var(--scroll-thumb) transparent; }
 button, a, label, .icon-btn, .btn, .fab, .conv, .ctx-item,
-.am-item, .am-item-narrow,
+.am-item,
 .side-head, .side-title, .conv-section-head, .stat-card,
 .mv-btn, .mv-tools, .report-item, .tbl-actions, .admin-side a,
 .ep-tabs button, .ep-body button, .poll-close-btn, .poll-add-btn,
@@ -1026,6 +1026,12 @@ b, strong { font-weight: 800; }
 .send-btn:hover { background: linear-gradient(180deg, #ff5252, #d32f2f); box-shadow: 0 10px 24px -6px var(--accent-glow); }
 .send-btn:active { transform: scale(.94); }
 .send-btn:disabled { opacity: .5; cursor: not-allowed; }
+.composer-end { position: relative; width: 46px; height: 46px; flex: 0 0 auto; display: grid; place-items: center; }
+.composer-end .comp-clip, .composer-end .send-btn { position: absolute; inset: 0; margin: auto; display: grid; place-items: center; transition: opacity .15s ease, transform .15s ease; }
+.composer-end .comp-clip { width: 44px; height: 44px; }
+.composer-end .send-btn { opacity: 0; transform: scale(.55); pointer-events: none; }
+.composer.has-text .composer-end .comp-clip { opacity: 0; transform: scale(.55); pointer-events: none; }
+.composer.has-text .composer-end .send-btn { opacity: 1; transform: scale(1); pointer-events: auto; }
 .composer-row { display: flex; gap: 8px; align-items: flex-end; }
 .composer-tools { display: flex; flex-direction: row; align-items: center; gap: 2px; }
 .composer-tools .icon-btn { width: 44px; height: 44px; }
@@ -1729,6 +1735,8 @@ table.data { width: 100%; border-collapse: collapse; }
   .attach-preview { padding: 6px 0 4px; }
   .composer-row { gap: 6px; }
   .send-btn { width: 44px; height: 44px; }
+  .composer-end { width: 44px; height: 44px; }
+  .composer-end .comp-clip { width: 38px; height: 38px; }
   .composer-input { min-height: 44px; padding: 10px 15px; }
   .composer-tools .icon-btn { width: 38px; height: 38px; }
   .bubble { max-width: 84%; }
@@ -2035,8 +2043,8 @@ body.dragging::after {
 .am-item[data-attach="media"] .am-ico { background: rgba(78, 192, 110, .15); color: var(--green); border-color: rgba(78, 192, 110, .3); }
 .am-item[data-attach="camera"] .am-ico { background: rgba(240, 179, 76, .15); color: var(--gold); border-color: rgba(240, 179, 76, .3); }
 .am-item[data-attach="doc"] .am-ico { background: var(--accent-soft); color: var(--accent-2); border-color: rgba(229, 57, 59, .28); }
+.am-item[data-attach="voice"] .am-ico { background: rgba(78, 192, 110, .15); color: var(--green); border-color: rgba(78, 192, 110, .3); }
 .am-item[data-attach="poll"] .am-ico { background: rgba(66, 165, 245, .15); color: #42a5f5; border-color: rgba(66, 165, 245, .3); }
-.am-item-narrow { display: none; }
 .am-txt { min-width: 0; }
 .am-txt small { display: block; color: var(--dim); font-size: 11px; font-weight: 500; margin-top: 1px; }
 .mention { color: var(--accent-2); font-weight: 700; cursor: pointer; text-decoration: none; border-radius: 4px; }
@@ -2061,11 +2069,7 @@ body.dragging::after {
   max-width: 190px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .mn-txt small { display: block; font-size: 11px; color: var(--dim); direction: ltr; text-align: right; }
 @media (max-width: 860px) {
-  .attach-menu { left: 50%; transform: translateX(-50%); right: auto; min-width: min(300px, 88vw); }
-}
-@media (max-width: 480px) {
-  .am-item-narrow { display: flex; }
-  #btnPoll { display: none; }
+  .attach-menu { left: 8px; right: 8px; min-width: 0; width: auto; transform: none; }
 }
 
 .pin-thumb {
