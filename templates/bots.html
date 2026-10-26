@@ -42,7 +42,7 @@
       <p class="bf-hint">اسم ربات را بنویس؛ توکن اختصاصی‌اش همین‌جا ساخته می‌شود. ربات به عنوان یک کاربر در نخیر قرار می‌گیرد و می‌تواند در دایرکت و گروه‌هایی که عضو است پیام بفرستد.</p>
       <form id="bfCreate" class="bf-form">
         <input type="text" id="bfName" name="name" placeholder="مثلاً: یادآور کارها" maxlength="60" autocomplete="off">
-        <button type="submit" class="btn">{{ bi('robot') }}<span>ساخت ربات</span></button>
+        <button type="submit" class="btn sm">{{ bi('robot') }}<span>ساخت ربات</span></button>
       </form>
       <div id="bfCreated" class="bf-created" hidden>
         <div class="bf-created-head">
@@ -93,7 +93,7 @@
             </div>
           </div>
           <div class="bf-card-foot">
-            <button class="btn sm ghost bf-act" data-action="save-profile">{{ bi('check-circle') }}<span>ذخیرهٔ اسم و توضیح</span></button>
+            <button class="btn sm ghost bf-act" data-action="save-profile">{{ bi('check-circle') }}<span>ذخیره</span></button>
             <button class="btn sm ghost bf-act" data-action="toggle">{{ bi('power') }}<span data-toggle-txt>{{ 'غیرفعال کردن' if item.bot.is_active else 'فعال کردن' }}</span></button>
             <button class="btn sm ghost danger bf-act" data-action="delete">{{ bi('trash') }}<span>حذف ربات</span></button>
           </div>
