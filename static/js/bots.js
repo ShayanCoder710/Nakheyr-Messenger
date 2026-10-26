@@ -66,6 +66,23 @@
           post(id, '/webhook', { url: '' }).then(function (j) {
             if (j.ok) location.reload(); else toast(j.error || 'خطا');
           });
+        } else if (action === 'save-profile') {
+          post(id, '/profile', {
+            name: card.querySelector('.bf-name').value.trim(),
+            bio: card.querySelector('.bf-bio').value.trim(),
+          }).then(function (j) {
+            if (j.ok) {
+              toast('ذخیره شد');
+              setTimeout(function () { location.reload(); }, 600);
+            } else toast(j.error || 'خطا');
+          });
+        } else if (action === 'delete-avatar') {
+          postForm(id, '/avatar', 'delete=1').then(function (j) {
+            if (j.ok) {
+              toast('تصویر حذف شد');
+              setTimeout(function () { location.reload(); }, 600);
+            } else toast(j.error || 'خطا');
+          });
         } else if (action === 'delete') {
           if (!confirm('این ربات و همه پیام‌هایش حذف می‌شود. مطمئن‌ای؟')) return;
           post(id, '/delete').then(function (j) {
@@ -84,6 +101,35 @@
       body: JSON.stringify(payload),
     }).then(function (r) { return r.json(); });
   }
+
+  function postForm(bid, ep, body) {
+    return fetch('/api/bot/' + bid + '/' + ep, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/x-www-form-urlencoded', 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+      body: body,
+    }).then(function (r) { return r.json(); });
+  }
+
+  document.querySelectorAll('.bf-avatar-row input[type="file"]').forEach(function (fileInput) {
+    fileInput.addEventListener('change', function () {
+      var f = fileInput.files[0];
+      if (!f) return;
+      var card = fileInput.closest('.bf-card');
+      var id = card.dataset.bot;
+      var fd = new FormData();
+      fd.append('avatar', f);
+      fetch('/api/bot/' + id + '/avatar', {
+        method: 'POST',
+        headers: { 'X-CSRF-Token': window.CSRF_TOKEN || '' },
+        body: fd,
+      }).then(function (r) { return r.json(); }).then(function (j) {
+        if (j.ok) {
+          toast('تصویر ربات ذخیره شد');
+          setTimeout(function () { location.reload(); }, 800);
+        } else toast(j.error || 'خطا');
+      }).catch(function () { toast('خطا در آپلود تصویر'); });
+    });
+  });
 
   function copyText(text) {
     if (navigator.clipboard && navigator.clipboard.writeText) {

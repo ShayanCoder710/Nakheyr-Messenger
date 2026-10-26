@@ -28,6 +28,7 @@ from func import (
     get_or_create_notes, delete_user_account, chat_label,
     member_perms, default_perms, PERMISSION_KEYS, PERMISSION_LABELS,
     add_owner_avatar, set_owner_avatar_primary, delete_owner_avatar, owner_avatar_gallery,
+    AVATAR_EXT,
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -1811,6 +1812,7 @@ def api_messages(chat_id):
 
 
 BOT_API_RATE = 30
+LIMIT_BOTS_PER_USER = 60
 _BOT_API_HITS = {}
 
 
@@ -1891,6 +1893,8 @@ def bots_page():
 def api_bot_create():
     me = current_user()
     data = request.get_json(silent=True) or {}
+    if Bot.query.filter_by(owner_id=me.id).count() >= LIMIT_BOTS_PER_USER:
+        return jsonify(ok=False, error=f'حداکثر {LIMIT_BOTS_PER_USER} ربات در هر اکانت مجازه')
     name = (data.get('name') or '').strip()[:60]
     if not name:
         return jsonify(ok=False, error='اسم ربات رو بنویس')
@@ -1969,6 +1973,59 @@ def api_bot_delete(bid):
     db.session.commit()
     delete_user_account(uid)
     return jsonify(ok=True)
+
+
+@app.route('/api/bot/<int:bid>/profile', methods=['POST'])
+@require_auth
+def api_bot_profile(bid):
+    me = current_user()
+    bot = Bot.query.get(bid)
+    if not bot or bot.owner_id != me.id:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    data = request.get_json(silent=True) or {}
+    bot_user = User.query.get(bot.user_id)
+    if not bot_user:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    if 'name' in data:
+        name = (data.get('name') or '').strip()[:60]
+        if not name:
+            return jsonify(ok=False, error='اسم ربات نمی‌تونه خالی باشه')
+        bot_user.display_name = name
+    if 'bio' in data:
+        bot_user.bio = (data.get('bio') or '').strip()[:200]
+    db.session.commit()
+    return jsonify(ok=True, user=bot_user.to_public())
+
+
+@app.route('/api/bot/<int:bid>/avatar', methods=['POST'])
+@require_auth
+def api_bot_avatar(bid):
+    me = current_user()
+    bot = Bot.query.get(bid)
+    if not bot or bot.owner_id != me.id:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    bot_user = User.query.get(bot.user_id)
+    if not bot_user:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    if request.form.get('delete') == '1':
+        prim = Avatar.query.filter_by(owner_type='user', owner_id=bot_user.id, is_primary=True).first()
+        if prim:
+            delete_owner_avatar('user', bot_user.id, prim.id)
+        else:
+            bot_user.avatar = ''
+            db.session.commit()
+        return jsonify(ok=True, avatar=bot_user.avatar_url)
+    f = request.files.get('avatar')
+    if not f or not f.filename:
+        return jsonify(ok=False, error='فایلی دریافت نشد')
+    ext = f.filename.rsplit('.', 1)[-1].lower() if '.' in f.filename else ''
+    if ext not in AVATAR_EXT:
+        return jsonify(ok=False, error='فرمت عکس مجاز نیست')
+    fname = f'{bot_user.id}_{secrets.token_hex(4)}.{ext}'
+    os.makedirs(app.config['AVATAR_DIR'], exist_ok=True)
+    f.save(os.path.join(app.config['AVATAR_DIR'], fname))
+    add_owner_avatar('user', bot_user.id, fname)
+    return jsonify(ok=True, avatar=bot_user.avatar_url)
 
 
 @app.route('/bot/api/<token>/getMe', methods=['GET'])

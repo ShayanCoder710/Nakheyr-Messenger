@@ -58,17 +58,26 @@
     </section>
 
     <section class="bf-section" id="bots">
-      <h2>ربات‌های من</h2>
+      <h2>ربات‌های من <small class="bf-count">{{ bots|length }}/60</small></h2>
       {% if bots %}
       <div class="bf-list">
         {% for item in bots %}
         <article class="bf-card" data-bot="{{ item.bot.id }}">
           <div class="bf-card-top">
             <div class="bf-card-id">
-              <b>{{ item.user.display_name if item.user else '' }}</b>
-              <span class="bf-mono">@{{ item.user.username if item.user else '' }}</span>
+              {{ avatar_html(item.user, 'sm') | safe }}
+              <div class="bf-card-name">
+                <input type="text" class="bf-name" value="{{ item.user.display_name if item.user else '' }}" maxlength="60" aria-label="اسم ربات">
+                <span class="bf-mono">@{{ item.user.username if item.user else '' }}</span>
+                <input type="text" class="bf-bio" value="{{ item.user.bio if item.user else '' }}" maxlength="200" placeholder="توضیح ربات" aria-label="توضیح ربات">
+              </div>
             </div>
             <span class="bf-state {{ 'on' if item.bot.is_active else 'off' }}" data-state>{{ 'فعال' if item.bot.is_active else 'غیرفعال' }}</span>
+          </div>
+          <div class="bf-avatar-row">
+            <label class="bf-av-pick" for="bfav-{{ item.bot.id }}">{{ bi('image') }}<span>تصویر ربات</span></label>
+            <input type="file" id="bfav-{{ item.bot.id }}" accept="image/*" hidden>
+            <button class="btn sm ghost bf-act" data-action="delete-avatar">{{ bi('trash') }}<span>حذف تصویر</span></button>
           </div>
           <div class="bf-token-row">
             <input type="text" class="bf-mono bf-card-token" value="{{ item.bot.token }}" readonly>
@@ -84,6 +93,7 @@
             </div>
           </div>
           <div class="bf-card-foot">
+            <button class="btn sm ghost bf-act" data-action="save-profile">{{ bi('check-circle') }}<span>ذخیرهٔ اسم و توضیح</span></button>
             <button class="btn sm ghost bf-act" data-action="toggle">{{ bi('power') }}<span data-toggle-txt>{{ 'غیرفعال کردن' if item.bot.is_active else 'فعال کردن' }}</span></button>
             <button class="btn sm ghost danger bf-act" data-action="delete">{{ bi('trash') }}<span>حذف ربات</span></button>
           </div>
