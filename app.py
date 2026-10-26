@@ -339,7 +339,20 @@ def api_dm():
     if is_blocked(user.id, peer.id):
         return jsonify(ok=False, error='تو یا کاربر مقابل، همدیگه رو بلاک کرده.')
     chat, created = get_or_create_dm(user, peer)
-    return jsonify(ok=True, chat_id=chat.id, created=created)
+    start_sent = False
+    if created and (peer.is_bot or user.is_bot):
+        starter, bot_peer = (user, peer) if peer.is_bot else (peer, user)
+        bot = Bot.query.filter_by(user_id=bot_peer.id, is_active=True).first()
+        if bot:
+            m = Message(chat_id=chat.id, sender_id=starter.id, msg_type='text', content='/start')
+            db.session.add(m)
+            db.session.commit()
+            payload = m.to_dict(starter.id)
+            socketio.emit('new_message', payload, room=f'user:{starter.id}')
+            socketio.emit('new_message', payload, room=f'user:{bot_peer.id}')
+            _enqueue_bot_updates(chat, starter.id, m.to_dict(None))
+            start_sent = True
+    return jsonify(ok=True, chat_id=chat.id, created=created, start_sent=start_sent)
 
 
 @app.route('/api/notes', methods=['POST'])
@@ -1993,6 +2006,13 @@ def api_bot_profile(bid):
         bot_user.display_name = name
     if 'bio' in data:
         bot_user.bio = (data.get('bio') or '').strip()[:200]
+    if 'username' in data:
+        new_un = (data.get('username') or '').strip().lower()
+        if not re.fullmatch(r'[a-z0-9_]{5,32}', new_un):
+            return jsonify(ok=False, error='یوزرنیم باید ۵ تا ۳۲ کاراکتر (a-z، 0-9، _) باشه')
+        if new_un in RESERVED_USERNAMES or username_taken(new_un, user_id=bot_user.id):
+            return jsonify(ok=False, error='این یوزرنیم در دسترس نیست')
+        bot_user.username = new_un
     db.session.commit()
     return jsonify(ok=True, user=bot_user.to_public())
 

@@ -68,7 +68,7 @@
               {{ avatar_html(item.user, 'sm') | safe }}
               <div class="bf-card-name">
                 <input type="text" class="bf-name" value="{{ item.user.display_name if item.user else '' }}" maxlength="60" aria-label="اسم ربات">
-                <span class="bf-mono">@{{ item.user.username if item.user else '' }}</span>
+                <input type="text" class="bf-un" value="{{ item.user.username if item.user else '' }}" maxlength="32" aria-label="یوزرنیم ربات" style="direction:ltr; text-align:left">
                 <input type="text" class="bf-bio" value="{{ item.user.bio if item.user else '' }}" maxlength="200" placeholder="توضیح ربات" aria-label="توضیح ربات">
               </div>
             </div>

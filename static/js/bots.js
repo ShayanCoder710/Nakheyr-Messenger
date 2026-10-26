@@ -69,6 +69,7 @@
         } else if (action === 'save-profile') {
           post(id, '/profile', {
             name: card.querySelector('.bf-name').value.trim(),
+            username: card.querySelector('.bf-un').value.trim().toLowerCase(),
             bio: card.querySelector('.bf-bio').value.trim(),
           }).then(function (j) {
             if (j.ok) {
