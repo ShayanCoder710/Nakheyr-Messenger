@@ -1,7 +1,10 @@
 import os
 import re
+import json
+import time
 import hmac
 import secrets
+import urllib.request
 from datetime import datetime, timedelta
 
 from flask import (
@@ -13,7 +16,8 @@ from sqlalchemy.orm import joinedload
 
 from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import (
-    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar, Gif
+    db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar, Gif,
+    Bot, BotUpdate,
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
@@ -63,6 +67,8 @@ def csrf_guard():
         return
     ep = request.endpoint or ''
     if ep.startswith('socketio') or request.path.startswith('/socket.io'):
+        return
+    if request.path.startswith('/bot/api/'):
         return
     if ep == 'api_upload' and request.form.get('kind') == 'audio':
         return
@@ -152,6 +158,9 @@ def login():
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         if user.is_banned:
             flash('اکانت شما توسط ادمین مسدود شده است.', 'error')
+            return render_template('login.html', next=safe_next(request.form.get('next')) or '')
+        if user.is_bot:
+            flash('ربات‌ها از API استفاده می‌کنن — لاگین ندارن.', 'error')
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         session['user_id'] = user.id
         session['session_ver'] = user.session_ver or 0
@@ -770,6 +779,7 @@ def api_send_message():
     if chat.slow_mode and member and not user.is_admin and role not in ('owner', 'admin'):
         member.slow_mode_last = datetime.utcnow()
     db.session.commit()
+    _enqueue_bot_updates(chat, user.id, m.to_dict(None))
     payload = m.to_dict(user.id)
     _attach_polls_to_messages([payload], user)
     socketio.emit('new_message', payload, room=f'user:{user.id}')
@@ -1798,6 +1808,284 @@ def api_messages(chat_id):
         joined=joined,
         draft=(membership.draft if membership else '') or '',
     )
+
+
+BOT_API_RATE = 30
+_BOT_API_HITS = {}
+
+
+def bot_api_check(bot):
+    now = time.time()
+    hits = _BOT_API_HITS.get(bot.id, [])
+    hits = [t for t in hits if now - t < 1.0]
+    if len(hits) >= BOT_API_RATE:
+        return False
+    hits.append(now)
+    _BOT_API_HITS[bot.id] = hits
+    return True
+
+
+def bot_auth(token):
+    bot = Bot.query.filter_by(token=token).first()
+    if not bot:
+        return None, None, jsonify(ok=False, error='invalid_token'), 404
+    if not bot.is_active:
+        return bot, None, jsonify(ok=False, error='bot_disabled'), 403
+    if not bot_api_check(bot):
+        return bot, None, jsonify(ok=False, error='rate_limited'), 429
+    return bot, User.query.get(bot.user_id), None, 200
+
+
+def _deliver_bot_webhook(bot, upayload):
+    if not bot.webhook_url:
+        return
+    try:
+        req = urllib.request.Request(
+            bot.webhook_url,
+            data=json.dumps(upayload, ensure_ascii=False).encode('utf-8'),
+            headers={'Content-Type': 'application/json'},
+            method='POST',
+        )
+        urllib.request.urlopen(req, timeout=5)
+    except Exception:
+        pass
+
+
+def _enqueue_bot_updates(chat, sender_id, payload):
+    bots = Bot.query.filter(Bot.is_active.is_(True)).all()
+    added = []
+    for b in bots:
+        if b.user_id == sender_id:
+            continue
+        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=b.user_id).first():
+            continue
+        db.session.add(BotUpdate(bot_id=b.id,
+                                 payload=json.dumps({'message': payload}, ensure_ascii=False)))
+        added.append(b)
+    if not added:
+        return
+    db.session.flush()
+    for b in added:
+        row = BotUpdate.query.filter_by(bot_id=b.id, consumed=False).order_by(BotUpdate.id.desc()).first()
+        if row:
+            data = json.loads(row.payload or '{}')
+            data['update_id'] = row.id
+            _deliver_bot_webhook(b, data)
+    db.session.commit()
+
+
+@app.route('/bots')
+@require_auth
+def bots_page():
+    me = current_user()
+    bots = Bot.query.filter_by(owner_id=me.id).order_by(Bot.id.desc()).all()
+    items = []
+    for b in bots:
+        u = User.query.get(b.user_id)
+        items.append({'bot': b.to_dict(with_token=True), 'user': u.to_public() if u else None})
+    return render_template('bots.html', me=me, bots=items)
+
+
+@app.route('/api/bot/create', methods=['POST'])
+@require_auth
+def api_bot_create():
+    me = current_user()
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or '').strip()[:60]
+    if not name:
+        return jsonify(ok=False, error='اسم ربات رو بنویس')
+    slug = re.sub(r'[^a-z0-9]', '', name.lower())[:20] or 'nakheyr'
+    candidate = f'{slug}_bot'
+    while username_taken(candidate):
+        candidate = f'{slug}_bot{secrets.randbelow(89) + 10}'
+    bot_user = User(
+        username=candidate,
+        display_name=name,
+        password_hash='',
+        is_bot=True,
+        status='offline',
+        show_online=False,
+        read_receipts=False,
+    )
+    bot_user.set_password(secrets.token_hex(24))
+    db.session.add(bot_user)
+    db.session.flush()
+    bot = Bot(owner_id=me.id, user_id=bot_user.id, token=secrets.token_urlsafe(48))
+    db.session.add(bot)
+    db.session.commit()
+    return jsonify(ok=True, bot=bot.to_dict(with_token=True), user=bot_user.to_public())
+
+
+@app.route('/api/bot/<int:bid>/token', methods=['POST'])
+@require_auth
+def api_bot_token(bid):
+    me = current_user()
+    bot = Bot.query.get(bid)
+    if not bot or bot.owner_id != me.id:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    bot.token = secrets.token_urlsafe(48)
+    db.session.commit()
+    return jsonify(ok=True, token=bot.token)
+
+
+@app.route('/api/bot/<int:bid>/toggle', methods=['POST'])
+@require_auth
+def api_bot_toggle(bid):
+    me = current_user()
+    bot = Bot.query.get(bid)
+    if not bot or bot.owner_id != me.id:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    bot.is_active = not bot.is_active
+    db.session.commit()
+    return jsonify(ok=True, is_active=bot.is_active)
+
+
+@app.route('/api/bot/<int:bid>/webhook', methods=['POST'])
+@require_auth
+def api_bot_webhook(bid):
+    me = current_user()
+    bot = Bot.query.get(bid)
+    if not bot or bot.owner_id != me.id:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    data = request.get_json(silent=True) or {}
+    url = (data.get('url') or '').strip()[:300]
+    if url and not (url.startswith('http://') or url.startswith('https://')):
+        return jsonify(ok=False, error='آدرس وب‌هوک باید با http:// یا https:// شروع بشه')
+    bot.webhook_url = url
+    db.session.commit()
+    return jsonify(ok=True, webhook_url=bot.webhook_url)
+
+
+@app.route('/api/bot/<int:bid>/delete', methods=['POST'])
+@require_auth
+def api_bot_delete(bid):
+    me = current_user()
+    bot = Bot.query.get(bid)
+    if not bot or bot.owner_id != me.id:
+        return jsonify(ok=False, error='ربات پیدا نشد')
+    BotUpdate.query.filter_by(bot_id=bot.id).delete()
+    uid = bot.user_id
+    db.session.delete(bot)
+    db.session.commit()
+    delete_user_account(uid)
+    return jsonify(ok=True)
+
+
+@app.route('/bot/api/<token>/getMe', methods=['GET'])
+def bot_api_get_me(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return jsonify(ok=True, me={
+        'id': bot_user.id,
+        'username': bot_user.username,
+        'name': bot_user.display_name,
+    })
+
+
+@app.route('/bot/api/<token>/sendMessage', methods=['POST'])
+def bot_api_send_message(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    text = (data.get('text') or '').strip()[:4096]
+    if not text:
+        return jsonify(ok=False, error='text_required')
+    chat = None
+    chat_id = data.get('chat_id')
+    user_id = data.get('user_id')
+    if chat_id:
+        try:
+            chat = Chat.query.get(int(chat_id))
+        except (TypeError, ValueError):
+            chat = None
+        if not chat:
+            return jsonify(ok=False, error='chat_not_found')
+        if chat.chat_type == 'channel':
+            return jsonify(ok=False, error='bots_cannot_post_channels')
+        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+            return jsonify(ok=False, error='bot_not_member')
+    elif user_id:
+        try:
+            target = User.query.get(int(user_id))
+        except (TypeError, ValueError):
+            target = None
+        if not target or target.is_banned:
+            return jsonify(ok=False, error='user_not_found')
+        if is_blocked(target.id, bot_user.id):
+            return jsonify(ok=False, error='blocked')
+        chat, _created = get_or_create_dm(bot_user, target)
+    else:
+        return jsonify(ok=False, error='chat_id_or_user_id_required')
+    reply_to = data.get('reply_to') or None
+    m = Message(chat_id=chat.id, sender_id=bot_user.id, msg_type='text',
+                content=text, reply_to=reply_to)
+    db.session.add(m)
+    db.session.commit()
+    payload = m.to_dict(None)
+    _attach_polls_to_messages([payload], None)
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('new_message', payload, room=f'user:{mid}')
+    return jsonify(ok=True, message=payload)
+
+
+@app.route('/bot/api/<token>/getUpdates', methods=['GET'])
+def bot_api_get_updates(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    try:
+        offset = int(request.args.get('offset') or 0)
+    except (TypeError, ValueError):
+        offset = 0
+    try:
+        limit = min(int(request.args.get('limit') or 100), 100)
+    except (TypeError, ValueError):
+        limit = 100
+    rows = BotUpdate.query.filter(
+        BotUpdate.bot_id == bot.id,
+        BotUpdate.id > offset,
+        BotUpdate.consumed.is_(False),
+    ).order_by(BotUpdate.id.asc()).limit(limit).all()
+    out = []
+    for r in rows:
+        data = json.loads(r.payload or '{}')
+        data['update_id'] = r.id
+        data['message_id'] = data.get('message', {}).get('id')
+        out.append(data)
+        r.consumed = True
+    if rows:
+        db.session.commit()
+    BotUpdate.query.filter(
+        BotUpdate.consumed.is_(True),
+        BotUpdate.created_at < datetime.utcnow() - timedelta(days=7),
+    ).delete(synchronize_session=False)
+    return jsonify(ok=True, updates=out, next_offset=(rows[-1].id if rows else offset))
+
+
+@app.route('/bot/api/<token>/setWebhook', methods=['POST'])
+def bot_api_set_webhook(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    url = (data.get('url') or '').strip()[:300]
+    if url and not (url.startswith('http://') or url.startswith('https://')):
+        return jsonify(ok=False, error='invalid_webhook_url')
+    bot.webhook_url = url
+    db.session.commit()
+    return jsonify(ok=True, webhook_url=bot.webhook_url)
+
+
+@app.route('/bot/api/<token>/deleteWebhook', methods=['POST'])
+def bot_api_delete_webhook(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    bot.webhook_url = ''
+    db.session.commit()
+    return jsonify(ok=True, webhook_url='')
 
 
 ADMIN_PAGE_SIZE = 25

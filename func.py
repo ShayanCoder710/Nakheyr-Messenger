@@ -129,6 +129,7 @@ def _ensure_columns():
         ('users', 'theme', "VARCHAR(10) NOT NULL DEFAULT 'dark'"),
         ('gifs', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'gif'"),
         ('users', 'session_ver', "INTEGER NOT NULL DEFAULT 0"),
+        ('users', 'is_bot', "BOOLEAN NOT NULL DEFAULT 0"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:

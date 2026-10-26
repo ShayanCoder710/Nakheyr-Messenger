@@ -7,6 +7,7 @@
     <h1>
       {{ target.display_name }}
       {% if target.is_admin %}<span class="badge red">ادمین</span>{% endif %}
+      {% if target.is_bot %}<span class="badge blue">ربات</span>{% endif %}
     </h1>
     <div class="uname">@{{ target.username }}</div>
     <p class="bio">{{ target.bio or 'بیویی نداره' }}</p>

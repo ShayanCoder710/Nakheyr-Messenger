@@ -1,0 +1,138 @@
+{% extends "base.html" %}
+{% block title %}ربات‌فادر — نخیر{% endblock %}
+{% block content %}
+<div class="admin-layout">
+  <aside class="admin-side">
+    <div class="admin-brand">
+      <img src="{{ url_for('static', filename='images/icon.png') }}" alt="نخیر">
+      <div class="admin-brand-txt">
+        <b>نخیر</b>
+        <small>ربات‌فادر</small>
+      </div>
+    </div>
+    <a class="admin-me" href="{{ url_for('home') }}" title="پروفایل من">
+      {{ avatar_html(me, 'sm') | safe }}
+      <div class="admin-me-txt">
+        <b>{{ me.public_name }}</b>
+        <small>@{{ me.username }}</small>
+      </div>
+      {{ bi('box-arrow-right') }}
+    </a>
+    <nav class="admin-nav">
+      <a href="#create" class="active">{{ bi('robot') }}<span>ساخت ربات</span></a>
+      <a href="#bots">{{ bi('gear') }}<span>ربات‌های من</span><i id="navBotsCount">{{ bots|length }}</i></a>
+      <a href="#docs">{{ bi('envelope') }}<span>API</span></a>
+      <a href="{{ url_for('home') }}">{{ bi('chat-dots') }}<span>بازگشت به گپ‌ها</span></a>
+    </nav>
+  </aside>
+
+  <main class="admin-main">
+    <header class="admin-topbar">
+      <div class="admin-topbar-title">
+        <b>ربات‌فادرِ نخیر</b>
+        <small>ربات بساز، با API به نخیر وصلش کن</small>
+      </div>
+      <div class="admin-topbar-actions">
+        <a class="btn sm ghost" href="{{ url_for('home') }}">{{ bi('chat-dots') }}<span>گپ‌ها</span></a>
+      </div>
+    </header>
+
+    <section class="bf-section" id="create">
+      <h2>ساخت ربات جدید</h2>
+      <p class="bf-hint">اسم ربات را بنویس؛ توکن اختصاصی‌اش همین‌جا ساخته می‌شود. ربات به عنوان یک کاربر در نخیر قرار می‌گیرد و می‌تواند در دایرکت و گروه‌هایی که عضو است پیام بفرستد.</p>
+      <form id="bfCreate" class="bf-form">
+        <input type="text" id="bfName" name="name" placeholder="مثلاً: یادآور کارها" maxlength="60" autocomplete="off">
+        <button type="submit" class="btn">{{ bi('robot') }}<span>ساخت ربات</span></button>
+      </form>
+      <div id="bfCreated" class="bf-created" hidden>
+        <div class="bf-created-head">
+          <b id="bfCreatedName"></b>
+          <span id="bfCreatedUser" class="bf-mono"></span>
+        </div>
+        <div class="bf-token-row">
+          <input type="text" id="bfToken" class="bf-mono" readonly>
+          <button class="btn sm ghost" id="bfCopy" type="button">{{ bi('clipboard') }}<span>کپی</span></button>
+        </div>
+        <p class="bf-note">این توکن کلید API ربات توست. مراقبش باش؛ هرکس آن را داشته باشد به‌جای رباتت می‌تواند پیام بفرستد.</p>
+      </div>
+    </section>
+
+    <section class="bf-section" id="bots">
+      <h2>ربات‌های من</h2>
+      {% if bots %}
+      <div class="bf-list">
+        {% for item in bots %}
+        <article class="bf-card" data-bot="{{ item.bot.id }}">
+          <div class="bf-card-top">
+            <div class="bf-card-id">
+              <b>{{ item.user.display_name if item.user else '' }}</b>
+              <span class="bf-mono">@{{ item.user.username if item.user else '' }}</span>
+            </div>
+            <span class="bf-state {{ 'on' if item.bot.is_active else 'off' }}" data-state>{{ 'فعال' if item.bot.is_active else 'غیرفعال' }}</span>
+          </div>
+          <div class="bf-token-row">
+            <input type="text" class="bf-mono bf-card-token" value="{{ item.bot.token }}" readonly>
+            <button class="btn sm ghost bf-act" data-action="copy">{{ bi('clipboard') }}<span>کپی</span></button>
+            <button class="btn sm ghost bf-act" data-action="regenerate">{{ bi('arrow-repeat') }}<span>تولید دوباره</span></button>
+          </div>
+          <div class="bf-webhook-row">
+            <label for="wh-{{ item.bot.id }}">وب‌هوک</label>
+            <div class="bf-webhook-in">
+              <input type="url" id="wh-{{ item.bot.id }}" placeholder="https://example.com/hook" value="{{ item.bot.webhook_url }}">
+              <button class="btn sm ghost bf-act" data-action="webhook">ذخیره</button>
+              {% if item.bot.webhook_url %}<button class="btn sm ghost bf-act" data-action="clear-webhook">حذف</button>{% endif %}
+            </div>
+          </div>
+          <div class="bf-card-foot">
+            <button class="btn sm ghost bf-act" data-action="toggle">{{ bi('power') }}<span data-toggle-txt>{{ 'غیرفعال کردن' if item.bot.is_active else 'فعال کردن' }}</span></button>
+            <button class="btn sm ghost danger bf-act" data-action="delete">{{ bi('trash') }}<span>حذف ربات</span></button>
+          </div>
+        </article>
+        {% endfor %}
+      </div>
+      {% else %}
+      <p class="bf-empty">هنوز ربات نساخته‌ای. اسم بده و اولین رباتت را بساز.</p>
+      {% endif %}
+    </section>
+
+    <section class="bf-section" id="docs">
+      <h2>API ربات‌ها</h2>
+      <p class="bf-hint">همهٔ مسیرها زیر <code class="bf-mono">/bot/api/&lt;token&gt;/</code> هستند؛ احرازهویت با خودِ توکن است. محدودیت: ۳۰ درخواست در ثانیه برای هر ربات.</p>
+      <div class="bf-docs">
+        <div class="bf-doc">
+          <span class="bf-mono">GET /bot/api/‹token›/getMe</span>
+          <p>مشخصات ربات (id، username).</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/sendMessage</span>
+          <p>مقدار <code class="bf-mono">chat_id</code> یا <code class="bf-mono">user_id</code> + <code class="bf-mono">text</code>. دایرکت با <code class="bf-mono">user_id</code> به‌صورت خودکار ساخته می‌شود؛ در گروه، ربات باید عضو آن گروه باشد.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">GET /bot/api/‹token›/getUpdates?offset=0</span>
+          <p>پیام‌هایی که کاربر در دایرکت ربات یا در گروهی که عضو آن است فرستاده؛ با <code class="bf-mono">offset</code> از آخرین <code class="bf-mono">update_id</code> ادامه بده.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/setWebhook</span>
+          <p>مقدار <code class="bf-mono">url</code>؛ به‌جای پُلب، هر آپدیت به‌صورت POST JSON به آن آدرس فرستاده می‌شود. برای برچیدن، <code class="bf-mono">deleteWebhook</code>.</p>
+        </div>
+      </div>
+      <h3>کتابخانهٔ کمکی (nakheyr_bot)</h3>
+      <pre class="bf-code">
+from nakheyr_bot import NakheyrBot
+
+bot = NakheyrBot(token="YOUR_TOKE...HERE")
+
+def on_update(update):
+    msg = update.get('message', {})
+    if msg.get('content') == 'سلام':
+        bot.send_message(user_id=msg['sender_id'], text='درود بر شما')
+
+bot.run_forever(on_update)
+</pre>
+    </section>
+  </main>
+</div>
+{% endblock %}
+{% block extra_js %}
+<script src="{{ url_for('static', filename='js/bots.js') }}" defer></script>
+{% endblock %}

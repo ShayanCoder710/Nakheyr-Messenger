@@ -2105,8 +2105,10 @@ function openMentionMenu(input) {
     return;
   }
   const q = tok.partial.toLowerCase();
+  const me = (window.ME && window.ME.username || '').toLowerCase();
   mentionMatches = (CD.members || [])
-    .filter(u => u && u.username && (u.username.toLowerCase().startsWith(q) || String(u.display_name || '').toLowerCase().includes(q)))
+    .filter(u => u && u.username && u.username.toLowerCase() !== me &&
+      (u.username.toLowerCase().startsWith(q) || String(u.display_name || '').toLowerCase().includes(q)))
     .slice(0, 8);
   if (!mentionMatches.length) {
     closeMentionMenu();
@@ -3202,6 +3204,7 @@ function openDmInfo() {
   setAvatarData(dmAv, p.avatar, p.display_name || (p.username ? '@' + p.username : ''), 'user', p.id);
   document.getElementById('dmName').textContent = p.display_name || 'کاربر';
   document.getElementById('dmUsername').textContent = p.username ? '@' + p.username : '';
+  document.getElementById('dmBotTag').hidden = !p.is_bot;
   document.getElementById('dmStatus').innerHTML = p.status === 'online' ? bi('circle-fill') + ' آنلاین' : bi('circle') + ' آفلاین';
   document.getElementById('dmBio').textContent = p.bio || 'بیویی نداره';
   document.getElementById('dmFull').href = '/profile/' + encodeURIComponent(p.username || '');

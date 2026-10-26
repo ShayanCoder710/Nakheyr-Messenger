@@ -21,6 +21,7 @@ class User(db.Model):
     avatar = db.Column(db.String(120), default='')
     is_admin = db.Column(db.Boolean, default=False)
     is_banned = db.Column(db.Boolean, default=False)
+    is_bot = db.Column(db.Boolean, default=False, nullable=False)
     read_receipts = db.Column(db.Boolean, default=True)
     show_online = db.Column(db.Boolean, default=True, nullable=False)
     session_ver = db.Column(db.Integer, default=0, nullable=False)
@@ -65,6 +66,7 @@ class User(db.Model):
             'bio': self.public_bio,
             'avatar': self.avatar_url,
             'is_admin': self.is_admin,
+            'is_bot': bool(self.is_bot),
             'status': self.status if self.show_online else 'offline',
             'read_receipts': bool(self.read_receipts),
         }
@@ -426,3 +428,39 @@ class Gif(db.Model):
             'url': self.url,
             'kind': self.kind,
         }
+
+
+class Bot(db.Model):
+    __tablename__ = 'bots'
+    __table_args__ = ({'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},)
+
+    id = db.Column(db.Integer, primary_key=True)
+    owner_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), unique=True, nullable=False)
+    token = db.Column(db.String(120), unique=True, nullable=False)
+    webhook_url = db.Column(db.String(300), default='')
+    is_active = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, with_token=False):
+        d = {
+            'id': self.id,
+            'user_id': self.user_id,
+            'is_active': bool(self.is_active),
+            'webhook_url': self.webhook_url or '',
+            'created_at': self.created_at.isoformat() if self.created_at else '',
+        }
+        if with_token:
+            d['token'] = self.token
+        return d
+
+
+class BotUpdate(db.Model):
+    __tablename__ = 'bot_updates'
+    __table_args__ = ({'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},)
+
+    id = db.Column(db.Integer, primary_key=True)
+    bot_id = db.Column(db.Integer, db.ForeignKey('bots.id'), nullable=False, index=True)
+    payload = db.Column(db.Text, default='{}')
+    consumed = db.Column(db.Boolean, default=False, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
