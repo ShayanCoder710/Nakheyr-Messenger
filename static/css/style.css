@@ -1099,6 +1099,7 @@ b, strong { font-weight: 800; }
 .sched-msg-file b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sched-msg-text { margin: 0; font-size: 13px; line-height: 1.8; color: var(--text); white-space: pre-wrap; word-break: break-word; display: -webkit-box; -webkit-line-clamp: 3; -webkit-box-orient: vertical; overflow: hidden; }
 .sched-msg-text.dim { color: var(--dim); }
+.sched-edit-text { resize: vertical; min-height: 56px; font-size: 13px; line-height: 1.8; }
 .sched-hero {
   display: flex; align-items: baseline; gap: 12px; justify-content: center;
   background: color-mix(in srgb, var(--accent) 9%, transparent);
@@ -1129,7 +1130,7 @@ b, strong { font-weight: 800; }
 }
 .sched-pend-item .sp-ico { color: var(--accent); display: grid; place-items: center; flex: none; }
 .sched-pend-item .sp-ico .bi-ic { width: 14px; height: 14px; }
-.sched-pend-item .sp-txt { flex: 1; min-width: 0; }
+.sched-pend-item .sp-txt { flex: 1; min-width: 0; cursor: pointer; }
 .sched-pend-item .sp-txt b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; font-size: 12.5px; }
 .sched-pend-item .sp-txt small { color: var(--muted); font-size: 10.5px; }
 .sched-pend-item button {

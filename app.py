@@ -903,6 +903,41 @@ def api_message_schedule_cancel(sid):
     return jsonify(ok=True)
 
 
+@app.route('/api/message/schedule/<int:sid>', methods=['POST'])
+@require_auth
+def api_message_schedule_update(sid):
+    user = current_user()
+    s = ScheduledMessage.query.get(sid)
+    if not s or s.user_id != user.id:
+        return jsonify(ok=False, error='موردی پیدا نشد')
+    if s.status != 'pending':
+        return jsonify(ok=False, error='این پیام زمان‌دار معتبر نیست')
+    data = request.get_json(silent=True) or {}
+    if 'send_at' in data:
+        raw = (data.get('send_at') or '').strip()
+        try:
+            when = datetime.fromisoformat(raw)
+        except (ValueError, TypeError):
+            return jsonify(ok=False, error='زمان نامعتبره')
+        if when.tzinfo is not None:
+            when = when.astimezone(timezone.utc).replace(tzinfo=None)
+        now = datetime.utcnow()
+        if when <= now + timedelta(seconds=15):
+            return jsonify(ok=False, error='زمان باید حداقل ۱۵ ثانیه بعد از الان باشه')
+        if when > now + timedelta(days=31):
+            return jsonify(ok=False, error='زمان‌بندی تا ۳۰ روز بعد مجازه')
+        s.send_at = when
+    if 'content' in data:
+        c = (data.get('content') or '').strip()
+        if s.msg_type == 'text' and not c:
+            return jsonify(ok=False, error='متن پیام نمی‌تونه خالی باشه')
+        s.content = c
+    db.session.commit()
+    socketio.emit('schedule_update', {'action': 'updated', 'chat_id': s.chat_id, 'id': sid},
+                  room=f'user:{user.id}')
+    return jsonify(ok=True, send_at=s.send_at.isoformat())
+
+
 def _clean_reaction(value):
     if not isinstance(value, str):
         return ''

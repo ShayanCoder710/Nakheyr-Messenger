@@ -964,9 +964,18 @@ document.getElementById('btnSendReport').onclick = async () => {
 
 let schedSel = { dayOffset: 0, hour: 9, minute: 0 };
 let schedFree = false;
+let schedEditItem = null;
+let schedTouched = false;
+let schedItems = [];
 
 function faNum(n) {
   return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
+}
+
+function parseSchedIso(iso) {
+  const s = String(iso);
+  const fixed = (s.endsWith('Z') || /([+-]\d{2}:?\d{2})$/.test(s)) ? s : s + 'Z';
+  return new Date(fixed);
 }
 
 function schedTodayBase() {
@@ -990,10 +999,10 @@ function renderSchedHero() {
 
 function buildSchedPickers() {
   const daySel = document.getElementById('schedDaySel');
-  daySel.innerHTML = Array.from({ length: 7 }, (_, i) => {
+  daySel.innerHTML = Array.from({ length: 30 }, (_, i) => {
     const d = new Date(schedTodayBase());
     d.setDate(d.getDate() + i);
-    const label = i === 0 ? 'امروز' : i === 1 ? 'فردا' : d.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+    const label = i === 0 ? 'امروز' : i === 1 ? 'فردا' : d.toLocaleDateString('fa-IR', { weekday: 'short', day: 'numeric', month: 'short' });
     return `<option value="${i}">${label}</option>`;
   }).join('');
   document.getElementById('schedHourSel').innerHTML = Array.from({ length: 24 }, (_, h) =>
@@ -1027,15 +1036,25 @@ function pickQuick(minutes) {
   syncSchedPickers();
 }
 
-function fillSchedMsg() {
+function fillSchedMsg(item) {
   const el = document.getElementById('schedMsg');
+  if (item) {
+    let html = '';
+    if (item.msg_type !== 'text' && item.file_name) {
+      const icon = (item.msg_type === 'image') ? bi('image') : (item.msg_type === 'video' || item.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
+      html += `<span class="sched-msg-file">${icon}<b>${esc(item.file_name)}</b></span>`;
+    }
+    html += `<textarea class="input sched-edit-text" id="schedEditText" rows="3" placeholder="متن پیام">${esc(item.content || '')}</textarea>`;
+    el.innerHTML = html;
+    return;
+  }
   const input = document.getElementById('msgInput');
   const text = (input.value || '').trim();
-  const item = pendingFiles.find(f => f.status === 'ready');
+  const file = pendingFiles.find(f => f.status === 'ready');
   let html = '';
-  if (item) {
-    const icon = (item.kind === 'image' || item.kind === 'photo') ? bi('image') : (item.kind === 'video' || item.kind === 'clip') ? bi('camera-reels') : bi('file-earmark');
-    html += `<span class="sched-msg-file">${icon}<b>${esc(item.name)}</b></span>`;
+  if (file) {
+    const icon = (file.kind === 'image' || file.kind === 'photo') ? bi('image') : (file.kind === 'video' || file.kind === 'clip' || file.kind === 'gif') ? bi('camera-reels') : bi('file-earmark');
+    html += `<span class="sched-msg-file">${icon}<b>${esc(file.name)}</b></span>`;
   }
   if (text) {
     const short = text.length > 140 ? text.slice(0, 140) + '…' : text;
@@ -1051,12 +1070,14 @@ function openScheduleModal() {
   const hasFile = pendingFiles.some(f => f.status === 'ready');
   if (!hasText && !hasFile) { toast('اول پیامی بنویس یا فایلی پیوست کن', 'error'); return; }
   if (input.disabled) { toast('تو این گپ نمی‌تونی پیام بفرستی', 'error'); return; }
+  schedEditItem = null;
+  schedTouched = false;
   buildSchedPickers();
   clearSchedQuick();
   const def = new Date(Date.now() + 30 * 60000);
   schedSel = { dayOffset: 0, hour: def.getHours(), minute: Math.floor(def.getMinutes() / 15) * 15 };
   syncSchedPickers();
-  fillSchedMsg();
+  fillSchedMsg(null);
   loadSchedPending();
   const free = document.getElementById('scheduleAt');
   const toLocalInput = d => {
@@ -1071,30 +1092,65 @@ function openScheduleModal() {
   document.getElementById('scheduleModal').classList.add('show');
 }
 
+function openSchedEdit(item) {
+  schedEditItem = item;
+  schedTouched = false;
+  schedFree = false;
+  buildSchedPickers();
+  clearSchedQuick();
+  const d = parseSchedIso(item.send_at);
+  const off = Math.max(0, Math.min(29, Math.round((new Date(d.toDateString()) - schedTodayBase()) / 86400000)));
+  let mn = Math.round(d.getMinutes() / 15) * 15;
+  let hr = d.getHours();
+  if (mn === 60) { mn = 0; hr = (hr + 1) % 24; }
+  schedSel = { dayOffset: off, hour: hr, minute: mn };
+  syncSchedPickers();
+  if (d.getMinutes() !== schedSel.minute) {
+    document.getElementById('schedHeroTime').textContent = d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  }
+  fillSchedMsg(item);
+  loadSchedPending();
+  const free = document.getElementById('scheduleAt');
+  const toLocalInput = d2 => {
+    const p = n => String(n).padStart(2, '0');
+    return `${d2.getFullYear()}-${p(d2.getMonth() + 1)}-${p(d2.getDate())}T${p(d2.getHours())}:${p(d2.getMinutes())}`;
+  };
+  free.value = toLocalInput(d);
+  free.min = toLocalInput(new Date(Date.now() + 15000));
+  free.max = toLocalInput(new Date(Date.now() + 30 * 86400000));
+  updateSchedulePreview();
+  document.querySelector('#scheduleModal .sched-free').open = false;
+  document.getElementById('scheduleModal').classList.add('show');
+}
+
 document.getElementById('btnSchedule').onclick = openScheduleModal;
-document.getElementById('scheduleCancel').onclick = () => document.getElementById('scheduleModal').classList.remove('show');
+document.getElementById('scheduleCancel').onclick = () => { schedEditItem = null; document.getElementById('scheduleModal').classList.remove('show'); };
 document.querySelectorAll('#scheduleModal').forEach(mod => {
-  mod.addEventListener('click', e => { if (e.target === mod) mod.classList.remove('show'); });
+  mod.addEventListener('click', e => { if (e.target === mod) { schedEditItem = null; mod.classList.remove('show'); } });
 });
 
 document.getElementById('schedDaySel').addEventListener('change', e => {
   schedSel.dayOffset = +e.target.value;
+  schedTouched = true;
   clearSchedQuick();
   syncSchedPickers();
 });
 document.getElementById('schedHourSel').addEventListener('change', e => {
   schedSel.hour = +e.target.value;
+  schedTouched = true;
   clearSchedQuick();
   syncSchedPickers();
 });
 document.getElementById('schedMinSel').addEventListener('change', e => {
   schedSel.minute = +e.target.value;
+  schedTouched = true;
   clearSchedQuick();
   syncSchedPickers();
 });
 document.getElementById('schedQuick').addEventListener('click', e => {
   const b = e.target.closest('[data-sched-quick]');
   if (!b) return;
+  schedTouched = true;
   if (b.dataset.schedQuick === 'tomorrow') {
     schedSel = { dayOffset: 1, hour: 9, minute: 0 };
     document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(x => x.classList.toggle('on', x === b));
@@ -1125,6 +1181,33 @@ document.getElementById('scheduleAt').addEventListener('input', updateSchedulePr
 
 document.getElementById('scheduleConfirm').onclick = async () => {
   if (!currentChat) return;
+  if (schedEditItem) {
+    let target;
+    if (schedFree) {
+      const v = document.getElementById('scheduleAt').value;
+      if (!v) return toast('زمان رو انتخاب کن', 'error');
+      target = new Date(v);
+    } else if (schedTouched) {
+      target = schedSelectedDate();
+    } else {
+      target = parseSchedIso(schedEditItem.send_at);
+    }
+    const now = new Date();
+    if (target.getTime() <= now.getTime() + 15000) return toast('زمان باید بعد از الان باشه', 'error');
+    const ta = document.getElementById('schedEditText');
+    const body = { send_at: target.toISOString() };
+    if (ta) {
+      if (schedEditItem.msg_type === 'text' && !ta.value.trim()) return toast('متن پیام نمی‌تونه خالی باشه', 'error');
+      body.content = ta.value.trim();
+    }
+    const r = await api('/api/message/schedule/' + schedEditItem.id, body);
+    if (!r.ok) return toast(r.error || 'انجام نشد', 'error');
+    toast('زمان‌بندی به‌روز شد', 'success');
+    schedEditItem = null;
+    document.getElementById('scheduleModal').classList.remove('show');
+    loadSchedPending();
+    return;
+  }
   let target;
   if (schedFree) {
     const v = document.getElementById('scheduleAt').value;
@@ -1171,15 +1254,21 @@ async function loadSchedPending() {
   if (!currentChat) return;
   const j = await (await fetch('/api/message/scheduled?chat_id=' + currentChat)).json();
   const items = (j.items || []).filter(x => x.chat_id === currentChat);
+  schedItems = items;
   const list = document.getElementById('schedPendList');
   const sec = document.getElementById('schedPendSec');
   if (!list || !sec) return;
   list.innerHTML = items.map(it => {
-    const ico = it.msg_type === 'text' ? bi('envelope') : (it.msg_type === 'image' || it.msg_type === 'photo') ? bi('image') : bi('file-earmark');
-    const title = it.msg_type === 'text' ? (it.preview || 'پیام') : (it.preview || it.msg_type);
-    const when = new Date(it.send_at);
+    const ico = it.msg_type === 'text' ? bi('envelope') : (it.msg_type === 'image') ? bi('image') : (it.msg_type === 'video' || it.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
+    const title = it.msg_type === 'text' ? (it.content || 'پیام') : (it.file_name || it.msg_type);
+    const when = parseSchedIso(it.send_at);
     const whenFa = when.toLocaleDateString('fa-IR', { day: 'numeric', month: 'short' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="sched-pend-item" data-sid="${it.id}"><span class="sp-ico">${ico}</span><div class="sp-txt"><b>${esc(title)}</b><small>${whenFa}</small></div><button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button></div>`;
+    return `<div class="sched-pend-item" data-sid="${it.id}">
+      <span class="sp-ico">${ico}</span>
+      <div class="sp-txt" data-resched-open="${it.id}" title="برای تغییر زمان کلیک کن"><b>${esc(title)}</b><small>${whenFa}</small></div>
+      <button title="تغییر زمان و ویرایش" data-resched-sched="${it.id}">${bi('hourglass-split')}</button>
+      <button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
+    </div>`;
   }).join('');
   document.getElementById('schedPendCount').textContent = items.length ? faNum(items.length) : '';
   sec.style.display = items.length ? '' : 'none';
@@ -1190,6 +1279,13 @@ function refreshSchedPending() {
 }
 
 document.addEventListener('click', e => {
+  const rb = e.target.closest('[data-resched-sched], [data-resched-open]');
+  if (rb) {
+    const rid = rb.dataset.reschedSched || rb.dataset.reschedOpen;
+    const it = schedItems.find(x => String(x.id) === String(rid));
+    if (it) openSchedEdit(it);
+    return;
+  }
   const b = e.target.closest('[data-cancel-sched]');
   if (!b) return;
   api('/api/message/schedule/' + b.dataset.cancelSched + '/cancel').then(r => {
