@@ -403,40 +403,29 @@ function scrollToBottom(force) {
   if (force || nearBottom()) {
     el.scrollTop = el.scrollHeight;
   }
-  updateScrollBtn();
+  updateMoreBtn();
 }
 
-function updateScrollBtn() {
-  const btn = document.getElementById('scrollDown');
-  const up = document.getElementById('jumpFirst');
+function updateMoreBtn() {
+  const btn = document.getElementById('btnMore');
   const el = document.getElementById('msgs');
   if (!btn || !el) return;
   const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-  btn.classList.toggle('show', dist > 220);
-  if (up) up.classList.toggle('show', currentChat && el.scrollTop <= 40);
+  btn.classList.toggle('show', currentChat && (dist > 220 || el.scrollTop <= 40));
 }
 
-function updateFirstBtn() {
-  const up = document.getElementById('jumpFirst');
+function scrollMsgsToBottom() {
   const el = document.getElementById('msgs');
-  if (up && el) up.classList.toggle('show', !!currentChat && el.scrollTop <= 40);
+  el.scrollTop = el.scrollHeight;
+  updateMoreBtn();
 }
 
 let firstLoading = false;
-function syncJumpFirstPos() {
-  const up = document.getElementById('jumpFirst');
-  const msgs = document.getElementById('msgs');
-  if (!up || !msgs) return;
-  if (msgs.offsetWidth === 0) return;
-  up.style.top = (msgs.offsetTop + 8) + 'px';
-}
 async function jumpToFirst() {
   if (!currentChat || firstLoading) return;
   const el = document.getElementById('msgs');
   if (!el || el.scrollTop > 60) return;
   firstLoading = true;
-  const up = document.getElementById('jumpFirst');
-  up.classList.add('busy');
   try {
     const j = await (await fetch('/api/messages/' + currentChat + '?first=1')).json();
     if (j.messages && j.messages.length) {
@@ -450,22 +439,36 @@ async function jumpToFirst() {
     if (topRow) flashMsg(topRow);
   } catch (_) {}
   firstLoading = false;
-  up.classList.remove('busy');
 }
 
-(function initScrollDown() {
+function openMoreMenu() {
+  const c = CD.chat || {};
+  const items = [
+    { label: 'رفتن به اولین پیام', icon: bi('arrow-up-circle'), fn: jumpToFirst },
+    { label: 'رفتن به آخرین پیام', icon: bi('chevron-down'), fn: scrollMsgsToBottom },
+    { label: 'جستجوی پیام‌ها', icon: bi('search'), fn: openChatSearch },
+  ];
+  if (c.chat_type === 'dm' && c.peer) {
+    items.push('sep');
+    items.push({ label: 'گزارش کاربر', icon: bi('flag'), danger: true, fn: () => openReport(c.peer, '') });
+  }
+  const btn = document.getElementById('btnMore');
+  const r = btn.getBoundingClientRect();
+  showCtxMenu(r.right, r.top - 8, items);
+  const m = document.getElementById('ctxMenu');
+  m.style.top = Math.max(8, r.top - m.offsetHeight - 8) + 'px';
+  m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px';
+}
+
+(function initMoreBtn() {
   const el = document.getElementById('msgs');
-  const btn = document.getElementById('scrollDown');
+  const btn = document.getElementById('btnMore');
   if (!el || !btn) return;
-  const up = document.getElementById('jumpFirst');
-  el.addEventListener('scroll', updateScrollBtn, { passive: true });
-  new MutationObserver(updateScrollBtn).observe(el, { childList: true, subtree: true });
-  btn.addEventListener('click', () => { el.scrollTop = el.scrollHeight; updateScrollBtn(); });
-  if (up) up.addEventListener('click', jumpToFirst);
-  window.addEventListener('resize', () => { updateScrollBtn(); syncJumpFirstPos(); });
-  if (typeof ResizeObserver === 'function') new ResizeObserver(syncJumpFirstPos).observe(el);
-  syncJumpFirstPos();
-  updateScrollBtn();
+  el.addEventListener('scroll', updateMoreBtn, { passive: true });
+  new MutationObserver(updateMoreBtn).observe(el, { childList: true, subtree: true });
+  btn.addEventListener('click', openMoreMenu);
+  window.addEventListener('resize', updateMoreBtn);
+  updateMoreBtn();
 })();
 
 function registerMessage(m) {

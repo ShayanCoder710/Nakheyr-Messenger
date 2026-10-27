@@ -541,25 +541,6 @@ b, strong { font-weight: 800; }
 .scroll-down svg { width: 20px; height: 20px; }
 .scroll-down.show { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
 .scroll-down:hover { background: var(--accent); color: #fff; border-color: transparent; }
-.scroll-up {
-  position: absolute; z-index: 6;
-  right: max(18px, calc((100% - var(--chat-max)) / 2 + 12px));
-  top: 72px; bottom: auto;
-  width: 42px; height: 42px; border-radius: 50%;
-  display: grid; place-items: center;
-  background: var(--panel-2); color: var(--muted);
-  border: 1px solid var(--line);
-  box-shadow: var(--card-shadow);
-  cursor: pointer;
-  opacity: 0; visibility: hidden; transform: translateY(-8px) scale(.9);
-  transition: opacity .18s ease, transform .18s ease, visibility .18s ease, background .15s ease, color .15s ease;
-  backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
-}
-.scroll-up svg { width: 20px; height: 20px; }
-.scroll-up.show { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
-.scroll-up:hover { background: var(--accent); color: #fff; border-color: transparent; }
-.scroll-up.busy { color: var(--accent); cursor: wait; }
-
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; max-width: 320px; }
 .empty-ico {
   width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; font-size: 42px;
@@ -1735,7 +1716,6 @@ table.data { width: 100%; border-collapse: collapse; }
   .conv { padding: 9px 10px; }
   .msgs { padding: 14px 10px; }
   .scroll-down { right: 14px; bottom: 72px; width: 40px; height: 40px; }
-  .scroll-up { right: 14px; width: 40px; height: 40px; }
   .members-strip { padding: 8px 10px; }
   .composer { padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 0; }
   .attach-preview { padding: 6px 0 4px; }
