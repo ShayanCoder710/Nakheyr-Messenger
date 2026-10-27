@@ -363,8 +363,11 @@ function lastDayKey() {
 function ensureDaySep(iso) {
   const raw = dayKey(iso);
   if (raw !== lastDayKey()) {
-    document.getElementById('msgsBody').insertAdjacentHTML('beforeend',
-      `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(iso)}</span></div>`);
+    const sep = document.createElement('div');
+    sep.innerHTML = `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(iso)}</span></div>`;
+    const anchor = msgsSchedAnchor();
+    if (anchor) anchor.parentElement.insertBefore(sep.firstElementChild, anchor);
+    else document.getElementById('msgsBody').appendChild(sep.firstElementChild);
   }
 }
 
@@ -390,6 +393,7 @@ function renderAllMessages() {
   } else if (currentChat) {
     body.innerHTML = '<div class="empty-msgs">اینجا جای پیام‌هاست. اولین پیام رو تو بفرست</div>';
   }
+  renderSchedBubbles();
   scrollToBottom(true);
 }
 
@@ -590,7 +594,11 @@ function appendMsg(m) {
   registerMessage(m);
   ensureDaySep(m.created_at);
   const own = m.sender_id === window.ME.id;
-  body.insertAdjacentHTML('beforeend', `<div id="m${m.id}">${renderMsg(m)}</div>`);
+  const frag = document.createElement('div');
+  frag.innerHTML = `<div id="m${m.id}">${renderMsg(m)}</div>`;
+  const anchor = msgsSchedAnchor();
+  if (anchor) anchor.parentElement.insertBefore(frag.firstElementChild, anchor);
+  else body.appendChild(frag.firstElementChild);
   scrollToBottom(own);
   updateConvPreview(m);
   if (selecting) syncSelection();
@@ -1205,7 +1213,7 @@ document.getElementById('scheduleConfirm').onclick = async () => {
     toast('زمان‌بندی به‌روز شد', 'success');
     schedEditItem = null;
     document.getElementById('scheduleModal').classList.remove('show');
-    loadSchedPending();
+    renderSchedBubbles();
     return;
   }
   let target;
@@ -1246,52 +1254,58 @@ document.getElementById('scheduleConfirm').onclick = async () => {
   document.getElementById('replyPreview').style.display = 'none';
   renderAttachPreview();
   flushDraftFor(currentChat, '');
-  refreshSchedPending();
+  renderSchedBubbles();
   input.focus({ preventScroll: true });
 };
 
-async function loadSchedPending() {
-  if (!currentChat) return;
-  const j = await (await fetch('/api/message/scheduled?chat_id=' + currentChat)).json();
-  const items = (j.items || []).filter(x => x.chat_id === currentChat);
-  schedItems = items;
-  const panel = document.getElementById('schedPanel');
-  const list = document.getElementById('schedPendList');
-  if (!panel || !list) return;
-  list.innerHTML = items.map(it => {
-    const ico = it.msg_type === 'text' ? bi('envelope') : (it.msg_type === 'image') ? bi('image') : (it.msg_type === 'video' || it.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
-    const title = it.msg_type === 'text' ? (it.content || 'پیام') : (it.file_name || it.msg_type);
-    const when = parseSchedIso(it.send_at);
-    const whenFa = when.toLocaleDateString('fa-IR', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="sched-panel-item" data-sid="${it.id}">
-      <span class="spi-ico">${ico}</span>
-      <div class="spi-txt" data-resched-open="${it.id}" title="برای ویرایش کلیک کن">
-        <b>${esc(title)}</b>
-        <small>${whenFa}</small>
+function schedBubbleHtml(it) {
+  const when = parseSchedIso(it.send_at);
+  const whenFa = when.toLocaleDateString('fa-IR', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  let body;
+  if (it.msg_type === 'text') {
+    body = `<div class="txt md">${mentionify(md(it.content || ''))}</div>`;
+  } else {
+    const ico = it.msg_type === 'image' ? bi('image') : (it.msg_type === 'video' || it.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
+    body = `<div class="sched-media"><span class="sm-ico">${ico}</span><span class="sm-meta"><b>${esc(it.file_name || it.msg_type)}</b>${it.content ? `<small class="sm-cap">${esc(it.content)}</small>` : ''}</span></div>`;
+  }
+  return `<div class="mrow mine-row sched-row" data-sid="${it.id}">
+    <div class="bubble me sched-bubble" data-resched-open="${it.id}" title="برای ویرایش کلیک کن">
+      <div class="sched-badge">${bi('hourglass-split')} در انتظار ارسال</div>
+      ${body}
+      <div class="m-meta">
+        <span class="sched-time">${bi('hourglass-split')} ${whenFa}</span>
+        <button class="sched-x" title="لغو ارسال" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
       </div>
-      <span class="spi-acts">
-        <button title="ویرایش متن و زمان" data-resched-sched="${it.id}">${bi('hourglass-split')}</button>
-        <button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
-      </span>
-    </div>`;
-  }).join('');
-  document.getElementById('schedPendCount').textContent = faNum(items.length);
-  panel.style.display = items.length ? '' : 'none';
+    </div>
+  </div>`;
 }
 
-document.getElementById('schedPanelHead').addEventListener('click', e => {
-  if (e.target.closest('.sp-toggle')) return;
-  document.getElementById('schedPanel').classList.toggle('collapsed');
-});
-document.getElementById('schedPanelToggle').addEventListener('click', () => {
-  document.getElementById('schedPanel').classList.toggle('collapsed');
-});
+async function renderSchedBubbles() {
+  if (!currentChat) return;
+  const cid = String(currentChat);
+  document.querySelectorAll('#msgsBody .sched-row').forEach(el => el.remove());
+  const j = await (await fetch('/api/message/scheduled?chat_id=' + cid)).json();
+  if (String(currentChat) !== cid) return;
+  const items = (j.items || []).filter(x => String(x.chat_id) === cid);
+  items.sort((a, b) => parseSchedIso(a.send_at) - parseSchedIso(b.send_at));
+  schedItems = items;
+  const body = document.getElementById('msgsBody');
+  items.forEach(it => body.insertAdjacentHTML('beforeend', schedBubbleHtml(it)));
+}
 
-function refreshSchedPending() {
-  loadSchedPending();
+function msgsSchedAnchor() {
+  return document.querySelector('#msgsBody .sched-row');
 }
 
 document.addEventListener('click', e => {
+  const cb = e.target.closest('[data-cancel-sched]');
+  if (cb) {
+    api('/api/message/schedule/' + cb.dataset.cancelSched + '/cancel').then(r => {
+      if (r.ok) { toast('زمان‌بندی لغو شد'); renderSchedBubbles(); }
+      else toast(r.error || 'انجام نشد', 'error');
+    });
+    return;
+  }
   const rb = e.target.closest('[data-resched-sched], [data-resched-open]');
   if (rb) {
     const rid = rb.dataset.reschedSched || rb.dataset.reschedOpen;
@@ -1299,12 +1313,6 @@ document.addEventListener('click', e => {
     if (it) openSchedEdit(it);
     return;
   }
-  const b = e.target.closest('[data-cancel-sched]');
-  if (!b) return;
-  api('/api/message/schedule/' + b.dataset.cancelSched + '/cancel').then(r => {
-    if (r.ok) { toast('زمان‌بندی لغو شد'); loadSchedPending(); }
-    else toast(r.error || 'انجام نشد', 'error');
-  });
 });
 
 function clearUnread(id) {
@@ -1384,7 +1392,6 @@ async function openChat(id, opts) {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
   updateComposerSlot();
   renderSlowHint();
-  refreshSchedPending();
   renderAllMessages();
   attachMore();
   api('/api/mark-read', { chat_id: currentChat });
@@ -4863,5 +4870,5 @@ S.on('banned', d => {
 
 S.on('schedule_update', d => {
   if (d && d.chat_id && d.chat_id !== currentChat) return;
-  refreshSchedPending();
+  renderSchedBubbles();
 });

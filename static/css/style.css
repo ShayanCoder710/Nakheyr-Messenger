@@ -1122,43 +1122,32 @@ b, strong { font-weight: 800; }
 .sched-sel-col { display: flex; flex-direction: column; gap: 4px; }
 .sched-sel-lab { margin: 0; font-size: 10.5px; font-weight: 700; color: var(--dim); }
 .sched-sels2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.sched-panel {
-  padding: 8px max(16px, calc((100% - var(--chat-max)) / 2)) 10px;
-  background: color-mix(in srgb, var(--accent) 7%, transparent);
-  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
+.sched-row .sched-bubble {
+  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
+  cursor: pointer;
 }
-.sched-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none; }
-.sched-panel-title {
-  display: flex; align-items: center; gap: 6px;
-  font-size: 12px; font-weight: 800; color: var(--accent-2);
+.sched-row .sched-bubble:hover { background: color-mix(in srgb, var(--accent) 6%, var(--bg-3)); }
+.sched-badge {
+  display: flex; align-items: center; gap: 5px;
+  font-size: 10.5px; font-weight: 800; color: var(--accent-2);
+  margin-bottom: 5px;
 }
-.sched-panel-title .bi-ic { width: 14px; height: 14px; }
-.sched-panel-title b { color: var(--text); font-size: 11px; background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 8px; padding: 1px 7px; }
-.sched-panel-body { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; max-height: 170px; overflow-y: auto; }
-.sched-panel.collapsed .sched-panel-body { display: none; }
-.sched-panel.collapsed .sp-toggle .bi-ic { transform: rotate(180deg); }
-.sp-toggle { transition: background .15s; }
-.sched-panel-item {
-  display: flex; align-items: center; gap: 9px;
-  background: var(--bg-2); border: 1px solid var(--line);
-  border-radius: 12px; padding: 8px 10px;
-}
-.spi-ico { color: var(--accent); display: grid; place-items: center; flex: none; }
-.spi-ico .bi-ic { width: 15px; height: 15px; }
-.spi-txt { flex: 1; min-width: 0; cursor: pointer; }
-.spi-txt b {
-  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
-  font-size: 12.5px; font-weight: 700; line-height: 1.6; word-break: break-word;
-}
-.spi-txt small { color: var(--muted); font-size: 10.5px; margin-top: 2px; display: block; }
-.spi-acts { display: flex; gap: 2px; flex: none; }
-.spi-acts button {
+.sched-badge .bi-ic { width: 12px; height: 12px; }
+.sched-time { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-2); font-weight: 700; }
+.sched-time .bi-ic { width: 11px; height: 11px; }
+.sched-x {
   border: 0; background: transparent; color: var(--muted); cursor: pointer;
-  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
+  display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
   transition: background .15s, color .15s;
 }
-.spi-acts button:hover { background: var(--bg-3); color: var(--accent-2); }
-.spi-acts button .bi-ic { width: 14px; height: 14px; }
+.sched-x:hover { background: var(--bg-3); color: var(--accent-2); }
+.sched-x .bi-ic { width: 12px; height: 12px; }
+.sched-media { display: flex; align-items: center; gap: 9px; }
+.sched-media .sm-ico { color: var(--accent-2); display: grid; place-items: center; flex: none; }
+.sched-media .sm-ico .bi-ic { width: 26px; height: 26px; }
+.sched-media .sm-meta { min-width: 0; }
+.sched-media .sm-meta b { display: block; font-size: 12.5px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.sched-media .sm-cap { display: block; font-size: 11px; color: var(--muted); overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .sched-free { margin-top: 12px; }
 .sched-free summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--muted); display: flex; align-items: center; gap: 6px; padding: 6px 0; user-select: none; }
 .sched-free summary::-webkit-details-marker { display: none; }
