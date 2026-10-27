@@ -124,8 +124,11 @@
       <div class="msgs" id="msgs">
         <div id="msgsBody" style="display:contents"></div>
       </div>
-      <button class="scroll-down" id="btnMore" title="گزینه‌های بیشتر" aria-label="گزینه‌های بیشتر">
-        {{ bi('three-dots-vertical') }}
+      <button class="jump-btn" id="btnJumpTop" title="رفتن به اولین پیام" aria-label="رفتن به اولین پیام">
+        {{ bi('arrow-up-circle') }}
+      </button>
+      <button class="jump-btn" id="btnJumpBottom" title="رفتن به آخرین پیام" aria-label="رفتن به آخرین پیام">
+        {{ bi('arrow-down-circle') }}
       </button>
       <div class="typing-bar" id="typingBar"></div>
       <div class="channel-hint" id="channelHint" style="display:none"><span>{{ bi('lock') }} در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>

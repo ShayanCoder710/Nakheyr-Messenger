@@ -407,21 +407,23 @@ function scrollToBottom(force) {
   if (force || nearBottom()) {
     el.scrollTop = el.scrollHeight;
   }
-  updateMoreBtn();
+  updateJumpBtns();
 }
 
-function updateMoreBtn() {
-  const btn = document.getElementById('btnMore');
+function updateJumpBtns() {
   const el = document.getElementById('msgs');
-  if (!btn || !el) return;
+  const top = document.getElementById('btnJumpTop');
+  const down = document.getElementById('btnJumpBottom');
+  if (!el || !top || !down) return;
   const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-  btn.classList.toggle('show', currentChat && (dist > 220 || el.scrollTop <= 40));
+  top.classList.toggle('show', !!currentChat && el.scrollTop > 220);
+  down.classList.toggle('show', !!currentChat && dist > 220);
 }
 
 function scrollMsgsToBottom() {
   const el = document.getElementById('msgs');
   el.scrollTop = el.scrollHeight;
-  updateMoreBtn();
+  updateJumpBtns();
 }
 
 let firstLoading = false;
@@ -445,34 +447,17 @@ async function jumpToFirst() {
   firstLoading = false;
 }
 
-function openMoreMenu() {
-  const c = CD.chat || {};
-  const items = [
-    { label: 'رفتن به اولین پیام', icon: bi('arrow-up-circle'), fn: jumpToFirst },
-    { label: 'رفتن به آخرین پیام', icon: bi('chevron-down'), fn: scrollMsgsToBottom },
-    { label: 'جستجوی پیام‌ها', icon: bi('search'), fn: openChatSearch },
-  ];
-  if (c.chat_type === 'dm' && c.peer) {
-    items.push('sep');
-    items.push({ label: 'گزارش کاربر', icon: bi('flag'), danger: true, fn: () => openReport(c.peer, '') });
-  }
-  const btn = document.getElementById('btnMore');
-  const r = btn.getBoundingClientRect();
-  showCtxMenu(r.right, r.top - 8, items);
-  const m = document.getElementById('ctxMenu');
-  m.style.top = Math.max(8, r.top - m.offsetHeight - 8) + 'px';
-  m.style.left = Math.max(8, r.right - m.offsetWidth) + 'px';
-}
-
-(function initMoreBtn() {
+(function initJumpBtns() {
   const el = document.getElementById('msgs');
-  const btn = document.getElementById('btnMore');
-  if (!el || !btn) return;
-  el.addEventListener('scroll', updateMoreBtn, { passive: true });
-  new MutationObserver(updateMoreBtn).observe(el, { childList: true, subtree: true });
-  btn.addEventListener('click', openMoreMenu);
-  window.addEventListener('resize', updateMoreBtn);
-  updateMoreBtn();
+  const top = document.getElementById('btnJumpTop');
+  const down = document.getElementById('btnJumpBottom');
+  if (!el || !top || !down) return;
+  el.addEventListener('scroll', updateJumpBtns, { passive: true });
+  new MutationObserver(updateJumpBtns).observe(el, { childList: true, subtree: true });
+  top.addEventListener('click', jumpToFirst);
+  down.addEventListener('click', scrollMsgsToBottom);
+  window.addEventListener('resize', updateJumpBtns);
+  updateJumpBtns();
 })();
 
 function registerMessage(m) {
@@ -1258,39 +1243,44 @@ document.getElementById('scheduleConfirm').onclick = async () => {
   input.focus({ preventScroll: true });
 };
 
-function schedBubbleHtml(it) {
+function schedCardHtml(it) {
   const when = parseSchedIso(it.send_at);
-  const whenFa = when.toLocaleDateString('fa-IR', { weekday: 'short', day: 'numeric', month: 'short' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  const whenFa = when.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' }) + '، ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
   let body;
   if (it.msg_type === 'text') {
-    body = `<div class="txt md">${mentionify(md(it.content || ''))}</div>`;
+    body = `<div class="sc-text">${mentionify(md(it.content || ''))}</div>`;
   } else {
     const ico = it.msg_type === 'image' ? bi('image') : (it.msg_type === 'video' || it.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
     body = `<div class="sched-media"><span class="sm-ico">${ico}</span><span class="sm-meta"><b>${esc(it.file_name || it.msg_type)}</b>${it.content ? `<small class="sm-cap">${esc(it.content)}</small>` : ''}</span></div>`;
   }
-  return `<div class="mrow mine-row sched-row" data-sid="${it.id}">
-    <div class="bubble me sched-bubble" data-resched-open="${it.id}" title="برای ویرایش کلیک کن">
-      <div class="sched-badge">${bi('hourglass-split')} در انتظار ارسال</div>
-      ${body}
-      <div class="m-meta">
-        <span class="sched-time">${bi('hourglass-split')} ${whenFa}</span>
-        <button class="sched-x" title="لغو ارسال" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
-      </div>
+  return `<div class="sched-card sched-row" data-sid="${it.id}">
+    <div class="sc-head">
+      <span class="sc-title">${bi('hourglass-split')} پیام زمان‌بندی‌شده</span>
+      <span class="sc-acts">
+        <button type="button" class="sc-btn" data-resched-sched="${it.id}">${bi('hourglass-split')} ویرایش</button>
+        <button type="button" class="sc-btn sc-danger" data-cancel-sched="${it.id}">${bi('x-lg')} لغو</button>
+      </span>
+    </div>
+    <div class="sc-body" data-resched-open="${it.id}" title="برای ویرایش کلیک کن">${body}
+      <div class="sc-time">${bi('hourglass-split')} زمان ارسال: ${whenFa}</div>
     </div>
   </div>`;
 }
 
+let schedRenderSeq = 0;
+
 async function renderSchedBubbles() {
   if (!currentChat) return;
   const cid = String(currentChat);
-  document.querySelectorAll('#msgsBody .sched-row').forEach(el => el.remove());
+  const seq = ++schedRenderSeq;
   const j = await (await fetch('/api/message/scheduled?chat_id=' + cid)).json();
-  if (String(currentChat) !== cid) return;
+  if (seq !== schedRenderSeq || String(currentChat) !== cid) return;
   const items = (j.items || []).filter(x => String(x.chat_id) === cid);
   items.sort((a, b) => parseSchedIso(a.send_at) - parseSchedIso(b.send_at));
   schedItems = items;
+  document.querySelectorAll('#msgsBody .sched-row').forEach(el => el.remove());
   const body = document.getElementById('msgsBody');
-  items.forEach(it => body.insertAdjacentHTML('beforeend', schedBubbleHtml(it)));
+  items.forEach(it => body.insertAdjacentHTML('beforeend', schedCardHtml(it)));
 }
 
 function msgsSchedAnchor() {
@@ -1895,7 +1885,7 @@ async function sendText(caption) {
     if (pendingFiles.some(f => f.status === 'ready')) toast('تو این گپ نمی‌تونی پیام بفرستی', 'error');
     return;
   }
-  const text = (caption !== undefined ? caption : input.value).trim();
+  const text = (typeof caption === 'string' ? caption : input.value).trim();
   const item = pendingFiles.find(f => f.status === 'ready');
   if (!text && !item) {
     if (pendingFiles.some(f => f.status === 'uploading')) toast('صبر کن تا آپلود تموم شه', 'error');
@@ -2323,7 +2313,7 @@ async function loadPinned() {
   renderPinnedBar();
 }
 
-document.getElementById('btnSend').onclick = sendText;
+document.getElementById('btnSend').onclick = () => sendText();
 document.getElementById('msgInput').addEventListener('keydown', e => {
   if (mentionOpen) {
     if (e.key === 'ArrowDown') {

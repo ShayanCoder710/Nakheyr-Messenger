@@ -524,10 +524,9 @@ b, strong { font-weight: 800; }
 }
 .msgs-pane.not-joined .msgs { background: var(--msg-dim); }
 
-.scroll-down {
+.jump-btn {
   position: absolute; z-index: 6;
   right: max(18px, calc((100% - var(--chat-max)) / 2 + 12px));
-  bottom: 86px;
   width: 42px; height: 42px; border-radius: 50%;
   display: grid; place-items: center;
   background: var(--panel-2); color: var(--muted);
@@ -538,9 +537,11 @@ b, strong { font-weight: 800; }
   transition: opacity .18s ease, transform .18s ease, visibility .18s ease, background .15s ease, color .15s ease;
   backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
 }
-.scroll-down svg { width: 20px; height: 20px; }
-.scroll-down.show { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
-.scroll-down:hover { background: var(--accent); color: #fff; border-color: transparent; }
+#btnJumpBottom { bottom: 86px; }
+#btnJumpTop { bottom: 136px; }
+.jump-btn svg { width: 20px; height: 20px; }
+.jump-btn.show { opacity: 1; visibility: visible; transform: translateY(0) scale(1); }
+.jump-btn:hover { background: var(--accent); color: #fff; border-color: transparent; }
 .empty-state { display: flex; flex-direction: column; align-items: center; gap: 16px; text-align: center; max-width: 320px; }
 .empty-ico {
   width: 92px; height: 92px; border-radius: 50%; display: grid; place-items: center; font-size: 42px;
@@ -1122,26 +1123,38 @@ b, strong { font-weight: 800; }
 .sched-sel-col { display: flex; flex-direction: column; gap: 4px; }
 .sched-sel-lab { margin: 0; font-size: 10.5px; font-weight: 700; color: var(--dim); }
 .sched-sels2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.sched-row .sched-bubble {
-  border: 1px dashed color-mix(in srgb, var(--accent) 55%, transparent);
-  cursor: pointer;
+.sched-card {
+  margin: 10px 0;
+  border: 1px solid color-mix(in srgb, var(--accent) 35%, var(--line));
+  background: var(--bg-2);
+  border-radius: 14px;
+  overflow: hidden;
+  flex: none;
 }
-.sched-row .sched-bubble:hover { background: color-mix(in srgb, var(--accent) 6%, var(--bg-3)); }
-.sched-badge {
-  display: flex; align-items: center; gap: 5px;
-  font-size: 10.5px; font-weight: 800; color: var(--accent-2);
-  margin-bottom: 5px;
+.sc-head {
+  display: flex; align-items: center; justify-content: space-between; gap: 8px;
+  padding: 8px 12px;
+  background: color-mix(in srgb, var(--accent) 9%, transparent);
+  border-bottom: 1px solid color-mix(in srgb, var(--accent) 18%, transparent);
 }
-.sched-badge .bi-ic { width: 12px; height: 12px; }
-.sched-time { display: inline-flex; align-items: center; gap: 4px; color: var(--accent-2); font-weight: 700; }
-.sched-time .bi-ic { width: 11px; height: 11px; }
-.sched-x {
-  border: 0; background: transparent; color: var(--muted); cursor: pointer;
-  display: grid; place-items: center; width: 22px; height: 22px; border-radius: 6px;
-  transition: background .15s, color .15s;
+.sc-title { display: flex; align-items: center; gap: 6px; font-size: 11.5px; font-weight: 800; color: var(--accent-2); }
+.sc-title .bi-ic { width: 13px; height: 13px; }
+.sc-acts { display: flex; gap: 4px; }
+.sc-btn {
+  display: inline-flex; align-items: center; gap: 5px;
+  border: 1px solid var(--line); background: transparent;
+  color: var(--muted); font-size: 11px; font-weight: 700;
+  padding: 4px 10px; border-radius: 9px; cursor: pointer;
+  transition: background .15s, color .15s, border-color .15s;
 }
-.sched-x:hover { background: var(--bg-3); color: var(--accent-2); }
-.sched-x .bi-ic { width: 12px; height: 12px; }
+.sc-btn .bi-ic { width: 12px; height: 12px; }
+.sc-btn:hover { background: color-mix(in srgb, var(--accent) 12%, transparent); color: var(--accent-2); border-color: color-mix(in srgb, var(--accent) 40%, transparent); }
+.sc-btn.sc-danger:hover { background: color-mix(in srgb, var(--red-3, #ff5f5f) 12%, transparent); color: var(--red-3, #ff5f5f); border-color: color-mix(in srgb, var(--red-3, #ff5f5f) 40%, transparent); }
+.sc-body { padding: 10px 12px; cursor: pointer; display: flex; flex-direction: column; gap: 7px; transition: background .15s; }
+.sc-body:hover { background: color-mix(in srgb, var(--accent) 4%, transparent); }
+.sc-text { font-size: 13px; line-height: 1.8; color: var(--text); white-space: pre-wrap; word-break: break-word; }
+.sc-time { display: flex; align-items: center; gap: 5px; font-size: 11px; font-weight: 700; color: var(--accent-2); }
+.sc-time .bi-ic { width: 12px; height: 12px; }
 .sched-media { display: flex; align-items: center; gap: 9px; }
 .sched-media .sm-ico { color: var(--accent-2); display: grid; place-items: center; flex: none; }
 .sched-media .sm-ico .bi-ic { width: 26px; height: 26px; }
@@ -1782,7 +1795,9 @@ table.data { width: 100%; border-collapse: collapse; }
   .search-results { max-height: min(52vh, 340px); }
   .conv { padding: 9px 10px; }
   .msgs { padding: 14px 10px; }
-  .scroll-down { right: 14px; bottom: 72px; width: 40px; height: 40px; }
+  .jump-btn { right: 14px; width: 40px; height: 40px; }
+  #btnJumpBottom { bottom: 72px; }
+  #btnJumpTop { bottom: 118px; }
   .members-strip { padding: 8px 10px; }
   .composer { padding: 8px 10px; padding-bottom: max(8px, env(safe-area-inset-bottom)); border-radius: 0; }
   .attach-preview { padding: 6px 0 4px; }
