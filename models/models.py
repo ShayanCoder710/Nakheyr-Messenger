@@ -250,6 +250,33 @@ class Message(db.Model):
         return data
 
 
+class ScheduledMessage(db.Model):
+    __tablename__ = 'scheduled_messages'
+    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
+    msg_type = db.Column(db.String(12), default='text')
+    content = db.Column(db.Text, default='')
+    file_path = db.Column(db.String(200), default='')
+    file_name = db.Column(db.String(160), default='')
+    reply_to = db.Column(db.Integer, nullable=True)
+    send_at = db.Column(db.DateTime, nullable=False, index=True)
+    status = db.Column(db.String(10), default='pending')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self):
+        return {
+            'id': self.id,
+            'chat_id': self.chat_id,
+            'msg_type': self.msg_type,
+            'preview': (self.content or self.file_name or '')[:60],
+            'send_at': self.send_at.isoformat() if self.send_at else '',
+            'status': self.status,
+        }
+
+
 class HiddenMessage(db.Model):
     __tablename__ = 'hidden_messages'
     __table_args__ = (db.UniqueConstraint('user_id', 'message_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})

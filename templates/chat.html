@@ -137,12 +137,14 @@
         <button class="btn sm" id="bulkCopy">کپی</button>
         <button class="btn sm danger" id="bulkDelete">{{ bi('trash') }} حذف</button>
       </div>
+      <div class="sched-strip" id="schedStrip" style="display:none"></div>
       <div class="composer">
         <div class="reply-preview" id="replyPreview" style="display:none"></div>
         <div class="attach-preview" id="attachPreview"></div>
         <div class="composer-row">
           <div class="composer-tools">
             <button class="icon-btn" id="btnEmoji" title="ایموجی">{{ bi('emoji-smile') }}</button>
+            <button class="icon-btn" id="btnSchedule" title="زمان‌بندی ارسال" aria-label="زمان‌بندی ارسال">{{ bi('hourglass-split') }}</button>
           </div>
           <input type="file" id="fileInput" multiple hidden>
           <textarea class="composer-input" id="msgInput" rows="1" placeholder="پیام…"></textarea>
@@ -344,6 +346,18 @@
     <div class="row">
       <button class="btn ghost" id="reportCancel">انصراف</button>
       <button class="btn danger" id="btnSendReport">ارسال گزارش</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="scheduleModal">
+  <div class="box narrow">
+    <h3>{{ bi('hourglass-split') }} زمان‌بندی ارسال</h3>
+    <p class="sub">پیام در ساعت انتخابی برای همهٔ اعضای این گپ ارسال می‌شه</p>
+    <input class="input" type="datetime-local" id="scheduleAt">
+    <div class="row">
+      <button class="btn ghost" id="scheduleCancel">انصراف</button>
+      <button class="btn danger" id="scheduleConfirm">{{ bi('hourglass-split') }} زمان‌بندی ارسال</button>
     </div>
   </div>
 </div>

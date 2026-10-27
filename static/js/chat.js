@@ -962,6 +962,91 @@ document.getElementById('btnSendReport').onclick = async () => {
   toast(r.ok ? 'گزارشتت ثبت شد. ادمین‌ها بررسی می‌کنن.' : r.error, r.ok ? 'success' : 'error');
 };
 
+function openScheduleModal() {
+  if (!currentChat) return;
+  const input = document.getElementById('msgInput');
+  const hasText = (input.value || '').trim();
+  const hasFile = pendingFiles.some(f => f.status === 'ready');
+  if (!hasText && !hasFile) { toast('اول پیامی بنویس یا فایلی پیوست کن', 'error'); return; }
+  if (input.disabled) { toast('تو این گپ نمی‌تونی پیام بفرستی', 'error'); return; }
+  const el = document.getElementById('scheduleAt');
+  const now = new Date();
+  const def = new Date(now.getTime() + 30 * 60000);
+  const toLocalInput = d => {
+    const p = n => String(n).padStart(2, '0');
+    return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
+  };
+  el.value = toLocalInput(def);
+  el.min = toLocalInput(new Date(now.getTime() + 15000));
+  el.max = toLocalInput(new Date(now.getTime() + 30 * 86400000));
+  document.getElementById('scheduleModal').classList.add('show');
+}
+
+document.getElementById('btnSchedule').onclick = openScheduleModal;
+document.getElementById('scheduleCancel').onclick = () => document.getElementById('scheduleModal').classList.remove('show');
+document.querySelectorAll('#scheduleModal').forEach(mod => {
+  mod.addEventListener('click', e => { if (e.target === mod) mod.classList.remove('show'); });
+});
+
+document.getElementById('scheduleConfirm').onclick = async () => {
+  if (!currentChat) return;
+  const when = document.getElementById('scheduleAt').value;
+  if (!when) return toast('زمان رو انتخاب کن', 'error');
+  const input = document.getElementById('msgInput');
+  const text = (input.value || '').trim();
+  const item = pendingFiles.find(f => f.status === 'ready');
+  const body = { chat_id: currentChat, send_at: new Date(when).toISOString() };
+  if (item) {
+    body.msg_type = item.asFile ? 'file' : item.kind;
+    body.file_path = item.path;
+    body.file_name = item.name;
+    if (text) body.content = text;
+  } else {
+    body.msg_type = 'text';
+    body.content = text;
+  }
+  if (pendingReply) body.reply_to = pendingReply.id;
+  const r = await api('/api/message/schedule', body);
+  if (!r.ok) return toast(r.error || 'انجام نشد', 'error');
+  document.getElementById('scheduleModal').classList.remove('show');
+  if (item) {
+    const i = pendingFiles.indexOf(item);
+    if (i > -1) pendingFiles.splice(i, 1);
+  }
+  input.value = '';
+  input.style.height = 'auto';
+  updateComposerSlot();
+  pendingReply = null;
+  document.getElementById('replyPreview').style.display = 'none';
+  renderAttachPreview();
+  flushDraftFor(currentChat, '');
+  loadSchedStrip();
+  input.focus({ preventScroll: true });
+};
+
+async function loadSchedStrip() {
+  const strip = document.getElementById('schedStrip');
+  if (!strip) return;
+  const j = await (await fetch('/api/message/scheduled?chat_id=' + currentChat)).json();
+  const items = (j.items || []).filter(x => !currentChat || x.chat_id === currentChat);
+  strip.innerHTML = items.map(it => `
+    <div class="sched-item" data-sid="${it.id}">
+      <span class="sched-ico">${bi('hourglass-split')}</span>
+      <div class="sched-txt"><b>${esc(it.msg_type === 'text' ? (it.preview || 'پیام') : (it.preview || it.msg_type))}</b><small>${fmtDay(it.send_at)} · ${fmtTime(it.send_at)}</small></div>
+      <button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
+    </div>`).join('');
+  strip.style.display = items.length ? 'flex' : 'none';
+}
+
+document.addEventListener('click', e => {
+  const b = e.target.closest('[data-cancel-sched]');
+  if (!b) return;
+  api('/api/message/schedule/' + b.dataset.cancelSched + '/cancel').then(r => {
+    if (r.ok) { toast('زمان‌بندی لغو شد'); loadSchedStrip(); }
+    else toast(r.error || 'انجام نشد', 'error');
+  });
+});
+
 function clearUnread(id) {
   document.querySelectorAll(`.conv[data-chat-id="${id}"] .unread-pill`).forEach(el => el.remove());
 }
@@ -974,6 +1059,7 @@ function closeChatPane(syncUrl) {
   if (recState) finishRec(false);
   flushDraft();
   currentChat = null;
+  document.getElementById('schedStrip').style.display = 'none';
   document.getElementById('msgsPane').classList.remove('open');
   document.getElementById('mainEmpty').style.display = 'grid';
   document.querySelector('.chat-layout').classList.remove('chatted');
@@ -1038,6 +1124,7 @@ async function openChat(id, opts) {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
   updateComposerSlot();
   renderSlowHint();
+  loadSchedStrip();
   renderAllMessages();
   attachMore();
   api('/api/mark-read', { chat_id: currentChat });
@@ -4512,4 +4599,9 @@ S.on('banned', d => {
   }
   toast('اکانت شما توسط ' + ((d && d.reason) || 'ادمین') + ' مسدود شد', 'error');
   setTimeout(() => location.replace('/logout'), 1200);
+});
+
+S.on('schedule_update', d => {
+  if (d && d.chat_id && d.chat_id !== currentChat) return;
+  loadSchedStrip();
 });

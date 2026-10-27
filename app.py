@@ -4,8 +4,9 @@ import json
 import time
 import hmac
 import secrets
+import threading
 import urllib.request
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
@@ -17,7 +18,7 @@ from sqlalchemy.orm import joinedload
 from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import (
     db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar, Gif,
-    Bot, BotUpdate,
+    Bot, BotUpdate, ScheduledMessage,
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
@@ -801,6 +802,103 @@ def api_send_message():
         if mid != user.id:
             socketio.emit('new_message', payload, room=f'user:{mid}')
     return jsonify(ok=True, message=payload)
+
+
+@app.route('/api/message/schedule', methods=['POST'])
+@require_auth
+def api_message_schedule():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    if chat.chat_type != 'dm' and not user.is_admin:
+        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first():
+            if chat.is_public:
+                db.session.add(ChatMember(chat_id=chat.id, user_id=user.id, role='member'))
+                db.session.flush()
+            else:
+                return jsonify(ok=False, error='دسترسی نداری')
+    member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+    role = member.role if member else None
+    if chat.chat_type == 'dm':
+        peer = next((m.user for m in chat.members if m.user_id != user.id), None)
+        if peer and is_blocked(user.id, peer.id):
+            return jsonify(ok=False, error='کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونی پیام بدی')
+    if chat.chat_type == 'channel':
+        if chat.owner_id != user.id and role != 'admin' and not user.is_admin:
+            return jsonify(ok=False, error='در کانال فقط ادمین‌ها پیام می‌فرستن')
+    msg_type = data.get('msg_type', 'text')
+    if msg_type not in ('text', 'image', 'video', 'audio', 'file', 'gif'):
+        msg_type = 'file'
+    if chat.chat_type == 'group' and not user.is_admin:
+        if member and role not in ('owner', 'admin'):
+            p = member_perms(member)
+            need = 'send_media' if msg_type != 'text' else 'send_messages'
+            if not p.get(need, False):
+                return jsonify(ok=False, error='اجازهٔ ارسال پیام در این گروه رو نداری')
+    content = (data.get('content') or '').strip()
+    file_path = data.get('file_path') or ''
+    file_name = (data.get('file_name') or '')[:160]
+    if msg_type == 'text' and not content:
+        return jsonify(ok=False, error='پیام خالی')
+    if msg_type != 'text':
+        if not file_path:
+            return jsonify(ok=False, error='فایلی آتچ نشده')
+        if not re.match(r'^\d+/[A-Za-z0-9._\-]+$', file_path):
+            return jsonify(ok=False, error='مسیر فایل نامعتبره')
+        if not os.path.isfile(os.path.join(app.config['UPLOAD_DIR'], file_path)):
+            return jsonify(ok=False, error='فایل پیدا نشد')
+    raw = (data.get('send_at') or '').strip()
+    try:
+        when = datetime.fromisoformat(raw)
+    except (ValueError, TypeError):
+        return jsonify(ok=False, error='زمان نامعتبره')
+    if when.tzinfo is not None:
+        when = when.astimezone(timezone.utc).replace(tzinfo=None)
+    now = datetime.utcnow()
+    if when <= now + timedelta(seconds=15):
+        return jsonify(ok=False, error='زمان باید حداقل ۱۵ ثانیه بعد از الان باشه')
+    if when > now + timedelta(days=31):
+        return jsonify(ok=False, error='زمان‌بندی تا ۳۰ روز بعد مجازه')
+    pending_count = ScheduledMessage.query.filter_by(user_id=user.id, status='pending').count()
+    if pending_count >= 20:
+        return jsonify(ok=False, error='حداکثر ۲۰ پیام زمان‌دار هم‌زمان')
+    s = ScheduledMessage(user_id=user.id, chat_id=chat.id, msg_type=msg_type,
+                         content=content, file_path=file_path, file_name=file_name,
+                         reply_to=data.get('reply_to') or None, send_at=when, status='pending')
+    db.session.add(s)
+    db.session.commit()
+    socketio.emit('schedule_update', {'action': 'created', 'chat_id': chat.id}, room=f'user:{user.id}')
+    return jsonify(ok=True, id=s.id, send_at=when.isoformat())
+
+
+@app.route('/api/message/scheduled')
+@require_auth
+def api_message_scheduled():
+    user = current_user()
+    chat_id = request.args.get('chat_id', type=int)
+    q = ScheduledMessage.query.filter_by(user_id=user.id, status='pending')
+    if chat_id:
+        q = q.filter_by(chat_id=chat_id)
+    rows = q.order_by(ScheduledMessage.send_at.asc()).all()
+    return jsonify(ok=True, items=[s.to_dict() for s in rows])
+
+
+@app.route('/api/message/schedule/<int:sid>/cancel', methods=['POST'])
+@require_auth
+def api_message_schedule_cancel(sid):
+    user = current_user()
+    s = ScheduledMessage.query.get(sid)
+    if not s or s.user_id != user.id:
+        return jsonify(ok=False, error='موردی پیدا نشد')
+    if s.status != 'pending':
+        return jsonify(ok=False, error='این پیام زمان‌دار معتبر نیست')
+    s.status = 'cancelled'
+    db.session.commit()
+    socketio.emit('schedule_update', {'action': 'cancelled', 'chat_id': s.chat_id, 'id': sid},
+                  room=f'user:{user.id}')
+    return jsonify(ok=True)
 
 
 def _clean_reaction(value):
@@ -1906,6 +2004,77 @@ def _enqueue_bot_updates(chat, sender_id, payload):
     db.session.commit()
 
 
+_SCHEDULER_STARTED = False
+
+
+def _deliver_due_schedules():
+    now = datetime.utcnow()
+    rows = ScheduledMessage.query.filter_by(status='pending') \
+        .filter(ScheduledMessage.send_at <= now).all()
+    if not rows:
+        return
+    for s in rows:
+        chat = Chat.query.get(s.chat_id)
+        user = User.query.get(s.user_id)
+        if not chat:
+            s.status = 'failed'
+            continue
+        if not user or user.is_banned:
+            s.status = 'failed'
+            continue
+        if chat.chat_type == 'channel':
+            m = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
+            if chat.owner_id != user.id and (not m or m.role != 'admin') and not user.is_admin:
+                s.status = 'failed'
+                continue
+        if chat.chat_type == 'dm':
+            peer = next((mm.user for mm in chat.members if mm.user_id != user.id), None)
+            if peer and is_blocked(user.id, peer.id):
+                s.status = 'failed'
+                continue
+        if s.msg_type != 'text':
+            if not s.file_path or not os.path.isfile(os.path.join(app.config['UPLOAD_DIR'], s.file_path)):
+                s.status = 'failed'
+                continue
+        try:
+            msg = Message(chat_id=chat.id, sender_id=user.id, msg_type=s.msg_type,
+                          content=s.content, file_path=s.file_path, file_name=s.file_name,
+                          reply_to=s.reply_to)
+            db.session.add(msg)
+            db.session.flush()
+            s.status = 'sent'
+            db.session.commit()
+            payload = msg.to_dict(user.id)
+            _attach_polls_to_messages([payload], user)
+            _enqueue_bot_updates(chat, user.id, payload)
+            socketio.emit('new_message', payload, room=f'user:{user.id}')
+            for mid in chat_member_ids(chat.id):
+                if mid != user.id:
+                    socketio.emit('new_message', payload, room=f'user:{mid}')
+            socketio.emit('schedule_update', {'action': 'delivered', 'chat_id': chat.id, 'id': s.id},
+                         room=f'user:{user.id}')
+        except Exception:
+            db.session.rollback()
+            s.status = 'failed'
+            db.session.commit()
+
+
+def start_scheduler():
+    global _SCHEDULER_STARTED
+    if _SCHEDULER_STARTED:
+        return
+    _SCHEDULER_STARTED = True
+    def loop():
+        while True:
+            time.sleep(3)
+            try:
+                with app.app_context():
+                    _deliver_due_schedules()
+            except Exception:
+                pass
+    threading.Thread(target=loop, daemon=True).start()
+
+
 @app.route('/bots')
 @require_auth
 def bots_page():
@@ -2519,5 +2688,6 @@ app.jinja_env.globals['bi'] = _bi_icon
 
 
 if __name__ == '__main__':
+    start_scheduler()
     socketio.run(app, host='0.0.0.0', port=5000, debug=False,
                  allow_unsafe_werkzeug=True)
