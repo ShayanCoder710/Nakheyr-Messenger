@@ -354,7 +354,13 @@
   <div class="box narrow">
     <h3>{{ bi('hourglass-split') }} زمان‌بندی ارسال</h3>
     <p class="sub">پیام در ساعت انتخابی برای همهٔ اعضای این گپ ارسال می‌شه</p>
+    <div class="sched-chips">
+      <button type="button" class="chip" data-sched-quick="15">۱۵ دقیقه دیگه</button>
+      <button type="button" class="chip" data-sched-quick="60">۱ ساعت دیگه</button>
+      <button type="button" class="chip" data-sched-quick="86400">فردا ۹ صبح</button>
+    </div>
     <input class="input" type="datetime-local" id="scheduleAt">
+    <p class="sched-preview" id="schedulePreview"></p>
     <div class="row">
       <button class="btn ghost" id="scheduleCancel">انصراف</button>
       <button class="btn danger" id="scheduleConfirm">{{ bi('hourglass-split') }} زمان‌بندی ارسال</button>

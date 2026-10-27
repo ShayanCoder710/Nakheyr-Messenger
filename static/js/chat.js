@@ -424,7 +424,7 @@ let firstLoading = false;
 async function jumpToFirst() {
   if (!currentChat || firstLoading) return;
   const el = document.getElementById('msgs');
-  if (!el || el.scrollTop > 60) return;
+  if (!el) return;
   firstLoading = true;
   try {
     const j = await (await fetch('/api/messages/' + currentChat + '?first=1')).json();
@@ -962,6 +962,24 @@ document.getElementById('btnSendReport').onclick = async () => {
   toast(r.ok ? 'گزارشتت ثبت شد. ادمین‌ها بررسی می‌کنن.' : r.error, r.ok ? 'success' : 'error');
 };
 
+function jalaliPreview(d) {
+  if (!(d instanceof Date) || isNaN(d)) return '';
+  const s = d.toLocaleString('fa-IR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  return s;
+}
+
+function updateSchedulePreview() {
+  const el = document.getElementById('scheduleAt');
+  const p = document.getElementById('schedulePreview');
+  if (!el || !p) return;
+  const v = el.value;
+  if (!v) { p.textContent = ''; p.classList.remove('warn'); return; }
+  const d = new Date(v);
+  p.textContent = 'زمان ارسال: ' + jalaliPreview(d);
+  const now = new Date();
+  p.classList.toggle('warn', d.getTime() <= now.getTime() + 15000);
+}
+
 function openScheduleModal() {
   if (!currentChat) return;
   const input = document.getElementById('msgInput');
@@ -979,6 +997,8 @@ function openScheduleModal() {
   el.value = toLocalInput(def);
   el.min = toLocalInput(new Date(now.getTime() + 15000));
   el.max = toLocalInput(new Date(now.getTime() + 30 * 86400000));
+  updateSchedulePreview();
+  document.querySelectorAll('#scheduleModal .chip').forEach(c => c.classList.remove('active'));
   document.getElementById('scheduleModal').classList.add('show');
 }
 
@@ -986,6 +1006,24 @@ document.getElementById('btnSchedule').onclick = openScheduleModal;
 document.getElementById('scheduleCancel').onclick = () => document.getElementById('scheduleModal').classList.remove('show');
 document.querySelectorAll('#scheduleModal').forEach(mod => {
   mod.addEventListener('click', e => { if (e.target === mod) mod.classList.remove('show'); });
+});
+
+document.getElementById('scheduleAt').addEventListener('input', updateSchedulePreview);
+document.querySelectorAll('#scheduleModal .chip').forEach(chip => {
+  chip.addEventListener('click', () => {
+    const el = document.getElementById('scheduleAt');
+    const now = new Date();
+    const mins = +chip.dataset.schedQuick;
+    let d = new Date(now.getTime() + mins * 60000);
+    if (mins === 86400) {
+      d = new Date(now.getTime() + 86400000);
+      d.setHours(9, 0, 0, 0);
+    }
+    const p2 = n => String(n).padStart(2, '0');
+    el.value = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
+    document.querySelectorAll('#scheduleModal .chip').forEach(c => c.classList.toggle('active', c === chip));
+    updateSchedulePreview();
+  });
 });
 
 document.getElementById('scheduleConfirm').onclick = async () => {
