@@ -696,6 +696,8 @@ def api_chat_delete(chat_id):
             os.remove(p)
     member_ids = chat_member_ids(chat.id)
     HiddenMessage.query.filter_by(chat_id=chat.id).delete()
+    ScheduledMessage.query.filter_by(chat_id=chat.id).delete(synchronize_session=False)
+    Report.query.filter_by(chat_id=chat.id).update({'chat_id': None}, synchronize_session=False)
     poll_ids = [p[0] for p in db.session.query(Poll.id).filter(Poll.chat_id == chat.id).all()]
     if poll_ids:
         PollVote.query.filter(PollVote.poll_id.in_(poll_ids)).delete(synchronize_session=False)
@@ -826,7 +828,7 @@ def api_message_schedule():
         if peer and is_blocked(user.id, peer.id):
             return jsonify(ok=False, error='کاربر رو بلاک کردی — تا وقتی باز نکنی نمی‌تونی پیام بدی')
     if chat.chat_type == 'channel':
-        if chat.owner_id != user.id and role != 'admin' and not user.is_admin:
+        if chat.owner_id != user.id and role != 'admin':
             return jsonify(ok=False, error='در کانال فقط ادمین‌ها پیام می‌فرستن')
     msg_type = data.get('msg_type', 'text')
     if msg_type not in ('text', 'image', 'video', 'audio', 'file', 'gif'):
@@ -2024,7 +2026,7 @@ def _deliver_due_schedules():
             continue
         if chat.chat_type == 'channel':
             m = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
-            if chat.owner_id != user.id and (not m or m.role != 'admin') and not user.is_admin:
+            if chat.owner_id != user.id and (not m or m.role != 'admin'):
                 s.status = 'failed'
                 continue
         if chat.chat_type == 'dm':
