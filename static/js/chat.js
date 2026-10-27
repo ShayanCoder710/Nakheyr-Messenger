@@ -989,26 +989,29 @@ function renderSchedHero() {
 }
 
 function buildSchedPickers() {
-  const days = document.getElementById('schedDays');
-  days.innerHTML = Array.from({ length: 7 }, (_, i) => {
+  const daySel = document.getElementById('schedDaySel');
+  daySel.innerHTML = Array.from({ length: 7 }, (_, i) => {
     const d = new Date(schedTodayBase());
     d.setDate(d.getDate() + i);
-    const label = i === 0 ? 'امروز' : i === 1 ? 'فردا' : d.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'short' });
-    return `<button type="button" data-day="${i}">${label}</button>`;
+    const label = i === 0 ? 'امروز' : i === 1 ? 'فردا' : d.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'short', year: 'numeric' });
+    return `<option value="${i}">${label}</option>`;
   }).join('');
-  document.getElementById('schedHours').innerHTML = Array.from({ length: 24 }, (_, h) =>
-    `<button type="button" data-hour="${h}">${faNum(String(h).padStart(2, '0'))}</button>`).join('');
-  document.getElementById('schedMins').innerHTML = ['00', '15', '30', '45'].map(m =>
-    `<button type="button" data-min="${m}">${faNum(m)}</button>`).join('');
+  document.getElementById('schedHourSel').innerHTML = Array.from({ length: 24 }, (_, h) =>
+    `<option value="${h}">${faNum(String(h).padStart(2, '0'))}</option>`).join('');
+  document.getElementById('schedMinSel').innerHTML = ['0', '15', '30', '45'].map(m =>
+    `<option value="${m}">${faNum(String(m).padStart(2, '0'))}</option>`).join('');
 }
 
 function syncSchedPickers() {
-  document.querySelectorAll('#schedDays [data-day]').forEach(b => b.classList.toggle('on', +b.dataset.day === schedSel.dayOffset));
-  document.querySelectorAll('#schedHours [data-hour]').forEach(b => b.classList.toggle('on', +b.dataset.hour === schedSel.hour));
-  document.querySelectorAll('#schedMins [data-min]').forEach(b => b.classList.toggle('on', b.dataset.min === String(schedSel.minute)));
-  document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(b => b.classList.remove('on'));
+  document.getElementById('schedDaySel').value = String(schedSel.dayOffset);
+  document.getElementById('schedHourSel').value = String(schedSel.hour);
+  document.getElementById('schedMinSel').value = String(schedSel.minute);
   schedFree = false;
   renderSchedHero();
+}
+
+function clearSchedQuick() {
+  document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(b => b.classList.remove('on'));
 }
 
 function pickQuick(minutes) {
@@ -1021,11 +1024,24 @@ function pickQuick(minutes) {
   if (mn === 60) { mn = 0; hr = (hr + 1) % 24; }
   schedSel = { dayOffset: off, hour: hr, minute: mn };
   document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(b => b.classList.toggle('on', minutes === +b.dataset.schedQuick));
-  document.querySelectorAll('#schedDays [data-day]').forEach(b => b.classList.toggle('on', +b.dataset.day === off));
-  document.querySelectorAll('#schedHours [data-hour]').forEach(b => b.classList.toggle('on', +b.dataset.hour === schedSel.hour));
-  document.querySelectorAll('#schedMins [data-min]').forEach(b => b.classList.toggle('on', b.dataset.min === String(schedSel.minute)));
-  schedFree = false;
-  renderSchedHero();
+  syncSchedPickers();
+}
+
+function fillSchedMsg() {
+  const el = document.getElementById('schedMsg');
+  const input = document.getElementById('msgInput');
+  const text = (input.value || '').trim();
+  const item = pendingFiles.find(f => f.status === 'ready');
+  let html = '';
+  if (item) {
+    const icon = (item.kind === 'image' || item.kind === 'photo') ? bi('image') : (item.kind === 'video' || item.kind === 'clip') ? bi('camera-reels') : bi('file-earmark');
+    html += `<span class="sched-msg-file">${icon}<b>${esc(item.name)}</b></span>`;
+  }
+  if (text) {
+    const short = text.length > 140 ? text.slice(0, 140) + '…' : text;
+    html += `<p class="sched-msg-text">${esc(short)}</p>`;
+  }
+  el.innerHTML = html || '<p class="sched-msg-text dim">پیامی نوشته نشد</p>';
 }
 
 function openScheduleModal() {
@@ -1036,9 +1052,12 @@ function openScheduleModal() {
   if (!hasText && !hasFile) { toast('اول پیامی بنویس یا فایلی پیوست کن', 'error'); return; }
   if (input.disabled) { toast('تو این گپ نمی‌تونی پیام بفرستی', 'error'); return; }
   buildSchedPickers();
+  clearSchedQuick();
   const def = new Date(Date.now() + 30 * 60000);
   schedSel = { dayOffset: 0, hour: def.getHours(), minute: Math.floor(def.getMinutes() / 15) * 15 };
   syncSchedPickers();
+  fillSchedMsg();
+  loadSchedPending();
   const free = document.getElementById('scheduleAt');
   const toLocalInput = d => {
     const p = n => String(n).padStart(2, '0');
@@ -1058,22 +1077,19 @@ document.querySelectorAll('#scheduleModal').forEach(mod => {
   mod.addEventListener('click', e => { if (e.target === mod) mod.classList.remove('show'); });
 });
 
-document.getElementById('schedDays').addEventListener('click', e => {
-  const b = e.target.closest('[data-day]');
-  if (!b) return;
-  schedSel.dayOffset = +b.dataset.day;
+document.getElementById('schedDaySel').addEventListener('change', e => {
+  schedSel.dayOffset = +e.target.value;
+  clearSchedQuick();
   syncSchedPickers();
 });
-document.getElementById('schedHours').addEventListener('click', e => {
-  const b = e.target.closest('[data-hour]');
-  if (!b) return;
-  schedSel.hour = +b.dataset.hour;
+document.getElementById('schedHourSel').addEventListener('change', e => {
+  schedSel.hour = +e.target.value;
+  clearSchedQuick();
   syncSchedPickers();
 });
-document.getElementById('schedMins').addEventListener('click', e => {
-  const b = e.target.closest('[data-min]');
-  if (!b) return;
-  schedSel.minute = +b.dataset.min;
+document.getElementById('schedMinSel').addEventListener('change', e => {
+  schedSel.minute = +e.target.value;
+  clearSchedQuick();
   syncSchedPickers();
 });
 document.getElementById('schedQuick').addEventListener('click', e => {
@@ -1082,11 +1098,7 @@ document.getElementById('schedQuick').addEventListener('click', e => {
   if (b.dataset.schedQuick === 'tomorrow') {
     schedSel = { dayOffset: 1, hour: 9, minute: 0 };
     document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(x => x.classList.toggle('on', x === b));
-    document.querySelectorAll('#schedDays [data-day]').forEach(x => x.classList.toggle('on', +x.dataset.day === 1));
-    document.querySelectorAll('#schedHours [data-hour]').forEach(x => x.classList.toggle('on', +x.dataset.hour === 9));
-    document.querySelectorAll('#schedMins [data-min]').forEach(x => x.classList.toggle('on', x.dataset.min === '00'));
-    schedFree = false;
-    renderSchedHero();
+    syncSchedPickers();
     return;
   }
   pickQuick(+b.dataset.schedQuick);
@@ -1151,29 +1163,37 @@ document.getElementById('scheduleConfirm').onclick = async () => {
   document.getElementById('replyPreview').style.display = 'none';
   renderAttachPreview();
   flushDraftFor(currentChat, '');
-  loadSchedStrip();
+  refreshSchedPending();
   input.focus({ preventScroll: true });
 };
 
-async function loadSchedStrip() {
-  const strip = document.getElementById('schedStrip');
-  if (!strip) return;
+async function loadSchedPending() {
+  if (!currentChat) return;
   const j = await (await fetch('/api/message/scheduled?chat_id=' + currentChat)).json();
-  const items = (j.items || []).filter(x => !currentChat || x.chat_id === currentChat);
-  strip.innerHTML = items.map(it => `
-    <div class="sched-item" data-sid="${it.id}">
-      <span class="sched-ico">${bi('hourglass-split')}</span>
-      <div class="sched-txt"><b>${esc(it.msg_type === 'text' ? (it.preview || 'پیام') : (it.preview || it.msg_type))}</b><small>${fmtDay(it.send_at)} · ${fmtTime(it.send_at)}</small></div>
-      <button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
-    </div>`).join('');
-  strip.style.display = items.length ? 'flex' : 'none';
+  const items = (j.items || []).filter(x => x.chat_id === currentChat);
+  const list = document.getElementById('schedPendList');
+  const sec = document.getElementById('schedPendSec');
+  if (!list || !sec) return;
+  list.innerHTML = items.map(it => {
+    const ico = it.msg_type === 'text' ? bi('envelope') : (it.msg_type === 'image' || it.msg_type === 'photo') ? bi('image') : bi('file-earmark');
+    const title = it.msg_type === 'text' ? (it.preview || 'پیام') : (it.preview || it.msg_type);
+    const when = new Date(it.send_at);
+    const whenFa = when.toLocaleDateString('fa-IR', { day: 'numeric', month: 'short' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="sched-pend-item" data-sid="${it.id}"><span class="sp-ico">${ico}</span><div class="sp-txt"><b>${esc(title)}</b><small>${whenFa}</small></div><button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button></div>`;
+  }).join('');
+  document.getElementById('schedPendCount').textContent = items.length ? faNum(items.length) : '';
+  sec.style.display = items.length ? '' : 'none';
+}
+
+function refreshSchedPending() {
+  if (document.getElementById('scheduleModal').classList.contains('show')) loadSchedPending();
 }
 
 document.addEventListener('click', e => {
   const b = e.target.closest('[data-cancel-sched]');
   if (!b) return;
   api('/api/message/schedule/' + b.dataset.cancelSched + '/cancel').then(r => {
-    if (r.ok) { toast('زمان‌بندی لغو شد'); loadSchedStrip(); }
+    if (r.ok) { toast('زمان‌بندی لغو شد'); loadSchedPending(); }
     else toast(r.error || 'انجام نشد', 'error');
   });
 });
@@ -1255,7 +1275,7 @@ async function openChat(id, opts) {
   inputEl.style.height = Math.min(inputEl.scrollHeight, 140) + 'px';
   updateComposerSlot();
   renderSlowHint();
-  loadSchedStrip();
+  refreshSchedPending();
   renderAllMessages();
   attachMore();
   api('/api/mark-read', { chat_id: currentChat });
@@ -4734,5 +4754,5 @@ S.on('banned', d => {
 
 S.on('schedule_update', d => {
   if (d && d.chat_id && d.chat_id !== currentChat) return;
-  loadSchedStrip();
+  refreshSchedPending();
 });

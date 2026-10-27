@@ -137,7 +137,6 @@
         <button class="btn sm" id="bulkCopy">کپی</button>
         <button class="btn sm danger" id="bulkDelete">{{ bi('trash') }} حذف</button>
       </div>
-      <div class="sched-strip" id="schedStrip" style="display:none"></div>
       <div class="composer">
         <div class="reply-preview" id="replyPreview" style="display:none"></div>
         <div class="attach-preview" id="attachPreview"></div>
@@ -353,29 +352,50 @@
 <div class="modal" id="scheduleModal">
   <div class="box narrow sched-box">
     <h3>{{ bi('hourglass-split') }} زمان‌بندی ارسال</h3>
-    <div class="sched-hero">
-      <span class="sched-hero-time" id="schedHeroTime"></span>
-      <span class="sched-hero-date" id="schedHeroDate"></span>
+    <p class="sub">پیام در زمان انتخابی، برای همهٔ اعضای این گپ ارسال می‌شه</p>
+    <div class="sched-sec">
+      <p class="sched-lab">{{ bi('envelope') }} پیام</p>
+      <div class="sched-msg" id="schedMsg"></div>
     </div>
-    <div class="sched-quick" id="schedQuick">
-      <button type="button" data-sched-quick="15">۱۵ دقیقه دیگه</button>
-      <button type="button" data-sched-quick="60">۱ ساعت دیگه</button>
-      <button type="button" data-sched-quick="180">۳ ساعت دیگه</button>
-      <button type="button" data-sched-quick="tomorrow">فردا ۰۹:۰۰</button>
-    </div>
-    <p class="sched-lab">روز</p>
-    <div class="sched-days" id="schedDays"></div>
-    <p class="sched-lab">ساعت</p>
-    <div class="sched-hours" id="schedHours"></div>
-    <p class="sched-lab">دقیقه</p>
-    <div class="sched-mins" id="schedMins"></div>
-    <details class="sched-free">
-      <summary>{{ bi('hourglass-split') }} انتخاب آزاد (تا ۳۰ روز)</summary>
-      <div class="sched-free-in">
-        <input class="input" type="datetime-local" id="scheduleAt">
-        <p class="sched-preview" id="schedulePreview"></p>
+    <div class="sched-sec">
+      <p class="sched-lab">{{ bi('hourglass-split') }} زمان ارسال</p>
+      <div class="sched-hero">
+        <span class="sched-hero-time" id="schedHeroTime"></span>
+        <span class="sched-hero-date" id="schedHeroDate"></span>
       </div>
-    </details>
+      <div class="sched-quick" id="schedQuick">
+        <button type="button" data-sched-quick="15">۱۵ دقیقه دیگه</button>
+        <button type="button" data-sched-quick="60">۱ ساعت دیگه</button>
+        <button type="button" data-sched-quick="tomorrow">فردا ۹ صبح</button>
+      </div>
+      <div class="sched-sels">
+        <div class="sched-sel-col">
+          <p class="sched-sel-lab">روز</p>
+          <select class="input" id="schedDaySel"></select>
+        </div>
+        <div class="sched-sels2">
+          <div class="sched-sel-col">
+            <p class="sched-sel-lab">ساعت</p>
+            <select class="input" id="schedHourSel"></select>
+          </div>
+          <div class="sched-sel-col">
+            <p class="sched-sel-lab">دقیقه</p>
+            <select class="input" id="schedMinSel"></select>
+          </div>
+        </div>
+      </div>
+      <details class="sched-free">
+        <summary>{{ bi('hourglass-split') }} انتخاب آزاد (۷ تا ۳۰ روز)</summary>
+        <div class="sched-free-in">
+          <input class="input" type="datetime-local" id="scheduleAt">
+          <p class="sched-preview" id="schedulePreview"></p>
+        </div>
+      </details>
+    </div>
+    <div class="sched-sec" id="schedPendSec" style="display:none">
+      <p class="sched-lab">{{ bi('hourglass-split') }} زمان‌بندی‌های این گپ <span id="schedPendCount"></span></p>
+      <div class="sched-pend" id="schedPendList"></div>
+    </div>
     <div class="row">
       <button class="btn ghost" id="scheduleCancel">انصراف</button>
       <button class="btn danger" id="scheduleConfirm">{{ bi('hourglass-split') }} زمان‌بندی ارسال</button>
