@@ -1072,13 +1072,13 @@ function openScheduleModal() {
   if (input.disabled) { toast('تو این گپ نمی‌تونی پیام بفرستی', 'error'); return; }
   schedEditItem = null;
   schedTouched = false;
+  document.getElementById('scheduleConfirm').innerHTML = bi('hourglass-split') + ' زمان‌بندی ارسال';
   buildSchedPickers();
   clearSchedQuick();
   const def = new Date(Date.now() + 30 * 60000);
   schedSel = { dayOffset: 0, hour: def.getHours(), minute: Math.floor(def.getMinutes() / 15) * 15 };
   syncSchedPickers();
   fillSchedMsg(null);
-  loadSchedPending();
   const free = document.getElementById('scheduleAt');
   const toLocalInput = d => {
     const p = n => String(n).padStart(2, '0');
@@ -1096,6 +1096,7 @@ function openSchedEdit(item) {
   schedEditItem = item;
   schedTouched = false;
   schedFree = false;
+  document.getElementById('scheduleConfirm').innerHTML = bi('hourglass-split') + ' ذخیره تغییرات';
   buildSchedPickers();
   clearSchedQuick();
   const d = parseSchedIso(item.send_at);
@@ -1109,7 +1110,6 @@ function openSchedEdit(item) {
     document.getElementById('schedHeroTime').textContent = d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
   }
   fillSchedMsg(item);
-  loadSchedPending();
   const free = document.getElementById('scheduleAt');
   const toLocalInput = d2 => {
     const p = n => String(n).padStart(2, '0');
@@ -1255,27 +1255,40 @@ async function loadSchedPending() {
   const j = await (await fetch('/api/message/scheduled?chat_id=' + currentChat)).json();
   const items = (j.items || []).filter(x => x.chat_id === currentChat);
   schedItems = items;
+  const panel = document.getElementById('schedPanel');
   const list = document.getElementById('schedPendList');
-  const sec = document.getElementById('schedPendSec');
-  if (!list || !sec) return;
+  if (!panel || !list) return;
   list.innerHTML = items.map(it => {
     const ico = it.msg_type === 'text' ? bi('envelope') : (it.msg_type === 'image') ? bi('image') : (it.msg_type === 'video' || it.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
     const title = it.msg_type === 'text' ? (it.content || 'پیام') : (it.file_name || it.msg_type);
     const when = parseSchedIso(it.send_at);
-    const whenFa = when.toLocaleDateString('fa-IR', { day: 'numeric', month: 'short' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
-    return `<div class="sched-pend-item" data-sid="${it.id}">
-      <span class="sp-ico">${ico}</span>
-      <div class="sp-txt" data-resched-open="${it.id}" title="برای تغییر زمان کلیک کن"><b>${esc(title)}</b><small>${whenFa}</small></div>
-      <button title="تغییر زمان و ویرایش" data-resched-sched="${it.id}">${bi('hourglass-split')}</button>
-      <button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
+    const whenFa = when.toLocaleDateString('fa-IR', { day: 'numeric', month: 'short', year: 'numeric' }) + ' · ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+    return `<div class="sched-panel-item" data-sid="${it.id}">
+      <span class="spi-ico">${ico}</span>
+      <div class="spi-txt" data-resched-open="${it.id}" title="برای ویرایش کلیک کن">
+        <b>${esc(title)}</b>
+        <small>${whenFa}</small>
+      </div>
+      <span class="spi-acts">
+        <button title="ویرایش متن و زمان" data-resched-sched="${it.id}">${bi('hourglass-split')}</button>
+        <button title="لغو" data-cancel-sched="${it.id}">${bi('x-lg')}</button>
+      </span>
     </div>`;
   }).join('');
-  document.getElementById('schedPendCount').textContent = items.length ? faNum(items.length) : '';
-  sec.style.display = items.length ? '' : 'none';
+  document.getElementById('schedPendCount').textContent = faNum(items.length);
+  panel.style.display = items.length ? '' : 'none';
 }
 
+document.getElementById('schedPanelHead').addEventListener('click', e => {
+  if (e.target.closest('.sp-toggle')) return;
+  document.getElementById('schedPanel').classList.toggle('collapsed');
+});
+document.getElementById('schedPanelToggle').addEventListener('click', () => {
+  document.getElementById('schedPanel').classList.toggle('collapsed');
+});
+
 function refreshSchedPending() {
-  if (document.getElementById('scheduleModal').classList.contains('show')) loadSchedPending();
+  loadSchedPending();
 }
 
 document.addEventListener('click', e => {

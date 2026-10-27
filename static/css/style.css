@@ -1122,23 +1122,43 @@ b, strong { font-weight: 800; }
 .sched-sel-col { display: flex; flex-direction: column; gap: 4px; }
 .sched-sel-lab { margin: 0; font-size: 10.5px; font-weight: 700; color: var(--dim); }
 .sched-sels2 { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
-.sched-pend { display: flex; flex-direction: column; gap: 5px; max-height: 150px; overflow-y: auto; }
-.sched-pend-item {
-  display: flex; align-items: center; gap: 8px;
-  background: var(--bg-3); border: 1px solid var(--line);
-  border-radius: 10px; padding: 7px 9px;
+.sched-panel {
+  padding: 8px max(16px, calc((100% - var(--chat-max)) / 2)) 10px;
+  background: color-mix(in srgb, var(--accent) 7%, transparent);
+  border-top: 1px solid color-mix(in srgb, var(--accent) 22%, transparent);
 }
-.sched-pend-item .sp-ico { color: var(--accent); display: grid; place-items: center; flex: none; }
-.sched-pend-item .sp-ico .bi-ic { width: 14px; height: 14px; }
-.sched-pend-item .sp-txt { flex: 1; min-width: 0; cursor: pointer; }
-.sched-pend-item .sp-txt b { display: block; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; font-weight: 700; font-size: 12.5px; }
-.sched-pend-item .sp-txt small { color: var(--muted); font-size: 10.5px; }
-.sched-pend-item button {
+.sched-panel-head { display: flex; align-items: center; justify-content: space-between; gap: 8px; user-select: none; }
+.sched-panel-title {
+  display: flex; align-items: center; gap: 6px;
+  font-size: 12px; font-weight: 800; color: var(--accent-2);
+}
+.sched-panel-title .bi-ic { width: 14px; height: 14px; }
+.sched-panel-title b { color: var(--text); font-size: 11px; background: color-mix(in srgb, var(--accent) 16%, transparent); border-radius: 8px; padding: 1px 7px; }
+.sched-panel-body { display: flex; flex-direction: column; gap: 6px; margin-top: 8px; max-height: 170px; overflow-y: auto; }
+.sched-panel.collapsed .sched-panel-body { display: none; }
+.sched-panel.collapsed .sp-toggle .bi-ic { transform: rotate(180deg); }
+.sp-toggle { transition: background .15s; }
+.sched-panel-item {
+  display: flex; align-items: center; gap: 9px;
+  background: var(--bg-2); border: 1px solid var(--line);
+  border-radius: 12px; padding: 8px 10px;
+}
+.spi-ico { color: var(--accent); display: grid; place-items: center; flex: none; }
+.spi-ico .bi-ic { width: 15px; height: 15px; }
+.spi-txt { flex: 1; min-width: 0; cursor: pointer; }
+.spi-txt b {
+  display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;
+  font-size: 12.5px; font-weight: 700; line-height: 1.6; word-break: break-word;
+}
+.spi-txt small { color: var(--muted); font-size: 10.5px; margin-top: 2px; display: block; }
+.spi-acts { display: flex; gap: 2px; flex: none; }
+.spi-acts button {
   border: 0; background: transparent; color: var(--muted); cursor: pointer;
-  display: grid; place-items: center; width: 26px; height: 26px; border-radius: 8px; flex: none;
+  display: grid; place-items: center; width: 28px; height: 28px; border-radius: 8px;
+  transition: background .15s, color .15s;
 }
-.sched-pend-item button:hover { background: var(--bg-2); color: var(--accent-2); }
-.sched-pend-item button .bi-ic { width: 13px; height: 13px; }
+.spi-acts button:hover { background: var(--bg-3); color: var(--accent-2); }
+.spi-acts button .bi-ic { width: 14px; height: 14px; }
 .sched-free { margin-top: 12px; }
 .sched-free summary { cursor: pointer; font-size: 12px; font-weight: 700; color: var(--muted); display: flex; align-items: center; gap: 6px; padding: 6px 0; user-select: none; }
 .sched-free summary::-webkit-details-marker { display: none; }
