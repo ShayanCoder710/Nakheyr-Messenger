@@ -962,22 +962,70 @@ document.getElementById('btnSendReport').onclick = async () => {
   toast(r.ok ? 'گزارشتت ثبت شد. ادمین‌ها بررسی می‌کنن.' : r.error, r.ok ? 'success' : 'error');
 };
 
-function jalaliPreview(d) {
-  if (!(d instanceof Date) || isNaN(d)) return '';
-  const s = d.toLocaleString('fa-IR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
-  return s;
+let schedSel = { dayOffset: 0, hour: 9, minute: 0 };
+let schedFree = false;
+
+function faNum(n) {
+  return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
 }
 
-function updateSchedulePreview() {
-  const el = document.getElementById('scheduleAt');
-  const p = document.getElementById('schedulePreview');
-  if (!el || !p) return;
-  const v = el.value;
-  if (!v) { p.textContent = ''; p.classList.remove('warn'); return; }
-  const d = new Date(v);
-  p.textContent = 'زمان ارسال: ' + jalaliPreview(d);
-  const now = new Date();
-  p.classList.toggle('warn', d.getTime() <= now.getTime() + 15000);
+function schedTodayBase() {
+  const d = new Date();
+  d.setHours(0, 0, 0, 0);
+  return d;
+}
+
+function schedSelectedDate() {
+  const d = new Date(schedTodayBase());
+  d.setDate(d.getDate() + schedSel.dayOffset);
+  d.setHours(schedSel.hour, schedSel.minute, 0, 0);
+  return d;
+}
+
+function renderSchedHero() {
+  const d = schedSelectedDate();
+  document.getElementById('schedHeroTime').textContent = d.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
+  document.getElementById('schedHeroDate').textContent = d.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long', year: 'numeric' });
+}
+
+function buildSchedPickers() {
+  const days = document.getElementById('schedDays');
+  days.innerHTML = Array.from({ length: 7 }, (_, i) => {
+    const d = new Date(schedTodayBase());
+    d.setDate(d.getDate() + i);
+    const label = i === 0 ? 'امروز' : i === 1 ? 'فردا' : d.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'short' });
+    return `<button type="button" data-day="${i}">${label}</button>`;
+  }).join('');
+  document.getElementById('schedHours').innerHTML = Array.from({ length: 24 }, (_, h) =>
+    `<button type="button" data-hour="${h}">${faNum(String(h).padStart(2, '0'))}</button>`).join('');
+  document.getElementById('schedMins').innerHTML = ['00', '15', '30', '45'].map(m =>
+    `<button type="button" data-min="${m}">${faNum(m)}</button>`).join('');
+}
+
+function syncSchedPickers() {
+  document.querySelectorAll('#schedDays [data-day]').forEach(b => b.classList.toggle('on', +b.dataset.day === schedSel.dayOffset));
+  document.querySelectorAll('#schedHours [data-hour]').forEach(b => b.classList.toggle('on', +b.dataset.hour === schedSel.hour));
+  document.querySelectorAll('#schedMins [data-min]').forEach(b => b.classList.toggle('on', b.dataset.min === String(schedSel.minute)));
+  document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(b => b.classList.remove('on'));
+  schedFree = false;
+  renderSchedHero();
+}
+
+function pickQuick(minutes) {
+  const d = new Date(Date.now() + minutes * 60000);
+  const base = schedTodayBase();
+  let off = Math.round((new Date(d.toDateString()) - base) / 86400000);
+  off = Math.max(0, Math.min(6, off));
+  let mn = Math.round(d.getMinutes() / 15) * 15;
+  let hr = d.getHours();
+  if (mn === 60) { mn = 0; hr = (hr + 1) % 24; }
+  schedSel = { dayOffset: off, hour: hr, minute: mn };
+  document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(b => b.classList.toggle('on', minutes === +b.dataset.schedQuick));
+  document.querySelectorAll('#schedDays [data-day]').forEach(b => b.classList.toggle('on', +b.dataset.day === off));
+  document.querySelectorAll('#schedHours [data-hour]').forEach(b => b.classList.toggle('on', +b.dataset.hour === schedSel.hour));
+  document.querySelectorAll('#schedMins [data-min]').forEach(b => b.classList.toggle('on', b.dataset.min === String(schedSel.minute)));
+  schedFree = false;
+  renderSchedHero();
 }
 
 function openScheduleModal() {
@@ -987,18 +1035,20 @@ function openScheduleModal() {
   const hasFile = pendingFiles.some(f => f.status === 'ready');
   if (!hasText && !hasFile) { toast('اول پیامی بنویس یا فایلی پیوست کن', 'error'); return; }
   if (input.disabled) { toast('تو این گپ نمی‌تونی پیام بفرستی', 'error'); return; }
-  const el = document.getElementById('scheduleAt');
-  const now = new Date();
-  const def = new Date(now.getTime() + 30 * 60000);
+  buildSchedPickers();
+  const def = new Date(Date.now() + 30 * 60000);
+  schedSel = { dayOffset: 0, hour: def.getHours(), minute: Math.floor(def.getMinutes() / 15) * 15 };
+  syncSchedPickers();
+  const free = document.getElementById('scheduleAt');
   const toLocalInput = d => {
     const p = n => String(n).padStart(2, '0');
     return `${d.getFullYear()}-${p(d.getMonth() + 1)}-${p(d.getDate())}T${p(d.getHours())}:${p(d.getMinutes())}`;
   };
-  el.value = toLocalInput(def);
-  el.min = toLocalInput(new Date(now.getTime() + 15000));
-  el.max = toLocalInput(new Date(now.getTime() + 30 * 86400000));
+  free.value = toLocalInput(schedSelectedDate());
+  free.min = toLocalInput(new Date(Date.now() + 15000));
+  free.max = toLocalInput(new Date(Date.now() + 30 * 86400000));
   updateSchedulePreview();
-  document.querySelectorAll('#scheduleModal .chip').forEach(c => c.classList.remove('active'));
+  document.querySelector('#scheduleModal .sched-free').open = false;
   document.getElementById('scheduleModal').classList.add('show');
 }
 
@@ -1008,32 +1058,75 @@ document.querySelectorAll('#scheduleModal').forEach(mod => {
   mod.addEventListener('click', e => { if (e.target === mod) mod.classList.remove('show'); });
 });
 
-document.getElementById('scheduleAt').addEventListener('input', updateSchedulePreview);
-document.querySelectorAll('#scheduleModal .chip').forEach(chip => {
-  chip.addEventListener('click', () => {
-    const el = document.getElementById('scheduleAt');
-    const now = new Date();
-    const mins = +chip.dataset.schedQuick;
-    let d = new Date(now.getTime() + mins * 60000);
-    if (mins === 86400) {
-      d = new Date(now.getTime() + 86400000);
-      d.setHours(9, 0, 0, 0);
-    }
-    const p2 = n => String(n).padStart(2, '0');
-    el.value = `${d.getFullYear()}-${p2(d.getMonth() + 1)}-${p2(d.getDate())}T${p2(d.getHours())}:${p2(d.getMinutes())}`;
-    document.querySelectorAll('#scheduleModal .chip').forEach(c => c.classList.toggle('active', c === chip));
-    updateSchedulePreview();
-  });
+document.getElementById('schedDays').addEventListener('click', e => {
+  const b = e.target.closest('[data-day]');
+  if (!b) return;
+  schedSel.dayOffset = +b.dataset.day;
+  syncSchedPickers();
 });
+document.getElementById('schedHours').addEventListener('click', e => {
+  const b = e.target.closest('[data-hour]');
+  if (!b) return;
+  schedSel.hour = +b.dataset.hour;
+  syncSchedPickers();
+});
+document.getElementById('schedMins').addEventListener('click', e => {
+  const b = e.target.closest('[data-min]');
+  if (!b) return;
+  schedSel.minute = +b.dataset.min;
+  syncSchedPickers();
+});
+document.getElementById('schedQuick').addEventListener('click', e => {
+  const b = e.target.closest('[data-sched-quick]');
+  if (!b) return;
+  if (b.dataset.schedQuick === 'tomorrow') {
+    schedSel = { dayOffset: 1, hour: 9, minute: 0 };
+    document.querySelectorAll('#schedQuick [data-sched-quick]').forEach(x => x.classList.toggle('on', x === b));
+    document.querySelectorAll('#schedDays [data-day]').forEach(x => x.classList.toggle('on', +x.dataset.day === 1));
+    document.querySelectorAll('#schedHours [data-hour]').forEach(x => x.classList.toggle('on', +x.dataset.hour === 9));
+    document.querySelectorAll('#schedMins [data-min]').forEach(x => x.classList.toggle('on', x.dataset.min === '00'));
+    schedFree = false;
+    renderSchedHero();
+    return;
+  }
+  pickQuick(+b.dataset.schedQuick);
+});
+document.querySelector('#scheduleModal .sched-free').addEventListener('toggle', e => {
+  if (e.target.open) {
+    schedFree = true;
+    e.target.querySelector('input').focus();
+  }
+});
+
+function updateSchedulePreview() {
+  const el = document.getElementById('scheduleAt');
+  const p = document.getElementById('schedulePreview');
+  if (!el || !p) return;
+  const v = el.value;
+  if (!v) { p.textContent = ''; p.classList.remove('warn'); return; }
+  const d = new Date(v);
+  p.textContent = 'زمان ارسال: ' + d.toLocaleString('fa-IR', { weekday: 'long', year: 'numeric', month: 'long', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+  p.classList.toggle('warn', d.getTime() <= Date.now() + 15000);
+}
+
+document.getElementById('scheduleAt').addEventListener('input', updateSchedulePreview);
 
 document.getElementById('scheduleConfirm').onclick = async () => {
   if (!currentChat) return;
-  const when = document.getElementById('scheduleAt').value;
-  if (!when) return toast('زمان رو انتخاب کن', 'error');
+  let target;
+  if (schedFree) {
+    const v = document.getElementById('scheduleAt').value;
+    if (!v) return toast('زمان رو انتخاب کن', 'error');
+    target = new Date(v);
+  } else {
+    target = schedSelectedDate();
+  }
+  const now = new Date();
+  if (target.getTime() <= now.getTime() + 15000) return toast('زمان باید بعد از الان باشه', 'error');
   const input = document.getElementById('msgInput');
   const text = (input.value || '').trim();
   const item = pendingFiles.find(f => f.status === 'ready');
-  const body = { chat_id: currentChat, send_at: new Date(when).toISOString() };
+  const body = { chat_id: currentChat, send_at: target.toISOString() };
   if (item) {
     body.msg_type = item.asFile ? 'file' : item.kind;
     body.file_path = item.path;
