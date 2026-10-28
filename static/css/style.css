@@ -486,6 +486,8 @@ b, strong { font-weight: 800; }
   box-shadow: var(--auth-shadow);
 }
 .msgs-pane.open { display: flex; }
+.pane-top-overlays { position: absolute; top: 60px; left: 0; right: 0; z-index: 7; pointer-events: none; }
+.pane-top-overlays > * { pointer-events: auto; }
 .chat-head {
   display: flex; align-items: center; gap: 8px;
   padding: 8px max(16px, calc((100% - var(--chat-max)) / 2));

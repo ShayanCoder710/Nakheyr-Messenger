@@ -101,21 +101,23 @@
           {{ bi('three-dots') }}
         </button>
       </div>
-      <div class="chat-search" id="chatSearch" style="display:none">
-        <input class="input" id="chatSearchInput" placeholder="جستجو در پیام‌های این گپ…">
-        <span class="cs-count" id="chatSearchCount"></span>
-        <button class="icon-btn" id="chatSearchPrev" title="قبلی">{{ bi('chevron-up') }}</button>
-        <button class="icon-btn" id="chatSearchNext" title="بعدی">{{ bi('chevron-down') }}</button>
-        <button class="icon-btn" id="chatSearchClose" title="بستن">{{ bi('x-lg') }}</button>
-      </div>
-      <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
-      <div class="voice-mp" id="voiceMp">
-        <div class="mp-card">
-          <button class="mp-toggle" id="mpToggle" type="button" title="پخش/توقف">{{ bi('play-fill') }}</button>
-          <div class="mp-info"><b id="mpTitle">پیام صوتی</b><small id="mpTime">0:00 / 0:00</small></div>
-          <span class="mp-wave" id="mpWave" title="برای جابه‌جایی کلیک یا بکشید"></span>
-          <button class="mp-speed" id="mpSpeed" type="button" title="سرعت پخش">1x</button>
-          <button class="mp-close" id="mpClose" type="button" title="بستن پخش">{{ bi('x-lg') }}</button>
+      <div class="pane-top-overlays">
+        <div class="chat-search" id="chatSearch" style="display:none">
+          <input class="input" id="chatSearchInput" placeholder="جستجو در پیام‌های این گپ…">
+          <span class="cs-count" id="chatSearchCount"></span>
+          <button class="icon-btn" id="chatSearchPrev" title="قبلی">{{ bi('chevron-up') }}</button>
+          <button class="icon-btn" id="chatSearchNext" title="بعدی">{{ bi('chevron-down') }}</button>
+          <button class="icon-btn" id="chatSearchClose" title="بستن">{{ bi('x-lg') }}</button>
+        </div>
+        <div class="pinned-bar" id="pinnedBar" style="display:none"></div>
+        <div class="voice-mp" id="voiceMp">
+          <div class="mp-card">
+            <button class="mp-toggle" id="mpToggle" type="button" title="پخش/توقف">{{ bi('play-fill') }}</button>
+            <div class="mp-info"><b id="mpTitle">پیام صوتی</b><small id="mpTime">0:00 / 0:00</small></div>
+            <span class="mp-wave" id="mpWave" title="برای جابه‌جایی کلیک یا بکشید"></span>
+            <button class="mp-speed" id="mpSpeed" type="button" title="سرعت پخش">1x</button>
+            <button class="mp-close" id="mpClose" type="button" title="بستن پخش">{{ bi('x-lg') }}</button>
+          </div>
         </div>
       </div>
       <div class="msgs" id="msgs">
