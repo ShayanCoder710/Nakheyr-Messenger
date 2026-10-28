@@ -97,11 +97,8 @@
         <a class="icon-btn" id="btnPeerProfile" href="#" title="پروفایل" style="display:none">
           {{ bi('person') }}
         </a>
-        <button class="icon-btn" id="btnReportUser" title="گزارش" style="display:none">
-          {{ bi('flag') }}
-        </button>
-        <button class="icon-btn" id="btnChatSearch" title="جستجو در پیام‌ها">
-          {{ bi('search') }}
+        <button class="icon-btn" id="btnChatMenu" title="گزینه‌ها" aria-label="گزینه‌ها">
+          {{ bi('three-dots') }}
         </button>
       </div>
       <div class="chat-search" id="chatSearch" style="display:none">
@@ -124,9 +121,7 @@
       <div class="msgs" id="msgs">
         <div id="msgsBody" style="display:contents"></div>
       </div>
-      <button class="jump-btn" id="btnJumpTop" title="رفتن به اولین پیام" aria-label="رفتن به اولین پیام">
-        {{ bi('arrow-up-circle') }}
-      </button>
+      <div class="sched-dock" id="schedDock"></div>
       <button class="jump-btn" id="btnJumpBottom" title="رفتن به آخرین پیام" aria-label="رفتن به آخرین پیام">
         {{ bi('arrow-down-circle') }}
       </button>
@@ -348,6 +343,18 @@
     <div class="row">
       <button class="btn ghost" id="reportCancel">انصراف</button>
       <button class="btn danger" id="btnSendReport">ارسال گزارش</button>
+    </div>
+  </div>
+</div>
+
+<div class="modal" id="chatMenuModal">
+  <div class="box narrow">
+    <button class="modal-x" id="chatMenuClose" title="بستن">{{ bi('x-lg') }}</button>
+    <h3>{{ bi('three-dots') }} گزینه‌ها</h3>
+    <div class="chat-menu-list">
+      <button class="chat-menu-item" id="cmSearch" type="button">{{ bi('search') }} <span>جستجو در پیام‌ها</span></button>
+      <button class="chat-menu-item" id="cmFirst" type="button">{{ bi('arrow-up-circle') }} <span>رفتن به اولین پیام</span></button>
+      <button class="chat-menu-item danger" id="cmReport" type="button">{{ bi('flag') }} <span id="cmReportLabel">گزارش کاربر</span></button>
     </div>
   </div>
 </div>

@@ -365,9 +365,7 @@ function ensureDaySep(iso) {
   if (raw !== lastDayKey()) {
     const sep = document.createElement('div');
     sep.innerHTML = `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(iso)}</span></div>`;
-    const anchor = msgsSchedAnchor();
-    if (anchor) anchor.parentElement.insertBefore(sep.firstElementChild, anchor);
-    else document.getElementById('msgsBody').appendChild(sep.firstElementChild);
+    document.getElementById('msgsBody').appendChild(sep.firstElementChild);
   }
 }
 
@@ -412,11 +410,9 @@ function scrollToBottom(force) {
 
 function updateJumpBtns() {
   const el = document.getElementById('msgs');
-  const top = document.getElementById('btnJumpTop');
   const down = document.getElementById('btnJumpBottom');
-  if (!el || !top || !down) return;
+  if (!el || !down) return;
   const dist = el.scrollHeight - el.scrollTop - el.clientHeight;
-  top.classList.toggle('show', !!currentChat && el.scrollTop > 220);
   down.classList.toggle('show', !!currentChat && dist > 220);
 }
 
@@ -449,12 +445,10 @@ async function jumpToFirst() {
 
 (function initJumpBtns() {
   const el = document.getElementById('msgs');
-  const top = document.getElementById('btnJumpTop');
   const down = document.getElementById('btnJumpBottom');
-  if (!el || !top || !down) return;
+  if (!el || !down) return;
   el.addEventListener('scroll', updateJumpBtns, { passive: true });
   new MutationObserver(updateJumpBtns).observe(el, { childList: true, subtree: true });
-  top.addEventListener('click', jumpToFirst);
   down.addEventListener('click', scrollMsgsToBottom);
   window.addEventListener('resize', updateJumpBtns);
   updateJumpBtns();
@@ -581,9 +575,7 @@ function appendMsg(m) {
   const own = m.sender_id === window.ME.id;
   const frag = document.createElement('div');
   frag.innerHTML = `<div id="m${m.id}">${renderMsg(m)}</div>`;
-  const anchor = msgsSchedAnchor();
-  if (anchor) anchor.parentElement.insertBefore(frag.firstElementChild, anchor);
-  else body.appendChild(frag.firstElementChild);
+  body.appendChild(frag.firstElementChild);
   scrollToBottom(own);
   updateConvPreview(m);
   if (selecting) syncSelection();
@@ -610,7 +602,6 @@ function setHead() {
   const headAv = document.getElementById('chatHeadAvatar');
   const name = document.getElementById('chatHeadName');
   const sub = document.getElementById('chatHeadSub');
-  const repBtn = document.getElementById('btnReportUser');
   const joinBtn = document.getElementById('btnJoin');
   const peerBtn = document.getElementById('btnPeerProfile');
   if (!CD.chat) return;
@@ -618,7 +609,6 @@ function setHead() {
   const c = CD.chat;
   renderSlowHint();
   joinBtn.style.display = 'none';
-  repBtn.style.display = 'none';
   peerBtn.style.display = 'none';
   if (c.is_notes) {
     displayName = 'فضای شخصی';
@@ -636,7 +626,6 @@ function setHead() {
     const narrow = window.innerWidth <= 480;
     subText = p.username ? (narrow ? status : ('@' + p.username + ' · ' + status)) : status;
     av = p.avatar || '';
-    if (p.id) repBtn.style.display = 'grid';
   } else {
     displayName = c.name || (c.chat_type === 'channel' ? 'کانال' : 'گروه');
     const vis = c.is_public ? bi('globe') + ' عمومی' : bi('lock') + ' خصوصی';
@@ -662,9 +651,6 @@ function setHead() {
     const p = c.peer || {};
     peerBtn.style.display = 'grid';
     peerBtn.href = '/profile/' + (p.username || '');
-    repBtn.dataset.target = p.id || '';
-    repBtn.dataset.name = p.display_name || '';
-    if (p.id) repBtn.style.display = 'grid';
   }
 }
 
@@ -682,12 +668,38 @@ document.addEventListener('click', e => {
   }
 });
 
-document.getElementById('btnReportUser').onclick = () => openReportFromBtn();
-
-function openReportFromBtn() {
-  const btn = document.getElementById('btnReportUser');
-  openReport({ id: +btn.dataset.target || 0, display_name: btn.dataset.name || 'کاربر' }, btn.dataset.msgid || '');
-}
+document.getElementById('btnChatMenu').onclick = () => {
+  const c = CD.chat || {};
+  const rep = document.getElementById('cmReport');
+  if (c.chat_type === 'dm' && c.peer) {
+    document.getElementById('cmReportLabel').textContent = 'گزارش کاربر';
+    rep.style.display = '';
+  } else if ((c.chat_type === 'group' || c.chat_type === 'channel') && c.id) {
+    document.getElementById('cmReportLabel').textContent = (c.chat_type === 'channel' ? 'گزارش کانال' : 'گزارش گروه');
+    rep.style.display = '';
+  } else {
+    rep.style.display = 'none';
+  }
+  document.getElementById('chatMenuModal').classList.add('show');
+};
+document.getElementById('chatMenuClose').onclick = () => document.getElementById('chatMenuModal').classList.remove('show');
+document.getElementById('cmSearch').onclick = () => {
+  document.getElementById('chatMenuModal').classList.remove('show');
+  openChatSearch();
+};
+document.getElementById('cmFirst').onclick = () => {
+  document.getElementById('chatMenuModal').classList.remove('show');
+  jumpToFirst();
+};
+document.getElementById('cmReport').onclick = () => {
+  document.getElementById('chatMenuModal').classList.remove('show');
+  const c = CD.chat || {};
+  if (c.chat_type === 'dm' && c.peer) openReport(c.peer, '');
+  else if (c.id && c.chat_type !== 'dm') {
+    const label = c.chat_type === 'channel' ? 'کانال' : 'گروه';
+    openReport({ id: c.id, display_name: label + ' «' + (c.name || label) + '»' }, '', c.id);
+  }
+};
 
 function openReport(target, messageId, chatId) {
   if (!target || !target.id) return;
@@ -1278,13 +1290,9 @@ async function renderSchedBubbles() {
   const items = (j.items || []).filter(x => String(x.chat_id) === cid);
   items.sort((a, b) => parseSchedIso(a.send_at) - parseSchedIso(b.send_at));
   schedItems = items;
-  document.querySelectorAll('#msgsBody .sched-row').forEach(el => el.remove());
-  const body = document.getElementById('msgsBody');
-  items.forEach(it => body.insertAdjacentHTML('beforeend', schedCardHtml(it)));
-}
-
-function msgsSchedAnchor() {
-  return document.querySelector('#msgsBody .sched-row');
+  const dock = document.getElementById('schedDock');
+  dock.innerHTML = items.length ? items.map(schedCardHtml).join('') : '';
+  dock.classList.toggle('has-items', items.length > 0);
 }
 
 document.addEventListener('click', e => {
@@ -2025,6 +2033,9 @@ function wipeChatDom() {
   CD.pins = [];
   oldestId = null;
   document.getElementById('msgsBody').innerHTML = '';
+  const dock = document.getElementById('schedDock');
+  dock.innerHTML = '';
+  dock.classList.remove('has-items');
   renderPinnedBar();
 }
 
@@ -3791,11 +3802,6 @@ async function loadAround(mid) {
   target.scrollIntoView({ block: 'center', behavior: 'smooth' });
   return target;
 }
-document.getElementById('btnChatSearch').onclick = () => {
-  const bar = document.getElementById('chatSearch');
-  if (bar.style.display === 'none' || !bar.style.display) openChatSearch();
-  else closeChatSearch();
-};
 document.getElementById('chatSearchClose').onclick = closeChatSearch;
 document.getElementById('chatSearchInput').oninput = runChatSearch;
 document.getElementById('chatSearchInput').onkeydown = e => {
