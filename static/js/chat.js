@@ -249,11 +249,13 @@ function mentionSet() {
 function mentionify(html) {
   if (!html || html.indexOf('@') < 0) return html;
   const known = mentionSet();
+  const c = CD.chat || {};
+  const linkAll = c.chat_type === 'dm' || c.chat_type === 'channel';
   const parts = String(html).split(/(<[^>]*>)/g);
   return parts.map(seg => {
     if (!seg || seg.charAt(0) === '<') return seg;
-    return seg.replace(/(^|[^@A-Za-z0-9_.])@([A-Za-z0-9_]{2,32})/g, (all, pre, un) => {
-      if (!known.has(un.toLowerCase())) return all;
+    return seg.replace(/(^|[^@A-Za-z0-9_.])@([A-Za-z0-9_]{2,32})(?![A-Za-z0-9_.])/g, (all, pre, un) => {
+      if (!linkAll && !known.has(un.toLowerCase())) return all;
       const mine = un.toLowerCase() === ((window.ME && window.ME.username) || '').toLowerCase();
       return pre + `<span class="mention${mine ? ' me' : ''}" data-un="${un}" role="link" tabindex="0">@${un}</span>`;
     });
@@ -576,6 +578,7 @@ function appendMsg(m) {
   const frag = document.createElement('div');
   frag.innerHTML = `<div id="m${m.id}">${renderMsg(m)}</div>`;
   body.appendChild(frag.firstElementChild);
+  body.querySelectorAll('.sched-card').forEach(el => body.appendChild(el));
   scrollToBottom(own);
   updateConvPreview(m);
   if (selecting) syncSelection();
@@ -1290,9 +1293,9 @@ async function renderSchedBubbles() {
   const items = (j.items || []).filter(x => String(x.chat_id) === cid);
   items.sort((a, b) => parseSchedIso(a.send_at) - parseSchedIso(b.send_at));
   schedItems = items;
-  const dock = document.getElementById('schedDock');
-  dock.innerHTML = items.length ? items.map(schedCardHtml).join('') : '';
-  dock.classList.toggle('has-items', items.length > 0);
+  const body = document.getElementById('msgsBody');
+  body.querySelectorAll('.sched-card').forEach(el => el.remove());
+  if (items.length) body.insertAdjacentHTML('beforeend', items.map(schedCardHtml).join(''));
 }
 
 document.addEventListener('click', e => {
@@ -2033,9 +2036,6 @@ function wipeChatDom() {
   CD.pins = [];
   oldestId = null;
   document.getElementById('msgsBody').innerHTML = '';
-  const dock = document.getElementById('schedDock');
-  dock.innerHTML = '';
-  dock.classList.remove('has-items');
   renderPinnedBar();
 }
 

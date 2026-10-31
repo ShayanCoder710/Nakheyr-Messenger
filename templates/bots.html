@@ -41,7 +41,7 @@
       <h2>ساخت ربات جدید</h2>
       <p class="bf-hint">اسم ربات را بنویس؛ توکن اختصاصی‌اش همین‌جا ساخته می‌شود. ربات به عنوان یک کاربر در نخیر قرار می‌گیرد و می‌تواند در دایرکت و گروه‌هایی که عضو است پیام بفرستد.</p>
       <form id="bfCreate" class="bf-form">
-        <input type="text" id="bfName" name="name" placeholder="مثلاً: یادآور کارها" maxlength="60" autocomplete="off">
+        <input type="text" id="bfName" class="input" name="name" placeholder="مثلاً: یادآور کارها" maxlength="60" autocomplete="off">
         <button type="submit" class="btn sm">{{ bi('robot') }}<span>ساخت ربات</span></button>
       </form>
       <div id="bfCreated" class="bf-created" hidden>
@@ -50,7 +50,7 @@
           <span id="bfCreatedUser" class="bf-mono"></span>
         </div>
         <div class="bf-token-row">
-          <input type="text" id="bfToken" class="bf-mono" readonly>
+          <input type="text" id="bfToken" class="input bf-mono" readonly>
           <button class="btn sm ghost" id="bfCopy" type="button">{{ bi('clipboard') }}<span>کپی</span></button>
         </div>
         <p class="bf-note">این توکن کلید API ربات توست. مراقبش باش؛ هرکس آن را داشته باشد به‌جای رباتت می‌تواند پیام بفرستد.</p>
@@ -67,9 +67,9 @@
             <div class="bf-card-id">
               {{ avatar_html(item.user, 'sm') | safe }}
               <div class="bf-card-name">
-                <input type="text" class="bf-name" value="{{ item.user.display_name if item.user else '' }}" maxlength="60" aria-label="اسم ربات">
-                <input type="text" class="bf-un" value="{{ item.user.username if item.user else '' }}" maxlength="32" aria-label="یوزرنیم ربات" style="direction:ltr; text-align:left">
-                <input type="text" class="bf-bio" value="{{ item.user.bio if item.user else '' }}" maxlength="200" placeholder="توضیح ربات" aria-label="توضیح ربات">
+                <input type="text" class="input bf-name" value="{{ item.user.display_name if item.user else '' }}" maxlength="60" aria-label="اسم ربات">
+                <input type="text" class="input bf-un" value="{{ item.user.username if item.user else '' }}" maxlength="32" aria-label="یوزرنیم ربات" style="direction:ltr; text-align:left">
+                <input type="text" class="input bf-bio" value="{{ item.user.bio if item.user else '' }}" maxlength="200" placeholder="توضیح ربات" aria-label="توضیح ربات">
               </div>
             </div>
             <span class="bf-state {{ 'on' if item.bot.is_active else 'off' }}" data-state>{{ 'فعال' if item.bot.is_active else 'غیرفعال' }}</span>
@@ -80,14 +80,14 @@
             <button class="btn sm ghost bf-act" data-action="delete-avatar">{{ bi('trash') }}<span>حذف تصویر</span></button>
           </div>
           <div class="bf-token-row">
-            <input type="text" class="bf-mono bf-card-token" value="{{ item.bot.token }}" readonly>
+            <input type="text" class="input bf-mono bf-card-token" value="{{ item.bot.token }}" readonly>
             <button class="btn sm ghost bf-act" data-action="copy">{{ bi('clipboard') }}<span>کپی</span></button>
             <button class="btn sm ghost bf-act" data-action="regenerate">{{ bi('arrow-repeat') }}<span>تولید دوباره</span></button>
           </div>
           <div class="bf-webhook-row">
             <label for="wh-{{ item.bot.id }}">وب‌هوک</label>
             <div class="bf-webhook-in">
-              <input type="url" id="wh-{{ item.bot.id }}" placeholder="https://example.com/hook" value="{{ item.bot.webhook_url }}">
+              <input type="url" id="wh-{{ item.bot.id }}" class="input" placeholder="https://example.com/hook" value="{{ item.bot.webhook_url }}">
               <button class="btn sm ghost bf-act" data-action="webhook">ذخیره</button>
               {% if item.bot.webhook_url %}<button class="btn sm ghost bf-act" data-action="clear-webhook">حذف</button>{% endif %}
             </div>
