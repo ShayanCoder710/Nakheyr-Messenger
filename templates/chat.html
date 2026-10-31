@@ -12,8 +12,11 @@
       </a>
       {% endif %}
       <a class="icon-btn" id="sideBots" href="{{ url_for('bots_page') }}" title="ربات‌فادر">
-        {{ bi('robot') }}
+        <img class="side-bot-img" src="{{ url_for('static', filename='images/icon-wb.png') }}" alt="">
       </a>
+      <button class="icon-btn" id="sideSettings" type="button" title="تنظیمات کاربر" aria-label="تنظیمات کاربر">
+        {{ bi('sliders') }}
+      </button>
       <button class="icon-btn side-toggle" id="sideToggle" type="button" title="جمع کردن سایدبار" aria-label="جمع/باز کردن سایدبار">
         {{ bi('layout-split') }}
       </button>
@@ -303,7 +306,7 @@
       <div class="cs-id">
         <b id="dmName"></b>
         <small id="dmUsername"></small>
-        <span class="dm-bot-tag" id="dmBotTag" hidden>{{ bi('robot') }} ربات</span>
+        <span class="dm-bot-tag" id="dmBotTag" hidden><img src="{{ url_for('static', filename='images/icon-wb.png') }}" alt=""> ربات</span>
       </div>
     </div>
     <p class="sub" id="dmStatus"></p>
@@ -471,7 +474,7 @@
     <div class="pm-actions">
       <button class="btn primary" id="pmSave">ذخیره</button>
       <a class="btn" id="pmAdmin" href="{{ url_for('admin_panel') }}" style="display:none">{{ bi('gear') }} پنل ادمین</a>
-      <a class="btn" id="pmBots" href="{{ url_for('bots_page') }}">{{ bi('robot') }} ربات‌های من</a>
+      <a class="btn" id="pmBots" href="{{ url_for('bots_page') }}"><img src="{{ url_for('static', filename='images/icon-wb.png') }}" alt=""> ربات‌های من</a>
       <button class="btn danger" id="pmLogout">خروج</button>
       <button class="btn ghost" id="pmBack">برگشت</button>
     </div>

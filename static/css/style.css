@@ -1723,6 +1723,8 @@ table.data { width: 100%; border-collapse: collapse; }
 .side-toggle { transition: background .16s ease; }
 .side-toggle svg { transition: transform .2s ease; }
 .side-search-btn { display: none; }
+.side-bot-img { width: 30px; height: 30px; border-radius: 50%; object-fit: cover; display: block; }
+#sideSettings { display: none; }
 .side-title {
   flex: 1; min-width: 0; text-align: center; font-weight: 800; font-size: 16.5px;
   white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
@@ -1769,6 +1771,8 @@ table.data { width: 100%; border-collapse: collapse; }
   .sidebar.collapsed .side-head { flex-direction: column; gap: 8px; padding: 12px 0; }
   .sidebar.collapsed #sideToggle { order: -1; }
   .sidebar.collapsed #sideProfileLink { opacity: 0; max-height: 0; transform: scale(.5); pointer-events: none; }
+  .sidebar.collapsed #sideBots { display: none; }
+  .sidebar.collapsed #sideSettings { display: grid; }
   .sidebar.collapsed .side-toggle svg { transform: scaleX(-1); }
   .sidebar.collapsed .conv-sections { padding: 6px 10px 88px; }
   .sidebar.collapsed .conv { justify-content: center; gap: 0; padding: 8px 0; }
@@ -2213,6 +2217,9 @@ body.dragging::after {
   background: rgba(96, 165, 250, .14); border-radius: 999px; padding: 2px 10px;
 }
 .dm-bot-tag .bi-ic { width: 1em; height: 1em; }
+.dm-bot-tag img { width: 14px; height: 14px; border-radius: 50%; object-fit: cover; }
+#pmBots img { width: 18px; height: 18px; border-radius: 50%; object-fit: cover; }
+.bf-bot-img { width: 16px; height: 16px; border-radius: 50%; object-fit: cover; }
 
 .bf-count { font-size: 12px; font-weight: 700; color: var(--dim); direction: ltr; unicode-bidi: plaintext; }
 .bf-card-id { display: flex; align-items: center; gap: 10px; min-width: 0; }

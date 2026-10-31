@@ -4000,6 +4000,12 @@ document.getElementById('sideProfileLink').addEventListener('click', e => {
   openProfilePage();
 });
 
+const sideSettingsBtn = document.getElementById('sideSettings');
+if (sideSettingsBtn) sideSettingsBtn.addEventListener('click', e => {
+  e.preventDefault();
+  openProfilePage();
+});
+
 function openProfilePage() {
   document.querySelector('.chat-layout').style.display = 'none';
   document.getElementById('myProfilePage').style.display = 'flex';
