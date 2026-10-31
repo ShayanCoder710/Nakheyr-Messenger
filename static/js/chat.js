@@ -578,7 +578,6 @@ function appendMsg(m) {
   const frag = document.createElement('div');
   frag.innerHTML = `<div id="m${m.id}">${renderMsg(m)}</div>`;
   body.appendChild(frag.firstElementChild);
-  body.querySelectorAll('.sched-card').forEach(el => body.appendChild(el));
   scrollToBottom(own);
   updateConvPreview(m);
   if (selecting) syncSelection();
@@ -1294,8 +1293,14 @@ async function renderSchedBubbles() {
   items.sort((a, b) => parseSchedIso(a.send_at) - parseSchedIso(b.send_at));
   schedItems = items;
   const body = document.getElementById('msgsBody');
-  body.querySelectorAll('.sched-card').forEach(el => el.remove());
-  if (items.length) body.insertAdjacentHTML('beforeend', items.map(schedCardHtml).join(''));
+  body.querySelectorAll('.sched-card[data-sid]').forEach(el => {
+    if (!items.some(x => String(x.id) === el.dataset.sid)) el.remove();
+  });
+  items.forEach(it => {
+    if (!body.querySelector('.sched-card[data-sid="' + it.id + '"]')) {
+      body.insertAdjacentHTML('beforeend', schedCardHtml(it));
+    }
+  });
 }
 
 document.addEventListener('click', e => {
