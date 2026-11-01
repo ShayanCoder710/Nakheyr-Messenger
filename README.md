@@ -15,7 +15,7 @@ RTL Persian web messenger built with Flask, Socket.IO, and MySQL. Dark Telegram-
 ## Stack
 
 - Python 3.10+, Flask 3, Flask-SocketIO, Flask-SQLAlchemy
-- MySQL 8 (utf8mb4)
+- MySQL 8 (utf8mb4) or MariaDB
 - Gunicorn + gevent for production
 
 ## Project layout
