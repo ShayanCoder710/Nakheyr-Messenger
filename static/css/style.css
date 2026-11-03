@@ -443,6 +443,8 @@ b, strong { font-weight: 800; }
 .conv.muted .unread-pill { background: var(--bg-3); color: var(--muted); }
 .conv .row2 { display: flex; justify-content: space-between; gap: 8px; margin-top: 1px; }
 .conv .row2 span { color: var(--muted); font-size: 13px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.conv .row2 span .conv-none { color: var(--dim); font-weight: 400; }
+.conv .row1 b .bi-ic { width: 12px; height: 12px; color: var(--muted); margin-inline-start: 3px; vertical-align: 1px; }
 .unread-pill {
   flex: 0 0 auto; min-width: 22px; height: 22px; padding: 0 7px; border-radius: 999px;
   background: var(--accent); color: #fff;
@@ -1719,6 +1721,12 @@ table.data { width: 100%; border-collapse: collapse; }
 .mi-chat { color: var(--accent-2); font-weight: 700; }
 .mi-time { margin-inline-start: auto; color: var(--dim); }
 .mi-body { font-size: 13px; line-height: 1.8; word-break: break-word; white-space: pre-wrap; }
+
+.err-page { min-height: 100dvh; min-height: var(--app-h, 100dvh); display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 10px; padding: 24px; text-align: center; }
+.err-code { font-size: 64px; font-weight: 900; color: var(--accent-2); line-height: 1; font-family: 'JetBrains Mono', monospace; }
+.err-page h1 { font-size: 20px; font-weight: 800; margin: 6px 0 0; }
+.err-page p { color: var(--muted); font-size: 14px; max-width: 420px; line-height: 1.8; }
+.err-actions { display: flex; gap: 10px; margin-top: 18px; flex-wrap: wrap; justify-content: center; }
 
 .side-toggle { transition: background .16s ease; }
 .side-toggle svg { transition: transform .2s ease; }

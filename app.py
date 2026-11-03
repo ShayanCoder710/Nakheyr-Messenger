@@ -8,6 +8,7 @@ import threading
 import urllib.request
 from datetime import datetime, timedelta, timezone
 
+from werkzeug.exceptions import HTTPException
 from flask import (
     Flask, render_template, request, redirect, url_for, session,
     flash, abort, jsonify, send_from_directory, current_app
@@ -111,6 +112,36 @@ def touch_online():
         db.session.commit()
     except Exception:
         db.session.rollback()
+
+
+@app.errorhandler(403)
+@app.errorhandler(404)
+@app.errorhandler(405)
+@app.errorhandler(500)
+def handle_http_error(e):
+    if (request.endpoint or '').startswith('api_') or request.path.startswith('/api') or request.path.startswith('/bot/api'):
+        if isinstance(e, HTTPException):
+            return jsonify(ok=False, error=e.name), e.code
+    page = {
+        403: ('دسترسی غیرمجاز', 'یا لاگین نکرده‌ای یا دسترسی به این بخش نداری.'),
+        404: ('چیزی پیدا نشد', 'این آدرس وجود نداره یا جابه‌جا شده.'),
+        405: ('روش مجاز نیست', 'این روش درخواست اینجا مجاز نیست.'),
+        500: ('خطای سرور', 'مشکلی از سمت ما پیش اومد. بعدا دوباره امتحان کن.'),
+    }.get(e.code, ('خطا', str(e)))
+    title, desc = page
+    return render_template('error.html', code=e.code, title=title, desc=desc), e.code
+
+
+class SessionExpired(HTTPException):
+    code = 419
+    description = 'نشست منقضی شد'
+
+
+@app.errorhandler(SessionExpired)
+def handle_session_expired(e):
+    if request.path.startswith('/api') or request.path.startswith('/bot/api'):
+        return jsonify(ok=False, error='نشست منقضی شد — صفحه رو رفرش کن'), 419
+    return render_template('error.html', code=419, title='نشست منقضی شد', desc='صفحه رو یک‌بار رفرش کن و دوباره تلاش کن.'), 419
 
 
 def can_view_chat(user, chat):

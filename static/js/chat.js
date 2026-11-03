@@ -1431,12 +1431,13 @@ function renderConvItem(it) {
     av = `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}</div>`;
   }
   const muteIco = it.muted ? `<span class="conv-mute" title="بی‌صدا">${bi('bell-slash')}</span>` : '';
+  const preview = it.last ? esc(it.last) : '<span class="conv-none">—</span>';
   return `
     <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-peer-id="${it.peer_id || ''}" data-blocked="${it.blocked ? 1 : 0}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}" data-unread="${it.unread || 0}">
       ${av}
       <div class="body">
         <div class="row1"><b>${esc(it.name)}${lock}</b><span class="conv-meta">${muteIco}<time>${fmtTime(it.last_at)}</time></span></div>
-        <div class="row2"><span>${esc(it.last)}</span>${it.unread ? `<span class="unread-pill">${it.unread}</span>` : ''}</div>
+        <div class="row2"><span>${preview}</span>${it.unread ? `<span class="unread-pill">${it.unread}</span>` : ''}</div>
       </div>
     </div>`;
 }
