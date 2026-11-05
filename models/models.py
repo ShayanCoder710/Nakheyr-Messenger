@@ -137,7 +137,12 @@ class Chat(db.Model):
 
 class ChatMember(db.Model):
     __tablename__ = 'chat_members'
-    __table_args__ = (db.UniqueConstraint('chat_id', 'user_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})
+    __table_args__ = (
+        db.UniqueConstraint('chat_id', 'user_id'),
+        db.Index('ix_chatmember_chat_muted', 'chat_id', 'muted'),
+        db.Index('ix_chatmember_chat_archived', 'chat_id', 'archived'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
@@ -165,7 +170,11 @@ class ChatMember(db.Model):
 
 class Message(db.Model):
     __tablename__ = 'messages'
-    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    __table_args__ = (
+        db.Index('ix_messages_chat_created', 'chat_id', 'created_at'),
+        db.Index('ix_messages_sender_created', 'sender_id', 'created_at'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
@@ -252,7 +261,11 @@ class Message(db.Model):
 
 class ScheduledMessage(db.Model):
     __tablename__ = 'scheduled_messages'
-    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    __table_args__ = (
+        db.Index('ix_sched_user_status', 'user_id', 'status'),
+        db.Index('ix_sched_chat_sendat', 'chat_id', 'send_at'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -282,7 +295,11 @@ class ScheduledMessage(db.Model):
 
 class HiddenMessage(db.Model):
     __tablename__ = 'hidden_messages'
-    __table_args__ = (db.UniqueConstraint('user_id', 'message_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'message_id'),
+        db.Index('ix_hidden_user_chat', 'user_id', 'chat_id'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -293,7 +310,11 @@ class HiddenMessage(db.Model):
 
 class Block(db.Model):
     __tablename__ = 'blocks'
-    __table_args__ = (db.UniqueConstraint('user_id', 'blocked_user_id'), {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'})
+    __table_args__ = (
+        db.UniqueConstraint('user_id', 'blocked_user_id'),
+        db.Index('ix_blocks_bidirectional', 'user_id', 'blocked_user_id'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
@@ -303,7 +324,11 @@ class Block(db.Model):
 
 class Report(db.Model):
     __tablename__ = 'reports'
-    __table_args__ = {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    __table_args__ = (
+        db.Index('ix_reports_status_created', 'status', 'created_at'),
+        db.Index('ix_reports_reporter_status', 'reporter_id', 'status'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     reporter_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False)
@@ -414,7 +439,8 @@ class Avatar(db.Model):
     __tablename__ = 'avatars'
     __table_args__ = (
         db.UniqueConstraint('owner_type', 'owner_id', 'path', name='uq_avatar'),
-        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},
+        db.Index('ix_avatars_owner', 'owner_type', 'owner_id'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
     )
 
     id = db.Column(db.Integer, primary_key=True)
@@ -490,7 +516,10 @@ class Bot(db.Model):
 
 class BotUpdate(db.Model):
     __tablename__ = 'bot_updates'
-    __table_args__ = ({'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'},)
+    __table_args__ = (
+        db.Index('ix_botupdates_bot_consumed', 'bot_id', 'consumed'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
 
     id = db.Column(db.Integer, primary_key=True)
     bot_id = db.Column(db.Integer, db.ForeignKey('bots.id'), nullable=False, index=True)

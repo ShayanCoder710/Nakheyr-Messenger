@@ -1293,11 +1293,17 @@ async function renderSchedBubbles() {
   items.sort((a, b) => parseSchedIso(a.send_at) - parseSchedIso(b.send_at));
   schedItems = items;
   const body = document.getElementById('msgsBody');
+  const existing = new Map();
   body.querySelectorAll('.sched-card[data-sid]').forEach(el => {
-    if (!items.some(x => String(x.id) === el.dataset.sid)) el.remove();
+    existing.set(el.dataset.sid, el);
+  });
+  const needed = new Set(items.map(it => String(it.id)));
+  existing.forEach((el, sid) => {
+    if (!needed.has(sid)) el.remove();
   });
   items.forEach(it => {
-    if (!body.querySelector('.sched-card[data-sid="' + it.id + '"]')) {
+    const sid = String(it.id);
+    if (!existing.has(sid)) {
       body.insertAdjacentHTML('beforeend', schedCardHtml(it));
     }
   });

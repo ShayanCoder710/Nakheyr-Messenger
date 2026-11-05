@@ -378,8 +378,12 @@ def save_upload_file(file):
 
 
 def is_blocked(a, b):
-    return (Block.query.filter_by(user_id=a, blocked_user_id=b).first() is not None or
-            Block.query.filter_by(user_id=b, blocked_user_id=a).first() is not None)
+    return Block.query.filter(
+        db.or_(
+            db.and_(Block.user_id == a, Block.blocked_user_id == b),
+            db.and_(Block.user_id == b, Block.blocked_user_id == a)
+        )
+    ).first() is not None
 
 
 PERMISSION_KEYS = [
@@ -669,6 +673,27 @@ def unread_counts(user):
         members_by_chat.setdefault(m.chat_id, []).append(m)
         if m.user_id == user.id:
             my_member[m.chat_id] = m
+    peer_ids = {
+        m.user.id for chat in chats
+        if chat.chat_type == 'dm'
+        for m in members_by_chat.get(chat.id, [])
+        if m.user_id != uid and m.user
+    }
+    blocked_peers = set()
+    if peer_ids:
+        block_rows = db.session.execute(
+            db.select(Block.user_id, Block.blocked_user_id).filter(
+                db.or_(
+                    Block.user_id == uid,
+                    db.and_(Block.blocked_user_id == uid, Block.user_id.in_(peer_ids))
+                )
+            )
+        ).all()
+        for r in block_rows:
+            if r[0] == uid:
+                blocked_peers.add(r[1])
+            else:
+                blocked_peers.add(r[0])
     last_q = db.select(db.func.max(Message.id)).filter(
         Message.chat_id.in_(chat_ids),
         Message.deleted.is_(False),
@@ -709,7 +734,7 @@ def unread_counts(user):
             other = next((m.user for m in members if m.user_id != uid), None)
             peer_username = other.username if other else ''
             peer_id = other.id if other else None
-            blocked = bool(other and is_blocked(uid, other.id))
+            blocked = bool(other and other.id in blocked_peers)
         out.append({
             'chat_id': chat.id,
             'chat_type': chat.chat_type,
@@ -760,20 +785,16 @@ def avatar_html(user, size=''):
     if isinstance(user, dict):
         av = user.get('avatar', '')
         name = (user.get('display_name') or '?').strip()
-        initial = escape(name[:1])
-        alt = escape(name).replace('"', '&quot;')
-        url = escape(av).replace('"', '&quot;')
         fname = av.rsplit('/', 1)[-1] if av else ''
-        inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if av and _avatar_file_ok(fname) else initial
-        return f'<div class="{cls}">{inner}</div>'
-    display_name = getattr(user, 'public_name', None)
-    if display_name is None:
-        display_name = getattr(user, 'name', None) or '?'
-    name = (display_name or '?').strip()
+        file_ok = av and _avatar_file_ok(fname)
+    else:
+        av = user.avatar_url
+        name = (getattr(user, 'public_name', None) or getattr(user, 'name', None) or '?').strip()
+        file_ok = user.avatar and _avatar_file_ok(user.avatar)
     initial = escape(name[:1])
     alt = escape(name).replace('"', '&quot;')
-    url = escape(user.avatar_url).replace('"', '&quot;')
-    inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if user.avatar and _avatar_file_ok(user.avatar) else initial
+    url = escape(av).replace('"', '&quot;')
+    inner = f'<span class="av-init">{initial}</span><img src="{url}" alt="{alt}">' if file_ok else initial
     return f'<div class="{cls}">{inner}</div>'
 
 
@@ -790,18 +811,33 @@ def _avatar_file_ok(fname):
 
 def admin_stats():
     start = datetime.combine(date.today(), datetime.min.time())
-    active = User.query.filter(User.is_banned.is_(False), User.is_admin.is_(False)).count()
+    users_total = db.session.execute(db.select(db.func.count(User.id))).scalar() or 0
+    user_flags = {
+        (bool(r[0]), bool(r[1])): (r[2] or 0)
+        for r in db.session.execute(db.select(User.is_banned, User.is_admin, db.func.count(User.id)).group_by(User.is_banned, User.is_admin))
+    }
+    active = user_flags.get((False, False), 0)
+    msgs_total = db.session.execute(db.select(db.func.count(Message.id))).scalar() or 0
+    today_msgs = db.session.execute(
+        db.select(db.func.count(Message.id)).filter(Message.created_at >= start)
+    ).scalar() or 0
+    chat_counts = {r[0]: (r[1] or 0) for r in db.session.execute(
+        db.select(Chat.chat_type, db.func.count(Chat.id)).group_by(Chat.chat_type)
+    )}
+    rep_counts = {r[0]: (r[1] or 0) for r in db.session.execute(
+        db.select(Report.status, db.func.count(Report.id)).group_by(Report.status)
+    )}
     return {
-        'users': User.query.count(),
+        'users': users_total,
         'active': active,
-        'admins': User.query.filter_by(is_admin=True).count(),
-        'messages': Message.query.count(),
-        'groups': Chat.query.filter_by(chat_type='group').count(),
-        'channels': Chat.query.filter_by(chat_type='channel').count(),
-        'reports': Report.query.filter_by(status='open').count(),
-        'reports_all': Report.query.count(),
-        'banned': User.query.filter_by(is_banned=True).count(),
-        'today_msgs': Message.query.filter(Message.created_at >= start).count(),
+        'admins': user_flags.get((False, True), 0) + user_flags.get((True, True), 0),
+        'messages': msgs_total,
+        'groups': chat_counts.get('group', 0),
+        'channels': chat_counts.get('channel', 0),
+        'reports': rep_counts.get('open', 0),
+        'reports_all': sum(rep_counts.values()),
+        'banned': user_flags.get((True, False), 0) + user_flags.get((True, True), 0),
+        'today_msgs': today_msgs,
     }
 
 
