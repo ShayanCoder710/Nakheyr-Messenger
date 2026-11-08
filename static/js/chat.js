@@ -342,7 +342,7 @@ function renderMsg(m) {
           ${pinTag}
           <span>${fmtTime(m.created_at)}</span>
           ${m.is_edited ? '<span class="edited">ویرایش شده</span>' : ''}
-          ${mine ? `<span class="ticks" data-mid="${m.id}">${tickIcon(seen)}</span>` : ''}
+          ${mine ? `<span class="ticks${seen ? ' seen' : ''}" data-mid="${m.id}">${tickIcon(seen)}</span>` : ''}
         </div>
         <div class="reactions" data-mid="${m.id}">${reactionChips(m)}</div>
       </div>
@@ -1392,11 +1392,24 @@ async function openChat(id, opts) {
   cancelSelect();
   pendingReply = null;
   document.getElementById('replyPreview').style.display = 'none';
-  const canPost = !(j.chat.chat_type === 'channel' && CD.role !== 'owner' && CD.role !== 'admin' && !window.ME.is_admin);
+  let canPost = true;
+  let hintTxt = 'در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن';
+  if (j.chat.chat_type === 'channel' && CD.role !== 'owner' && CD.role !== 'admin' && !window.ME.is_admin) {
+    canPost = false;
+  } else if (j.chat.chat_type === 'group' && !window.ME.is_admin && CD.role !== 'owner' && CD.role !== 'admin') {
+    const me = (j.members || []).find(x => x.id === window.ME.id);
+    if (me && me.permissions && me.permissions.send_messages === false) {
+      canPost = false;
+      hintTxt = 'مالک/مدیران حق ارسال پیام رو برات بسته‌ان';
+    }
+  }
   document.getElementById('msgInput').disabled = !canPost;
   const endSlot = document.querySelector('.composer-end');
   if (endSlot) endSlot.style.visibility = canPost ? 'visible' : 'hidden';
-  document.getElementById('channelHint').style.display = canPost ? 'none' : 'flex';
+  const hintEl = document.getElementById('channelHint');
+  const hintTxtEl = document.getElementById('channelHintTxt');
+  if (hintTxtEl) hintTxtEl.textContent = hintTxt;
+  hintEl.style.display = canPost ? 'none' : 'flex';
   const savedDraft = typeof j.draft === 'string' ? j.draft : '';
   if (+composerChatId !== +id) inputEl.value = savedDraft;
   composerChatId = +id;
@@ -3362,20 +3375,28 @@ function renderMembers(members) {
     </div>` : '';
   list.innerHTML = addRow + (members.map(m => {
     const isMe = m.id === window.ME.id;
+    const restricted = m.role === 'member' && m.permissions && m.permissions.send_messages === false;
     const badge = m.role === 'owner'
       ? `<span class="mb-role owner">${bi('star-fill')} مالک</span>`
       : m.role === 'admin'
         ? `<span class="mb-role admin">${bi('shield-fill')} مدیر</span>`
         : '';
+    const restTag = restricted ? `<span class="mb-role limited" title="ارسال پیام براش بسته شده">${bi('bell-slash')} محدود</span>` : '';
     return `
-    <div class="mb-item${isMe ? ' me' : ''}" data-mmember="${m.id}"${canManage && !isMe ? ' title="برای دیدن گزینه‌ها راست‌کلیک کن"' : ''}>
+    <div class="mb-item${isMe ? ' me' : ''}" data-mmember="${m.id}"${canManage && !isMe ? ' title="برای مدیریت کلیک کن یا راست‌کلیک کن"' : ''}>
       <span class="avatar sm">${avatarInner(m.display_name, m.avatar, m.status === 'online')}</span>
       <div class="mb-info">
         <b>${esc(m.display_name)}${m.title ? ` <span class="member-title">${esc(m.title)}</span>` : ''}${isMe ? ' <span class="mb-you">شما</span>' : ''}</b>
-        <small>@${esc(m.username)}${badge ? ' · ' + badge : ''}</small>
+        <small>@${esc(m.username)}${badge ? ' · ' + badge : ''}${restTag ? ' · ' + restTag : ''}</small>
       </div>
     </div>`;
   }).join('') || '<div class="mb-empty">عضوی نیست</div>');
+  list.querySelectorAll('.mb-item:not(.me)').forEach(el => {
+    el.onclick = () => {
+      const m = members.find(x => String(x.id) === el.dataset.mmember);
+      if (canManage && m) openMemberPerms(m);
+    };
+  });
 
   const addBtn = document.getElementById('mlAddBtn');
   if (addBtn) addBtn.onclick = async () => {
@@ -3472,6 +3493,23 @@ function openMemberPerms(m) {
     </label>`;
   }).join('');
   document.getElementById('memberPermModal').classList.add('show');
+  const acts = document.getElementById('mpActions');
+  const actsHtml = [];
+  if (isOwner && m.role === 'member') actsHtml.push(`<button class="btn sm primary" data-mact="promote">${bi('shield-fill')} ارتقا به مدیر</button>`);
+  if (isOwner && m.role === 'admin') actsHtml.push(`<button class="btn sm" data-mact="demote">${bi('shield-slash')} حذف از مدیران</button>`);
+  if (isOwner && m.role !== 'owner') actsHtml.push(`<button class="btn sm" data-mact="transfer">${bi('star-fill')} انتقال مالکیت</button>`);
+  if ((isOwner || isAdmin) && m.role !== 'owner') actsHtml.push(`<button class="btn sm danger" data-mact="kick">${bi('trash')} حذف از گروه</button>`);
+  acts.innerHTML = actsHtml.length ? actsHtml.join('') : '<small class="dim">عملیاتی برای این عضو وجود نداره</small>';
+  acts.querySelectorAll('[data-mact]').forEach(b => {
+    b.onclick = () => {
+      const a = b.dataset.mact;
+      document.getElementById('memberPermModal').classList.remove('show');
+      if (a === 'promote') promoteMember(m);
+      else if (a === 'demote') demoteMember(m);
+      else if (a === 'kick') kickMember(m);
+      else if (a === 'transfer') transferOwnership(m);
+    };
+  });
 }
 document.getElementById('mpCancel').onclick = () => document.getElementById('memberPermModal').classList.remove('show');
 document.getElementById('mpSave').onclick = async () => {
@@ -4737,7 +4775,10 @@ S.on('read_recept', d => {
   const lastId = d.last_id || Infinity;
   document.querySelectorAll('.mrow .ticks').forEach(t => {
     const mid = +t.dataset.mid;
-    if (mid <= lastId) t.innerHTML = tickIcon(true);
+    if (mid <= lastId && !t.classList.contains('seen')) {
+      t.classList.add('seen');
+      t.innerHTML = tickIcon(true);
+    }
   });
 });
 

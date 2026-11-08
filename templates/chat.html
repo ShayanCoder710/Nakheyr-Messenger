@@ -127,7 +127,7 @@
         {{ bi('arrow-down-circle') }}
       </button>
       <div class="typing-bar" id="typingBar"></div>
-      <div class="channel-hint" id="channelHint" style="display:none"><span>{{ bi('lock') }} در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
+      <div class="channel-hint" id="channelHint" style="display:none"><span class="ch-ic">{{ bi('lock') }}</span><span id="channelHintTxt">در کانال فقط صاحب و ادمین‌ها پیام می‌فرستن</span></div>
       <div class="channel-hint slow-hint" id="slowModeHint" style="display:none"></div>
       <div class="bulk-bar" id="bulkBar" style="display:none">
         <button class="btn sm ghost" id="bulkCancel" title="بستن">{{ bi('x-lg') }}</button>
@@ -289,6 +289,8 @@
     <input class="input" id="mpTitle" maxlength="30" placeholder="مثلاً مدیر تبلیغات">
     <label class="label">مجوزها</label>
     <div class="perm-list" id="mpPerms"></div>
+    <label class="label">اعمال سریع</label>
+    <div class="mp-actions" id="mpActions"></div>
     <div class="row">
       <button class="btn ghost" id="mpCancel">بستن</button>
       <button class="btn primary" id="mpSave">ذخیره</button>
