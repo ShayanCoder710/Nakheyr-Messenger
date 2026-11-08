@@ -1339,12 +1339,11 @@ function closeChatPane(syncUrl) {
   if (recState) finishRec(false);
   flushDraft();
   currentChat = null;
-  document.getElementById('schedStrip').style.display = 'none';
   document.getElementById('msgsPane').classList.remove('open');
   document.getElementById('mainEmpty').style.display = 'grid';
   document.querySelector('.chat-layout').classList.remove('chatted');
   document.querySelectorAll('.conv.active').forEach(c => c.classList.remove('active'));
-  if (syncUrl !== false && location.pathname !== '/') history.pushState({}, '', '/');
+  if (syncUrl !== false && location.pathname !== '/') history.replaceState({}, '', '/');
 }
 
 function setChatted(on) {
