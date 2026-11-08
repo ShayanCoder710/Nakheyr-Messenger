@@ -1866,8 +1866,11 @@ document.addEventListener('click', e => {
   const memItem = e.target.closest('#csMembersList .mb-item');
   if (memItem) {
     const mem = memberById(+memItem.dataset.mmember);
-    if (mem && mem.username && mem.id !== window.ME.id) {
-      openDmByUsername(mem.username);
+    if (mem && mem.id !== window.ME.id) {
+      const role = myRole();
+      const canManage = role === 'owner' || role === 'admin' || !!window.ME.is_admin;
+      if (canManage) openMemberPerms(mem);
+      else if (mem.username) openDmByUsername(mem.username);
     }
     return;
   }
@@ -3391,12 +3394,6 @@ function renderMembers(members) {
       </div>
     </div>`;
   }).join('') || '<div class="mb-empty">عضوی نیست</div>');
-  list.querySelectorAll('.mb-item:not(.me)').forEach(el => {
-    el.onclick = () => {
-      const m = members.find(x => String(x.id) === el.dataset.mmember);
-      if (canManage && m) openMemberPerms(m);
-    };
-  });
 
   const addBtn = document.getElementById('mlAddBtn');
   if (addBtn) addBtn.onclick = async () => {
@@ -3472,6 +3469,7 @@ function openMemberPerms(m) {
   _permMember = m;
   const role = myRole();
   const isOwner = role === 'owner' || isSiteAdmin();
+  const isAdmin = role === 'admin';
   let myPerms = null;
   if (!isOwner) {
     const meM = memberById(window.ME.id);
