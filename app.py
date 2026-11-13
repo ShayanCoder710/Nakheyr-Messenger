@@ -19,7 +19,7 @@ from sqlalchemy.orm import joinedload
 from config import MYSQL_CONFIG, SECRET_KEY, ADMIN_USERNAME, ADMIN_DISPLAY_NAME
 from models.models import (
     db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Poll, PollVote, Avatar, Gif,
-    Bot, BotUpdate, ScheduledMessage,
+    Bot, BotUpdate, ScheduledMessage, UserSession, Article,
 )
 from func import (
     init_db, current_user, require_auth, require_admin, save_avatar, save_upload_file,
@@ -30,7 +30,8 @@ from func import (
     get_or_create_notes, delete_user_account, chat_label,
     member_perms, default_perms, PERMISSION_KEYS, PERMISSION_LABELS,
     add_owner_avatar, set_owner_avatar_primary, delete_owner_avatar, owner_avatar_gallery,
-    AVATAR_EXT,
+    AVATAR_EXT, open_user_session, close_user_session, close_other_user_sessions,
+    rotate_user_session, device_label,
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -55,6 +56,11 @@ USER_SOCKETS = {}
 
 with app.app_context():
     init_db()
+    try:
+        User.query.filter(User.status == 'online').update({'status': 'offline'}, synchronize_session=False)
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
 
 
 def ensure_csrf_token():
@@ -197,6 +203,7 @@ def login():
             return render_template('login.html', next=safe_next(request.form.get('next')) or '')
         session['user_id'] = user.id
         session['session_ver'] = user.session_ver or 0
+        session['session_key'] = open_user_session(user) or ''
         session.permanent = True
         bump_online(user)
         flash(f'خوش برگشتی {user.public_name}!', 'success')
@@ -230,6 +237,7 @@ def register():
         db.session.commit()
         session['user_id'] = user.id
         session['session_ver'] = user.session_ver or 0
+        session['session_key'] = open_user_session(user) or ''
         session.permanent = True
         bump_online(user)
         flash(f'خوش اومدی {display}!', 'success')
@@ -241,6 +249,7 @@ def register():
 def logout():
     user = current_user()
     if user:
+        close_user_session(user.id, session.get('session_key'))
         user.status = 'offline'
         user.last_seen = datetime.utcnow()
         user.session_ver = (user.session_ver or 0) + 1
@@ -1479,16 +1488,149 @@ def api_profile():
                 return jsonify(ok=False, error='این نام کاربری قبلا گرفته شده')
             user.username = new_username
     db.session.commit()
-    if 'show_online' in data and not user.show_online:
+    if 'show_online' in data:
         seen = set()
         for c in user_chats(user.id):
             for mid in chat_member_ids(c.id):
                 if mid != user.id and mid not in seen:
                     seen.add(mid)
-                    socketio.emit('presence_update', {'user_id': user.id, 'status': 'offline'},
-                                  room=f'user:{mid}')
+                    socketio.emit('presence_update', {
+                        'user_id': user.id,
+                        'status': 'online' if user.show_online else 'offline',
+                        'last_seen': user.last_seen.isoformat() if user.last_seen else None,
+                        'hiding': not user.show_online,
+                    }, room=f'user:{mid}')
     socketio.emit('profile_updated', user.to_self(), room=f'user:{user.id}')
     return jsonify(ok=True, profile=user.to_self())
+
+
+@app.route('/api/chat/<int:chat_id>/articles')
+@require_auth
+def api_articles(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    rows = Article.query.filter_by(chat_id=chat.id).order_by(Article.created_at.desc()).limit(100).all()
+    return jsonify(ok=True, articles=[a.to_dict() for a in rows])
+
+
+@app.route('/api/articles/<int:aid>')
+@require_auth
+def api_article_get(aid):
+    user = current_user()
+    a = Article.query.get(aid)
+    if not a:
+        abort(404)
+    chat = Chat.query.get(a.chat_id)
+    if not chat or not can_view_chat(user, chat):
+        abort(404)
+    return jsonify(ok=True, article=a.to_dict(full=True))
+
+
+@app.route('/api/chat/<int:chat_id>/articles', methods=['POST'])
+@require_auth
+def api_article_save(chat_id):
+    user = current_user()
+    chat = Chat.query.get(chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    role = my_role_in(user, chat)
+    if not (user.is_admin or chat.owner_id == user.id or role == 'admin'):
+        return jsonify(ok=False, error='فقط صاحب یا ادمین می‌تونه مقاله بذاره')
+    data = request.get_json(silent=True) or {}
+    title = (data.get('title') or '').strip()[:120]
+    body = (data.get('body') or '').strip()[:20000]
+    cover = (data.get('cover') or '').strip()[:200]
+    if not title:
+        return jsonify(ok=False, error='عنوان مقاله رو بنویس')
+    if not body:
+        return jsonify(ok=False, error='متن مقاله خالیه')
+    aid = int(data.get('id') or 0)
+    if aid:
+        a = Article.query.get(aid)
+        if not a or a.chat_id != chat.id:
+            return jsonify(ok=False, error='مقاله پیدا نشد')
+        if not (user.is_admin or a.author_id == user.id or chat.owner_id == user.id):
+            return jsonify(ok=False, error='دسترسی نداری')
+        a.title, a.body, a.cover = title, body, cover
+        a.updated_at = datetime.utcnow()
+    else:
+        a = Article(chat_id=chat.id, author_id=user.id, title=title, body=body, cover=cover)
+        db.session.add(a)
+    db.session.commit()
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('article_update', {'chat_id': chat.id, 'article': a.to_dict()}, room=f'user:{mid}')
+    return jsonify(ok=True, article=a.to_dict())
+
+
+@app.route('/api/articles/<int:aid>/delete', methods=['POST'])
+@require_auth
+def api_article_delete(aid):
+    user = current_user()
+    a = Article.query.get(aid)
+    if not a:
+        return jsonify(ok=False, error='مقاله پیدا نشد')
+    chat = Chat.query.get(a.chat_id)
+    if not chat:
+        return jsonify(ok=False, error='گپ پیدا نشد')
+    role = my_role_in(user, chat)
+    if not (user.is_admin or chat.owner_id == user.id or role == 'admin' or a.author_id == user.id):
+        return jsonify(ok=False, error='دسترسی نداری')
+    db.session.delete(a)
+    db.session.commit()
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('article_update', {'chat_id': chat.id, 'deleted': aid}, room=f'user:{mid}')
+    return jsonify(ok=True)
+
+
+@app.route('/api/sessions')
+@require_auth
+def api_sessions():
+    user = current_user()
+    cur = session.get('session_key') or ''
+    rows = UserSession.query.filter_by(user_id=user.id).order_by(UserSession.last_active_at.desc()).all()
+    out = []
+    for r in rows:
+        d = r.to_dict(cur)
+        d['device'] = device_label(r.user_agent)
+        out.append(d)
+    return jsonify(ok=True, sessions=out, current=cur)
+
+
+@app.route('/api/sessions/<key>/close', methods=['POST'])
+@require_auth
+def api_session_close(key):
+    user = current_user()
+    cur = session.get('session_key') or ''
+    row = UserSession.query.filter_by(user_id=user.id, key=key).first()
+    if not row:
+        return jsonify(ok=False, error='این سشن پیدا نشد')
+    is_current = key == cur
+    close_user_session(user.id, key)
+    if is_current:
+        session.clear()
+    return jsonify(ok=True, current_closed=is_current)
+
+
+@app.route('/api/sessions/close-others', methods=['POST'])
+@require_auth
+def api_sessions_close_others():
+    user = current_user()
+    n = close_other_user_sessions(user.id, session.get('session_key') or '')
+    return jsonify(ok=True, closed=n)
+
+
+@app.route('/api/sessions/rotate', methods=['POST'])
+@require_auth
+def api_session_rotate():
+    user = current_user()
+    old = session.get('session_key') or ''
+    new_key = rotate_user_session(user, old)
+    if not new_key:
+        return jsonify(ok=False, error='تغییر سشن انجام نشد')
+    session['session_key'] = new_key
+    return jsonify(ok=True, key=new_key)
 
 
 @app.route('/api/password', methods=['POST'])
@@ -1966,7 +2108,7 @@ def profile(username):
         abort(404)
     blocked = is_blocked(user.id, target.id)
     my_blocks = [str(b.blocked_user_id) for b in Block.query.filter_by(user_id=user.id).all()]
-    return render_template('profile.html', target=target.to_public(), me=user,
+    return render_template('profile.html', target=target.to_public(user), me=user,
                            blocked=blocked, my_blocks=my_blocks)
 
 
@@ -2314,6 +2456,42 @@ def bot_api_get_me(token):
     })
 
 
+def _norm_bot_buttons(data):
+    rows = data.get('buttons')
+    if rows is None:
+        rm = data.get('reply_markup') or {}
+        if isinstance(rm, dict):
+            rows = rm.get('inline_keyboard')
+    if not isinstance(rows, list):
+        return []
+    out = []
+    for row in rows[:8]:
+        if isinstance(row, dict):
+            row = [row]
+        if not isinstance(row, list):
+            continue
+        clean = []
+        for b in row[:4]:
+            if not isinstance(b, dict):
+                continue
+            text = str(b.get('text') or '').strip()[:64]
+            if not text:
+                continue
+            item = {'text': text}
+            url = str(b.get('url') or '').strip()
+            cbd = b.get('data', b.get('callback_data'))
+            if url.startswith('http://') or url.startswith('https://'):
+                item['url'] = url[:500]
+            elif cbd is not None:
+                item['data'] = str(cbd)[:128]
+            else:
+                continue
+            clean.append(item)
+        if clean:
+            out.append(clean)
+    return out
+
+
 @app.route('/bot/api/<token>/sendMessage', methods=['POST'])
 def bot_api_send_message(token):
     bot, bot_user, err, status = bot_auth(token)
@@ -2350,8 +2528,10 @@ def bot_api_send_message(token):
     else:
         return jsonify(ok=False, error='chat_id_or_user_id_required')
     reply_to = data.get('reply_to') or None
+    buttons = _norm_bot_buttons(data)
     m = Message(chat_id=chat.id, sender_id=bot_user.id, msg_type='text',
-                content=text, reply_to=reply_to)
+                content=text, reply_to=reply_to,
+                buttons=json.dumps(buttons, ensure_ascii=False) if buttons else '')
     db.session.add(m)
     db.session.commit()
     payload = m.to_dict(None)
@@ -2417,6 +2597,59 @@ def bot_api_delete_webhook(token):
     bot.webhook_url = ''
     db.session.commit()
     return jsonify(ok=True, webhook_url='')
+
+
+@app.route('/bot/api/<token>/answerCallbackQuery', methods=['POST'])
+def bot_api_answer_callback(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    text = (data.get('text') or '').strip()[:200]
+    return jsonify(ok=True, answered=True, text=text)
+
+
+@app.route('/api/bot-callback', methods=['POST'])
+@require_auth
+def api_bot_callback():
+    user = current_user()
+    data = request.get_json(silent=True) or {}
+    m = Message.query.get(int(data.get('message_id') or 0))
+    if not m or m.deleted:
+        return jsonify(ok=False, error='پیام پیدا نشد')
+    chat = Chat.query.get(m.chat_id)
+    if not chat or not can_view_chat(user, chat):
+        return jsonify(ok=False, error='دسترسی نداری')
+    sender = User.query.get(m.sender_id) if m.sender_id else None
+    if not sender or not sender.is_bot:
+        return jsonify(ok=False, error='این پیام از طرف ربات نیست')
+    bot = Bot.query.filter_by(user_id=sender.id).first()
+    if not bot or not bot.is_active:
+        return jsonify(ok=False, error='ربات غیرفعاله')
+    try:
+        r = int(data.get('row') or 0)
+        c = int(data.get('col') or 0)
+    except (TypeError, ValueError):
+        return jsonify(ok=False, error='دکمه نامعتبره')
+    rows = m.buttons_list()
+    if r < 0 or r >= len(rows) or c < 0 or c >= len(rows[r]):
+        return jsonify(ok=False, error='دکمه نامعتبره')
+    btn = rows[r][c]
+    if btn.get('url'):
+        return jsonify(ok=True, url=btn['url'])
+    payload = {
+        'callback_query': {
+            'id': secrets.token_hex(8),
+            'data': btn.get('data', ''),
+            'from': user.to_public(),
+            'message': {**m.to_dict(user.id), 'chat_id': m.chat_id},
+        }
+    }
+    row = BotUpdate(bot_id=bot.id, payload=json.dumps(payload, ensure_ascii=False))
+    db.session.add(row)
+    db.session.commit()
+    _deliver_bot_webhook(bot, {**payload, 'update_id': row.id})
+    return jsonify(ok=True, data=btn.get('data', ''))
 
 
 ADMIN_PAGE_SIZE = 25
@@ -2626,16 +2859,15 @@ def on_connect():
         emit('auth_required')
         return
     first = not USER_SOCKETS.get(user.id)
+    was_online = user.status == 'online'
     USER_SOCKETS.setdefault(user.id, set()).add(request.sid)
     join_room(f'user:{user.id}')
     for c in user_chats(user.id):
         join_room(f'chat:{c.id}')
-    if not user.show_online:
-        if first:
-            bump_online(user)
-        return
     bump_online(user)
-    if first:
+    if not user.show_online:
+        return
+    if first or not was_online:
         seen = set()
         for c in user_chats(user.id):
             for mid in chat_member_ids(c.id):
@@ -2672,7 +2904,8 @@ def on_disconnect():
             if mid != user.id and mid not in seen:
                 seen.add(mid)
                 emit('presence_update', {'user_id': user.id, 'status': 'offline',
-                                          'last_seen': user.last_seen.isoformat()},
+                                          'last_seen': user.last_seen.isoformat(),
+                                          'hiding': not user.show_online},
                      room=f'user:{mid}')
 
 

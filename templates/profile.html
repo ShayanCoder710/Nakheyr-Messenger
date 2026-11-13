@@ -12,7 +12,7 @@
     <div class="uname">@{{ target.username }}</div>
     <p class="bio">{{ target.bio or 'بیویی نداره' }}</p>
     <div style="display:flex; gap:14px; justify-content:center; margin-bottom:18px; color:var(--muted); font-size:12.5px">
-      <span>وضعیت: <b style="color:var(--text)">{{ 'آنلاین' if target.status == 'online' else 'آفلاین' }}</b></span>
+      <span>وضعیت: <b id="pfStatus" style="color:var(--text)"></b></span>
     </div>
     <div class="p-actions">
       <button class="btn primary" id="btnMsg">{{ bi('send') }} پیام بده</button>
@@ -36,6 +36,31 @@
 <script>
 window.TARGET = {{ target | tojson }};
 window.AM_BLOCKED = {{ 'true' if target.id | string in my_blocks else 'false' }};
+(function () {
+  const t = window.TARGET;
+  const el = document.getElementById('pfStatus');
+  if (t.status === 'online') el.textContent = 'آنلاین';
+  else if (t.is_bot) el.textContent = 'ربات';
+  else if (t.recently || !t.last_seen) el.textContent = 'آخرین بازدید اخیراً';
+  else {
+    const s = t.last_seen.length === 19 ? t.last_seen + 'Z' : t.last_seen;
+    const date = new Date(s);
+    const sec = Math.max(0, Math.floor((Date.now() - date.getTime()) / 1000));
+    const pad = n => String(n).padStart(2, '0');
+    const fa = v => String(v).replace(/\d/g, c => '۰۱۲۳۴۵۶۷۸۹'[c]);
+    if (sec < 60) el.textContent = 'آخرین بازدید لحظاتی پیش';
+    else if (sec < 3600) el.textContent = 'آخرین بازدید ' + fa(Math.floor(sec / 60)) + ' دقیقه پیش';
+    else {
+      const now = new Date();
+      const hm = pad(date.getHours()) + ':' + pad(date.getMinutes());
+      const sameDay = date.toDateString() === now.toDateString();
+      const yest = new Date(now.getTime() - 86400000).toDateString();
+      if (sameDay) el.textContent = 'آخرین بازدید امروز ' + fa(hm);
+      else if (date.toDateString() === yest) el.textContent = 'آخرین بازدید دیروز ' + fa(hm);
+      else el.textContent = 'آخرین بازدید ' + new Intl.DateTimeFormat('fa-IR', { day: 'numeric', month: 'long' }).format(date);
+    }
+  }
+})();
 document.getElementById('btnMsg').onclick = async () => {
   const r = await fetch('/api/dm', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({user_id: TARGET.id})});
   const j = await r.json();

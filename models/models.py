@@ -58,7 +58,15 @@ class User(db.Model):
     def avatar_url(self):
         return f'/files/avatar/{self.avatar}' if self.avatar else ''
 
-    def to_public(self):
+    def to_public(self, viewer=None):
+        show = bool(self.show_online)
+        visible = show and not (viewer is not None and not viewer.show_online)
+        last_seen = None
+        recently = False
+        if not self.is_bot and self.status != 'online' and not visible:
+            recently = True
+        if visible:
+            last_seen = self.last_seen.isoformat() if self.last_seen else None
         return {
             'id': self.id,
             'username': self.username,
@@ -67,7 +75,9 @@ class User(db.Model):
             'avatar': self.avatar_url,
             'is_admin': self.is_admin,
             'is_bot': bool(self.is_bot),
-            'status': self.status if self.show_online else 'offline',
+            'status': 'online' if show else 'offline',
+            'last_seen': last_seen,
+            'recently': recently,
             'read_receipts': bool(self.read_receipts),
         }
 
@@ -121,9 +131,10 @@ class Chat(db.Model):
             data['is_notes'] = bool(self.chat_type == 'dm' and self.members and all(m.user_id == getattr(current_user, 'id', 0) for m in self.members))
         if self.chat_type == 'dm' and current_user:
             uid = getattr(current_user, 'id', current_user)
+            viewer = current_user if isinstance(current_user, User) else None
             other = next((m.user for m in self.members if m.user_id != uid), None)
             if other:
-                peer = other.to_public()
+                peer = other.to_public(viewer=viewer)
                 try:
                     from func import is_blocked
                     peer['blocked'] = is_blocked(uid, other.id)
@@ -191,6 +202,7 @@ class Message(db.Model):
     reply_to = db.Column(db.Integer, nullable=True)
     fwd_from_id = db.Column(db.Integer, nullable=True)
     fwd_from_name = db.Column(db.String(60), default='')
+    buttons = db.Column(db.Text, default='')
     created_at = db.Column(db.DateTime, default=datetime.utcnow, index=True)
 
     def react_dict(self):
@@ -201,6 +213,13 @@ class Message(db.Model):
 
     def set_reactions(self, value):
         self.reactions = json.dumps(value)
+
+    def buttons_list(self):
+        try:
+            v = json.loads(self.buttons or '[]')
+            return v if isinstance(v, list) else []
+        except Exception:
+            return []
 
     def read_ids(self):
         try:
@@ -244,6 +263,7 @@ class Message(db.Model):
             'fwd_from_id': self.fwd_from_id,
             'fwd_from_name': self.fwd_from_name or '',
             'read_by': self.visible_read_ids(),
+            'buttons': self.buttons_list(),
             'created_at': self.created_at.isoformat(),
         }
         if self.reply_to:
@@ -486,6 +506,72 @@ class Gif(db.Model):
             'name': self.name,
             'url': self.url,
             'kind': self.kind,
+        }
+
+
+class Article(db.Model):
+    __tablename__ = 'articles'
+    __table_args__ = (
+        db.Index('ix_articles_chat', 'chat_id', 'created_at'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    chat_id = db.Column(db.Integer, db.ForeignKey('chats.id'), nullable=False, index=True)
+    author_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=True)
+    title = db.Column(db.String(120), nullable=False, default='')
+    body = db.Column(db.Text, default='')
+    cover = db.Column(db.String(200), default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    updated_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    @property
+    def cover_url(self):
+        if not self.cover:
+            return ''
+        if self.cover.startswith('http://') or self.cover.startswith('https://'):
+            return self.cover
+        return f'/files/{self.cover}'
+
+    def to_dict(self, full=False):
+        d = {
+            'id': self.id,
+            'chat_id': self.chat_id,
+            'author_id': self.author_id,
+            'title': self.title,
+            'cover': self.cover_url,
+            'created_at': self.created_at.isoformat() if self.created_at else '',
+            'updated_at': self.updated_at.isoformat() if self.updated_at else '',
+            'preview': (self.body or '')[:180],
+        }
+        if full:
+            d['body'] = self.body or ''
+        return d
+
+
+class UserSession(db.Model):
+    __tablename__ = 'user_sessions'
+    __table_args__ = (
+        db.Index('ix_usersessions_user', 'user_id', 'last_active_at'),
+        {'mysql_charset': 'utf8mb4', 'mysql_collate': 'utf8mb4_unicode_ci'}
+    )
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.Integer, db.ForeignKey('users.id'), nullable=False, index=True)
+    key = db.Column(db.String(64), unique=True, nullable=False)
+    user_agent = db.Column(db.String(300), default='')
+    ip = db.Column(db.String(64), default='')
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    last_active_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def to_dict(self, current_key=None):
+        return {
+            'key': self.key,
+            'user_agent': self.user_agent or '',
+            'ip': self.ip or '',
+            'created_at': self.created_at.isoformat() if self.created_at else '',
+            'last_active_at': self.last_active_at.isoformat() if self.last_active_at else '',
+            'current': bool(current_key and self.key == current_key),
         }
 
 

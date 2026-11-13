@@ -7,7 +7,7 @@ from datetime import datetime, date, timedelta
 from functools import wraps
 
 from flask import session, redirect, url_for, current_app, flash, abort, request
-from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Avatar, Poll, PollVote, Gif
+from models.models import db, User, Chat, ChatMember, Message, Report, Block, HiddenMessage, Avatar, Poll, PollVote, Gif, UserSession
 from config import ADMIN_USERNAME
 from sqlalchemy.orm import joinedload
 
@@ -130,6 +130,7 @@ def _ensure_columns():
         ('gifs', 'kind', "VARCHAR(10) NOT NULL DEFAULT 'gif'"),
         ('users', 'session_ver', "INTEGER NOT NULL DEFAULT 0"),
         ('users', 'is_bot', "BOOLEAN NOT NULL DEFAULT 0"),
+        ('messages', 'buttons', "TEXT NULL"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
@@ -247,8 +248,116 @@ def current_user():
     if user.session_ver is not None and session.get('session_ver') != user.session_ver:
         session.pop('user_id', None)
         session.pop('session_ver', None)
+        session.pop('session_key', None)
         return None
+    key = session.get('session_key')
+    if not key:
+        key = open_user_session(user)
+        if key:
+            session['session_key'] = key
+    else:
+        row = UserSession.query.filter_by(user_id=user.id, key=key).first()
+        if not row:
+            session.pop('user_id', None)
+            session.pop('session_ver', None)
+            session.pop('session_key', None)
+            return None
+        touch_user_session(row)
     return user
+
+
+_SESSION_TOUCH = {}
+
+
+def touch_user_session(row):
+    now = datetime.utcnow()
+    last = _SESSION_TOUCH.get(row.key)
+    if last and (now - last).total_seconds() < 45:
+        return
+    _SESSION_TOUCH[row.key] = now
+    row.last_active_at = now
+    try:
+        db.session.commit()
+    except Exception:
+        db.session.rollback()
+
+
+def open_user_session(user, ua=None, ip=None):
+    from flask import request as _rq
+    try:
+        ua = ua if ua is not None else (_rq.headers.get('User-Agent') or '')
+        ip = ip if ip is not None else (_rq.headers.get('X-Forwarded-For', '') or _rq.remote_addr or '')
+        ip = ip.split(',')[0].strip()
+    except Exception:
+        ua, ip = ua or '', ip or ''
+    key = secrets.token_urlsafe(32)
+    row = UserSession(user_id=user.id, key=key, user_agent=(ua or '')[:300], ip=(ip or '')[:64])
+    db.session.add(row)
+    try:
+        db.session.commit()
+        _SESSION_TOUCH[key] = datetime.utcnow()
+    except Exception:
+        db.session.rollback()
+        return None
+    return key
+
+
+def close_user_session(user_id, key):
+    if not key:
+        return False
+    row = UserSession.query.filter_by(user_id=user_id, key=key).first()
+    if not row:
+        return False
+    db.session.delete(row)
+    db.session.commit()
+    _SESSION_TOUCH.pop(key, None)
+    return True
+
+
+def close_other_user_sessions(user_id, keep_key):
+    q = UserSession.query.filter(UserSession.user_id == user_id)
+    if keep_key:
+        q = q.filter(UserSession.key != keep_key)
+    rows = q.all()
+    for r in rows:
+        _SESSION_TOUCH.pop(r.key, None)
+        db.session.delete(r)
+    db.session.commit()
+    return len(rows)
+
+
+def rotate_user_session(user, old_key):
+    close_user_session(user.id, old_key)
+    return open_user_session(user)
+
+
+def device_label(ua):
+    ua = (ua or '').lower()
+    if not ua:
+        return 'دستگاه ناشناس'
+    os_name = 'دستگاه'
+    if 'android' in ua:
+        os_name = 'اندروید'
+    elif 'iphone' in ua or 'ipad' in ua or 'ios' in ua:
+        os_name = 'آیفون' if 'ipad' not in ua else 'آیپد'
+    elif 'windows' in ua:
+        os_name = 'ویندوز'
+    elif 'mac os' in ua or 'macintosh' in ua:
+        os_name = 'مک'
+    elif 'linux' in ua:
+        os_name = 'لینوکس'
+    browser = 'مرورگر'
+    if 'edg/' in ua:
+        browser = 'Edge'
+    elif 'opr/' in ua or 'opera' in ua:
+        browser = 'Opera'
+    elif 'firefox' in ua:
+        browser = 'Firefox'
+    elif 'chrome' in ua or 'crios' in ua:
+        browser = 'Chrome'
+    elif 'safari' in ua:
+        browser = 'Safari'
+    return f'{browser} · {os_name}'
 
 
 def require_auth(fn):
@@ -728,6 +837,7 @@ def unread_counts(user):
             last_text = prefix + snippet(last.content, last.msg_type)
         peer_username = ''
         peer_id = None
+        peer_online = False
         blocked = False
         is_notes = chat.chat_type == 'dm' and all(m.user_id == uid for m in members)
         if chat.chat_type == 'dm' and not is_notes:
@@ -735,12 +845,15 @@ def unread_counts(user):
             peer_username = other.username if other else ''
             peer_id = other.id if other else None
             blocked = bool(other and other.id in blocked_peers)
+            if other and user.show_online:
+                peer_online = bool(other.show_online and other.status == 'online')
         out.append({
             'chat_id': chat.id,
             'chat_type': chat.chat_type,
             'name': chat_display_name(chat, user, members),
             'peer_username': peer_username,
             'peer_id': peer_id,
+            'peer_online': peer_online,
             'blocked': blocked,
             'is_notes': is_notes,
             'avatar': chat.avatar_url,
@@ -881,6 +994,7 @@ def delete_user_account(uid, reassign_to=None):
         db.text("DELETE FROM hangman_games WHERE host_id = :uid"), {"uid": uid})
     Block.query.filter(db.or_(Block.user_id == uid, Block.blocked_user_id == uid)).delete(
         synchronize_session=False)
+    UserSession.query.filter_by(user_id=uid).delete(synchronize_session=False)
     Report.query.filter(db.or_(Report.reporter_id == uid, Report.reported_id == uid)).delete(
         synchronize_session=False)
     u = User.query.get(uid)

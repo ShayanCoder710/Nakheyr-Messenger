@@ -119,26 +119,80 @@
         </div>
         <div class="bf-doc">
           <span class="bf-mono">GET /bot/api/‹token›/getUpdates?offset=0</span>
-          <p>پیام‌هایی که کاربر در دایرکت ربات یا در گروهی که عضو آن است فرستاده؛ با <code class="bf-mono">offset</code> از آخرین <code class="bf-mono">update_id</code> ادامه بده.</p>
+          <p>پیام‌ها و کلیک‌های دکمه‌ها؛ با <code class="bf-mono">offset</code> از آخرین <code class="bf-mono">update_id</code> ادامه بده.</p>
         </div>
         <div class="bf-doc">
           <span class="bf-mono">POST /bot/api/‹token›/setWebhook</span>
           <p>مقدار <code class="bf-mono">url</code>؛ به‌جای پُلب، هر آپدیت به‌صورت POST JSON به آن آدرس فرستاده می‌شود. برای برچیدن، <code class="bf-mono">deleteWebhook</code>.</p>
         </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/answerCallbackQuery</span>
+          <p>پاسخ به کلیک دکمه‌ی شیشه‌ای؛ <code class="bf-mono">text</code> اختیاری است.</p>
+        </div>
       </div>
-      <h3>کتابخانهٔ کمکی (nakheyr_bot)</h3>
+
+      <h3>دکمه‌های شیشه‌ای (Inline Buttons)</h3>
+      <p class="bf-hint">به <code class="bf-mono">sendMessage</code> یک <code class="bf-mono">buttons</code> اضافه کن: آرایه‌ای از ردیف‌ها، هر دکمه با <code class="bf-mono">text</code> و <code class="bf-mono">data</code> (برای کال‌بک) یا <code class="bf-mono">url</code> (برای باز کردن لینک). حداکثر ۸ ردیف و ۴ دکمه در هر ردیف.</p>
       <pre class="bf-code">
-from nakheyr_bot import NakheyrBot
-
-bot = NakheyrBot(token="YOUR_TOKE...HERE")
-
-def on_update(update):
-    msg = update.get('message', {})
-    if msg.get('content') == 'سلام':
-        bot.send_message(user_id=msg['sender_id'], text='درود بر شما')
-
-bot.run_forever(on_update)
+{
+  "user_id": 42,
+  "text": "یکی رو انتخاب کن:",
+  "buttons": [
+    [{"text": "👍 آره", "data": "yes"}, {"text": "👎 نه", "data": "no"}],
+    [{"text": "سایت ما", "url": "https://example.com"}]
+  ]
+}
 </pre>
+      <p class="bf-hint">وقتی کاربر روی دکمه‌ی <code class="bf-mono">data</code> بزند، در <code class="bf-mono">getUpdates</code> یک آپدیت با کلید <code class="bf-mono">callback_query</code> می‌گیری که <code class="bf-mono">data</code> و <code class="bf-mono">from</code> و <code class="bf-mono">message</code> دارد.</p>
+
+      <h3>آموزش: ربات با TeleBot (pyTelegramBotAPI)</h3>
+      <p class="bf-hint">نخیر همان شکل API تلگرام را دارد؛ پس همان کتابخانهٔ محبوب <code class="bf-mono">pyTelegramBotAPI</code> با یک <code class="bf-mono">api_baseurl</code> سفارشی کار می‌کند.</p>
+      <pre class="bf-code">
+pip install pyTelegramBotAPI requests
+</pre>
+      <pre class="bf-code">
+import telebot
+
+TOKEN = "TOKEN_ربات_تو"
+BASE  = "http://127.0.0.1:5000/bot/api/"
+
+bot = telebot.TeleBot(TOKEN, api_baseurl=BASE, threaded=False)
+
+@bot.message_handler(commands=["start"])
+def start(message):
+    bot.send_message(message.chat.id, "سلام! من ربات نخیرم 👋")
+
+@bot.message_handler(func=lambda m: True)
+def echo(message):
+    bot.send_message(message.chat.id, "گفتی: " + (message.text or ""))
+
+bot.infinity_polling(timeout=10, long_polling_timeout=5)
+</pre>
+      <p class="bf-hint">اگر می‌خواهی بدون کتابخانه و فقط با <code class="bf-mono">requests</code> کار کنی:</p>
+      <pre class="bf-code">
+import requests, time
+
+TOKEN = "TOKEN_ربات_تو"
+API   = f"http://127.0.0.1:5000/bot/api/{TOKEN}"
+offset = 0
+
+while True:
+    r = requests.get(f"{API}/getUpdates", params={"offset": offset}).json()
+    for up in r.get("updates", []):
+        offset = up["update_id"]
+        msg = up.get("message")
+        if msg:
+            requests.post(f"{API}/sendMessage", json={
+                "user_id": msg["sender_id"],
+                "text": "دریافت شد: " + (msg.get("content") or ""),
+                "buttons": [[{"text": "باشه", "data": "ok"}]],
+            })
+        cb = up.get("callback_query")
+        if cb:
+            requests.post(f"{API}/answerCallbackQuery", json={"text": "کلیک شد: " + cb["data"]})
+    time.sleep(2)
+</pre>
+      <p class="bf-hint">نکته: در <code class="bf-mono">getUpdates</code> هر پیام کلیدهای <code class="bf-mono">sender_id</code>، <code class="bf-mono">content</code>، <code class="bf-mono">chat_id</code> و <code class="bf-mono">buttons</code> را دارد. برای وب‌هوک، همان JSON را روی آدرس خودت دریافت می‌کنی.</p>
     </section>
   </main>
 </div>
