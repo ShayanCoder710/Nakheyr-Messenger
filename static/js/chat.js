@@ -859,10 +859,12 @@ document.getElementById('tmClear').onclick = async () => {
 };
 
 let _delAction = null;
-function openConfirm(title, sub, onConfirm, okLabel) {
+function openConfirm(title, sub, onConfirm, okLabel, danger) {
   document.getElementById('delTitle').textContent = title;
   document.getElementById('delSub').textContent = sub;
-  document.getElementById('delConfirm').textContent = okLabel || 'تأیید';
+  const btn = document.getElementById('delConfirm');
+  btn.textContent = okLabel || 'تأیید';
+  btn.classList.toggle('danger', !!danger);
   _delAction = onConfirm;
   openModal('deleteModal');
 }
@@ -3609,14 +3611,14 @@ function demoteMember(m) {
   openConfirm('حذف از مدیران', `«${m.display_name}» دیگه مدیر گروه نیست`, () => {
     api(`/api/chat/${currentChat}/members`, { action: 'demote', user_id: m.id })
       .then(j => j.ok ? (toast('از مدیران حذف شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
-  }, 'حذف از مدیران');
+  }, 'حذف از مدیران', true);
 }
 
 function kickMember(m) {
   openConfirm('حذف از گروه', `«${m.display_name}» از گروه حذف می‌شه و دسترسی‌اش قطع می‌شه`, () => {
     api(`/api/chat/${currentChat}/members`, { action: 'kick', user_id: m.id })
       .then(j => j.ok ? (toast('از گروه حذف شد'), loadMembers(currentChat)) : toast(j.error, 'error'));
-  }, 'حذف');
+  }, 'حذف', true);
 }
 
 function transferOwnership(m) {
@@ -3627,8 +3629,8 @@ function transferOwnership(m) {
           if (j.ok) { toast('مالکیت منتقل شد'); loadMembers(currentChat); if (currentChat) openChat(currentChat); }
           else toast(j.error, 'error');
         });
-    }, 'بله، مطمئنم');
-  }, 'ادامه');
+    }, 'بله، مطمئنم', true);
+  }, 'ادامه', true);
 }
 
 let _permMember = null;
@@ -4168,7 +4170,7 @@ document.getElementById('csWipe').onclick = () => {
           refreshConvList();
         } else toast(r.error || 'انجام نشد', 'error');
       });
-    }, 'پاک شدن');
+    }, 'پاک شدن', true);
 };
 
 document.getElementById('csLeave').onclick = () => {
@@ -4181,7 +4183,7 @@ document.getElementById('csLeave').onclick = () => {
         refreshConvList();
       } else toast(r.error, 'error');
     });
-  }, 'خروج');
+  }, 'خروج', true);
 };
 
 document.getElementById('csDelete').onclick = () => {
@@ -4198,7 +4200,7 @@ document.getElementById('csDelete').onclick = () => {
           refreshConvList();
         } else toast(r.error || 'حذف نشد', 'error');
       });
-    }, 'حذف');
+    }, 'حذف', true);
 };
 
 document.getElementById('csReport').onclick = () => {
@@ -4311,7 +4313,7 @@ async function loadSessions() {
         toast('سشن حذف شد');
         loadSessions();
       });
-    }, 'حذف');
+    }, 'حذف', true);
   });
 }
 
@@ -4323,7 +4325,7 @@ if (pmSessOthers) pmSessOthers.onclick = () => {
       toast(j.closed ? faNum(j.closed) + ' دستگاه خارج شد' : 'دستگاه دیگری نبود');
       loadSessions();
     });
-  }, 'خارج کن');
+  }, 'خارج کن', true);
 };
 
 const pmSessRotate = document.getElementById('pmSessRotate');
@@ -4334,7 +4336,7 @@ if (pmSessRotate) pmSessRotate.onclick = () => {
       toast('سشن عوض شد');
       loadSessions();
     });
-  }, 'تغییر بده');
+  }, 'تغییر بده', true);
 };
 
 const pmRR = document.getElementById('pmReadReceipts');
@@ -4559,7 +4561,13 @@ document.getElementById('pmSave').onclick = async () => {
   } else toast(r.error, 'error');
 };
 
-document.getElementById('pmLogout').onclick = () => location.href = '/logout';
+document.getElementById('pmLogout').onclick = () => {
+  const un = window.ME.username ? ' ' + window.ME.username : '';
+  openConfirm('خروج از حساب', 'از حساب ' + (un || 'کاربری‌ات') + ' خارج می‌شی. دستگاه‌های دیگر هم بیرون می‌خورن و برای ادامه باید دوباره واردشی', () => {
+    toast('در حال خروج…');
+    setTimeout(() => { location.href = '/logout'; }, 500);
+  }, 'خروج', true);
+};
 
 document.getElementById('pmChangePass').onclick = async () => {
   const cur = document.getElementById('pmCurPass').value;
@@ -4585,7 +4593,7 @@ document.getElementById('pmDeleteAccount').onclick = () => {
       if (r.ok) { toast('حسابت حذف شد'); setTimeout(() => location.href = '/', 800); }
       else toast(r.error, 'error');
     });
-  }, 'حذف حساب');
+  }, 'حذف حساب', true);
 };
 
 async function openDmByUsername(username) {
@@ -4773,7 +4781,7 @@ async function loadArticles() {
         toast('مقاله حذف شد');
         loadArticles();
       });
-    }, 'حذف');
+    }, 'حذف', true);
   });
 }
 async function openArticle(id) {
@@ -4927,7 +4935,7 @@ function openConvActions(conv, x, y) {
               refreshConvList();
             } else toast(j.error, 'error');
           });
-        }, 'خروج');
+        }, 'خروج', true);
       }
     } : null,
     isDm && peerName ? { label: 'پروفایل ' + peerName, icon: bi('person'), fn: () => openChat(chatId).then(openDmInfo) } : null,
@@ -4957,7 +4965,7 @@ function openConvActions(conv, x, y) {
             refreshConvList();
           } else toast(j.error || 'حذف نشد', 'error');
         });
-      }, 'حذف');
+      }, 'حذف', true);
     } } : null,
     isDm ? { label: 'حذف گپ', icon: bi('trash'), danger: true, fn: () => {
       openConfirm('حذف گپ', `«${peerName || 'گپ'}» کامل حذف می‌شه؛ برای تو و طرف مقابل پیام‌ها می‌ره. این کار قابل بازگشت نیست`, () => {
@@ -4968,7 +4976,7 @@ function openConvActions(conv, x, y) {
             refreshConvList();
           } else toast(j.error || 'حذف نشد', 'error');
         });
-      }, 'حذف');
+      }, 'حذف', true);
     } } : null,
   ]);
 }
