@@ -5165,14 +5165,19 @@ S.on('chat_wiped', d => {
 S.on('read_recept', d => {
   if (window.ME.read_receipts === false) return;
   if (d.chat_id !== currentChat) return;
-  const lastId = d.last_id || Infinity;
-  document.querySelectorAll('.mrow .ticks').forEach(t => {
-    const mid = +t.dataset.mid;
-    if (mid <= lastId && !t.classList.contains('seen')) {
-      t.classList.add('seen');
-      t.innerHTML = tickIcon(true);
-    }
-  });
+  fetch('/api/messages/' + currentChat).then(r => r.json()).then(j => {
+    if (d.chat_id !== currentChat || !j.messages) return;
+    const fresh = {};
+    j.messages.forEach(m => { fresh[m.id] = m.read_by || []; });
+    document.querySelectorAll('.mrow .ticks').forEach(t => {
+      const mid = +t.dataset.mid;
+      const ids = fresh[mid];
+      if (ids === undefined) return;
+      const seen = ids.some(id => String(id) !== String(window.ME.id));
+      t.classList.toggle('seen', seen);
+      t.innerHTML = tickIcon(seen);
+    });
+  }).catch(() => {});
 });
 
 S.on('chat_read', d => {

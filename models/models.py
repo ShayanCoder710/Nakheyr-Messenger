@@ -1,5 +1,6 @@
 import hmac
 import json
+import time
 from datetime import datetime
 from flask_sqlalchemy import SQLAlchemy
 from werkzeug.security import generate_password_hash, check_password_hash
@@ -179,6 +180,25 @@ class ChatMember(db.Model):
         self.permissions = json.dumps(data or {})
 
 
+_HIDDEN_RR = {}
+
+
+def _hidden_read_users(ids):
+    key = frozenset(ids)
+    hit = _HIDDEN_RR.get(key)
+    if hit and time.time() - hit[1] < 15:
+        return hit[0]
+    hidden = {
+        u.id for u in User.query.filter(
+            User.id.in_(list(key)), User.read_receipts.is_(False)
+        ).all()
+    }
+    if len(_HIDDEN_RR) > 200:
+        _HIDDEN_RR.clear()
+    _HIDDEN_RR[key] = (hidden, time.time())
+    return hidden
+
+
 class Message(db.Model):
     __tablename__ = 'messages'
     __table_args__ = (
@@ -231,11 +251,7 @@ class Message(db.Model):
         ids = self.read_ids()
         if not ids:
             return []
-        hidden = {
-            u.id for u in User.query.filter(
-                User.id.in_(ids), User.read_receipts.is_(False)
-            ).all()
-        }
+        hidden = _hidden_read_users(ids)
         return [i for i in ids if i not in hidden]
 
     def set_read(self, user_id):
