@@ -625,7 +625,7 @@ function appendMsg(m) {
   const row = node.querySelector('.mrow');
   if (row) {
     row.classList.add('msg-in');
-    setTimeout(() => row.classList.remove('msg-in'), 240);
+    setTimeout(() => row.classList.remove('msg-in'), 430);
   }
   scrollToBottom(own);
   updateConvPreview(m);
@@ -2208,16 +2208,22 @@ async function doForward(chatId) {
 }
 
 function deleteRow(mid) {
-  const wrapper = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`);
-  if (!wrapper) return;
-  const row = wrapper.classList.contains('mrow') ? wrapper : wrapper.querySelector('.mrow');
-  const el = row ? row : wrapper;
-  el.classList.add('removing');
-  setTimeout(() => {
-    el.classList.remove('removing');
-    el.classList.add('removing-done');
-    setTimeout(() => el.remove(), 200);
-  }, 220);
+  const outer = document.querySelector('#m' + mid) || document.querySelector(`.mrow[data-mid="${mid}"]`) || document.querySelector(`.sys-msg[data-mid="${mid}"]`);
+  if (!outer) return;
+  const row = outer.classList.contains('mrow') ? outer : (outer.querySelector('.mrow') || outer);
+  row.classList.add('removing');
+  outer.style.overflow = 'hidden';
+  const h = outer.offsetHeight;
+  if (h > 0) {
+    outer.style.height = h + 'px';
+    requestAnimationFrame(() => requestAnimationFrame(() => {
+      outer.style.transition = 'height .34s cubic-bezier(.4, 0, .2, 1)';
+      outer.style.height = '0px';
+      setTimeout(() => outer.remove(), 350);
+    }));
+  } else {
+    setTimeout(() => outer.remove(), 280);
+  }
 }
 
 function removeMsgRow(mid) {
@@ -2352,11 +2358,7 @@ if (convSections) {
 function localDeleteMid(mid) {
   const m = (CD.initialMessages || []).find(x => x.id === mid);
   if (m) m.deleted = true;
-  const row = document.querySelector(`#m${mid}`) || document.querySelector(`.mrow[data-mid="${mid}"]`) || document.querySelector(`.sys-msg[data-mid="${mid}"]`);
-  if (row) {
-    const wrap = row.classList.contains('mrow') ? row.closest('#m' + mid) || row : row;
-    wrap.remove();
-  }
+  deleteRow(mid);
   if ((CD.pins || []).some(p => +p.id === +mid)) loadPinned();
 }
 
@@ -5148,12 +5150,7 @@ S.on('message_edited', d => {
 S.on('message_deleted', d => {
   const m = (CD.initialMessages || []).find(x => x.id === d.message_id);
   if (m) m.deleted = true;
-  const wrapper = document.querySelector(`#m${d.message_id}`) || document.querySelector(`.mrow[data-mid="${d.message_id}"]`) || document.querySelector(`.sys-msg[data-mid="${d.message_id}"]`);
-  if (wrapper) {
-    const row = wrapper.classList.contains('mrow') ? wrapper : wrapper.querySelector('.mrow');
-    const target = row ? row.closest('#m' + d.message_id) || row : wrapper;
-    target.remove();
-  }
+  deleteRow(d.message_id);
   if ((CD.pins || []).some(p => +p.id === +d.message_id)) loadPinned();
 });
 
