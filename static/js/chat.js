@@ -1429,6 +1429,7 @@ document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
 async function openChat(id, opts) {
   closeMentionMenu();
+  hideRxQuick();
   if (recState) finishRec(false);
   const inputEl = document.getElementById('msgInput');
   if (composerChatId) {
@@ -1680,19 +1681,21 @@ function editMessage(mid, rowEl) {
   input.onblur = finish;
 }
 
+const RX_QUICK = ['👍', '❤️', '😂', '🥰', '😮', '😢', '🙏', '🔥'];
 let pickerMsg = null;
 function hidePicker() {
   const p = document.getElementById('emojiPicker');
-  p.style.display = 'none';
+  p.classList.remove('on');
   p.style.left = ''; p.style.top = '';
   pickerMsg = null;
 }
 function openEmojiPicker(mid, x, y) {
   pickerMsg = mid;
+  hideRxQuick();
   const p = document.getElementById('emojiPicker');
-  p.innerHTML = EMOJIS.map(e => `<button data-emoji="${e}">${e}</button>`).join('');
-  p.classList.add('global');
-  p.style.display = 'grid';
+  p.innerHTML = RX_QUICK.map(e => `<button data-emoji="${e}">${e}</button>`).join('')
+    + `<button class="rx-more" data-rxmore title="بیشتر">${bi('emoji-smile')}</button>`;
+  p.classList.add('on');
   const bw = p.offsetWidth, bh = p.offsetHeight;
   let px = x - bw / 2, py = y + 22;
   if (px < 8) px = 8;
@@ -1700,9 +1703,90 @@ function openEmojiPicker(mid, x, y) {
   if (py + bh > window.innerHeight - 8) py = y - bh - 22;
   p.style.left = px + 'px';
   p.style.top = py + 'px';
+  rxPickerXY = { x: px, y: py };
 }
 document.addEventListener('mousedown', e => {
   if (!e.target.closest('#emojiPicker')) hidePicker();
+});
+document.getElementById('emojiPicker').addEventListener('click', e => {
+  if (e.target.closest('[data-rxmore]')) {
+    e.stopPropagation();
+    if (pickerMsg != null) openEpReact(pickerMsg);
+    hidePicker();
+    return;
+  }
+});
+
+let epReactMid = null;
+let rxPickerXY = null;
+function openEpReact(mid) {
+  epReactMid = mid;
+  openEmojiPanel();
+  if (rxPickerXY) {
+    const panel = document.getElementById('emojiPanel');
+    const pw = panel.offsetWidth, ph = panel.offsetHeight;
+    let left = rxPickerXY.x;
+    let top = rxPickerXY.y - ph - 12;
+    if (top < 8) top = Math.min(rxPickerXY.y + 44, window.innerHeight - ph - 8);
+    left = Math.min(Math.max(8, left), window.innerWidth - pw - 8);
+    panel.style.left = left + 'px';
+    panel.style.top = top + 'px';
+  }
+}
+
+const rxQuick = document.getElementById('rxQuick');
+rxQuick.innerHTML = RX_QUICK.map(e => `<button data-emoji="${e}">${e}</button>`).join('');
+let rxQuickMid = null, rxQuickTimer = null;
+function positionRxQuick() {
+  const row = document.querySelector(`.mrow[data-mid="${rxQuickMid}"]`);
+  if (!row) return;
+  const r = (row.querySelector('.bubble') || row).getBoundingClientRect();
+  const first = !rxQuick.classList.contains('on');
+  if (first) rxQuick.classList.add('on');
+  const bw = rxQuick.offsetWidth, bh = rxQuick.offsetHeight;
+  let x = row.classList.contains('mine-row') ? r.right - bw : r.left;
+  x = Math.min(Math.max(8, x), window.innerWidth - bw - 8);
+  let y = r.top - bh - 8;
+  if (y < 8) y = Math.min(r.bottom + 8, window.innerHeight - bh - 8);
+  rxQuick.style.left = x + 'px';
+  rxQuick.style.top = y + 'px';
+  if (first) {
+    rxQuick.classList.remove('on');
+    void rxQuick.offsetWidth;
+    rxQuick.classList.add('on');
+  }
+}
+function showRxQuick(mid) {
+  rxQuickMid = mid;
+  positionRxQuick();
+}
+function hideRxQuick() {
+  clearTimeout(rxQuickTimer);
+  rxQuickMid = null;
+  rxQuick.classList.remove('on');
+}
+document.getElementById('msgsBody').addEventListener('mouseover', e => {
+  const row = e.target.closest('.mrow');
+  if (!row || !row.dataset.mid || row.classList.contains('removing')) return;
+  const mid = row.dataset.mid;
+  clearTimeout(rxQuickTimer);
+  if (rxQuickMid === mid && rxQuick.classList.contains('on')) return;
+  rxQuickTimer = setTimeout(() => {
+    const cm = document.getElementById('ctxMenu');
+    if (cm && cm.classList.contains('show')) return;
+    showRxQuick(mid);
+  }, 420);
+});
+document.getElementById('msgsBody').addEventListener('mouseout', e => {
+  if (e.target.closest('.mrow')) { clearTimeout(rxQuickTimer); hideRxQuick(); }
+});
+document.getElementById('msgs').addEventListener('scroll', hideRxQuick, { passive: true });
+rxQuick.addEventListener('mousedown', e => e.preventDefault());
+rxQuick.addEventListener('click', e => {
+  const b = e.target.closest('button[data-emoji]');
+  if (!b || rxQuickMid == null) return;
+  doReact(rxQuickMid, b.dataset.emoji);
+  hideRxQuick();
 });
 
 const ALL_EMOJIS = [...new Set(EMOJI_SETS.flatMap(s => s.emojis))];
@@ -1872,6 +1956,7 @@ function hideEmojiPanel() {
   const s = document.getElementById('epSearch');
   if (s) s.value = '';
   epSetMode('emoji'); 
+  epReactMid = null;
   const b = document.getElementById('btnEmoji');
   if (b) b.classList.remove('active');
 }
@@ -1985,7 +2070,16 @@ document.getElementById('emojiPanel').addEventListener('click', e => {
   const gx = e.target.closest('.ep-gifx');
   if (gx) { e.stopPropagation(); delGifFromGrid(gx.dataset.gifdel); return; }
   const b = e.target.closest('[data-em]');
-  if (b) { insertEmoji(b.dataset.em); return; }
+  if (b) {
+    if (epReactMid != null) {
+      doReact(epReactMid, b.dataset.em);
+      epReactMid = null;
+      hideEmojiPanel();
+      return;
+    }
+    insertEmoji(b.dataset.em);
+    return;
+  }
   const g = e.target.closest('[data-gif]');
   if (g) { sendGifFromTile(g.dataset.gif); return; }
   e.stopPropagation();
@@ -2389,7 +2483,7 @@ function localSetPin(mid, pinned) {
 }
 
 function localReact(mid, emoji) {
-  const m = (CD.initialMessages || []).find(x => x.id === mid);
+  const m = (CD.initialMessages || []).find(x => +x.id === +mid);
   if (!m) return;
   if (!m.reactions) m.reactions = {};
   const key = String(window.ME.id);
@@ -2397,7 +2491,14 @@ function localReact(mid, emoji) {
   else m.reactions[key] = emoji;
   m.my_reaction = m.reactions[key];
   const chip = document.querySelector(`.mrow[data-mid="${mid}"] .reactions`);
-  if (chip) chip.innerHTML = reactionChips(m);
+  if (chip) { chip.innerHTML = reactionChips(m); rxPop(chip); }
+}
+
+function rxPop(chip) {
+  chip.classList.remove('rx-pop');
+  void chip.offsetWidth;
+  chip.classList.add('rx-pop');
+  setTimeout(() => chip.classList.remove('rx-pop'), 380);
 }
 
 async function bulkDelete() {
@@ -4686,6 +4787,7 @@ let ctxItems = [];
 
 function showCtxMenu(x, y, items) {
   const menu = document.getElementById('ctxMenu');
+  hideRxQuick();
   ctxItems = [];
   menu.innerHTML = items.filter(i => i).map(i => {
     if (i === 'sep') return '<div class="ctx-sep"></div>';
@@ -5127,8 +5229,9 @@ S.on('reaction', d => {
   if (row) {
     const msgs = document.getElementById('msgs').querySelector(`[data-mid="${d.message_id}"] .reactions`);
     if (msgs) {
-      const fake = { my_reaction: d.my_reaction, reactions: d.reactions };
+      const fake = { id: d.message_id, my_reaction: d.my_reaction, reactions: d.reactions };
       msgs.innerHTML = reactionChips(fake);
+      rxPop(msgs);
     }
   }
 });
