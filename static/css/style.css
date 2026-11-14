@@ -1696,6 +1696,10 @@ table.data { width: 100%; border-collapse: collapse; }
   display: flex; align-items: center; gap: 12px; padding: 12px 14px; cursor: default;
   border-bottom: 1px solid var(--line);
 }
+button.set-row {
+  width: 100%; background: transparent; border: none; font: inherit;
+  color: inherit; text-align: inherit;
+}
 .set-card > .set-row:last-child, .set-card > .set-sub:last-child { border-bottom: none; }
 .set-row.pm-link { cursor: pointer; text-decoration: none; color: var(--text); }
 .set-row.pm-link:hover { background: var(--bg-3); }

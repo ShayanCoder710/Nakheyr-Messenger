@@ -4562,7 +4562,7 @@ document.getElementById('pmSave').onclick = async () => {
 };
 
 document.getElementById('pmLogout').onclick = () => {
-  const un = window.ME.username ? ' ' + window.ME.username : '';
+  const un = window.ME.username ? '@' + window.ME.username : '';
   openConfirm('خروج از حساب', 'از حساب ' + (un || 'کاربری‌ات') + ' خارج می‌شی. دستگاه‌های دیگر هم بیرون می‌خورن و برای ادامه باید دوباره واردشی', () => {
     toast('در حال خروج…');
     setTimeout(() => { location.href = '/logout'; }, 500);
