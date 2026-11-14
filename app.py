@@ -1542,6 +1542,9 @@ def api_article_save(chat_id):
     title = (data.get('title') or '').strip()[:120]
     body = (data.get('body') or '').strip()[:20000]
     cover = (data.get('cover') or '').strip()[:200]
+    if cover:
+        if not re.match(r'^\d+/[A-Za-z0-9._\-]+$', cover) or not os.path.isfile(os.path.join(app.config['UPLOAD_DIR'], cover)):
+            return jsonify(ok=False, error='کاور مقاله معتبر نیست')
     if not title:
         return jsonify(ok=False, error='عنوان مقاله رو بنویس')
     if not body:

@@ -3,6 +3,7 @@ import os
 import re
 import secrets
 import threading
+import time
 from datetime import datetime, date, timedelta
 from functools import wraps
 
@@ -256,26 +257,43 @@ def current_user():
         if key:
             session['session_key'] = key
     else:
-        row = UserSession.query.filter_by(user_id=user.id, key=key).first()
-        if not row:
+        if not _session_key_exists(user.id, key):
             session.pop('user_id', None)
             session.pop('session_ver', None)
             session.pop('session_key', None)
             return None
-        touch_user_session(row)
+        touch_user_session(user.id, key)
     return user
 
 
 _SESSION_TOUCH = {}
+_SESSION_EXISTS = {}
+_SESSION_EXISTS_TTL = 30
 
 
-def touch_user_session(row):
+def _session_key_exists(user_id, key):
+    hit = _SESSION_EXISTS.get((user_id, key))
+    if hit and hit[1] > time.time():
+        return hit[0]
+    row = UserSession.query.filter_by(user_id=user_id, key=key).first()
+    ok = row is not None
+    if len(_SESSION_EXISTS) > 4000:
+        _SESSION_EXISTS.clear()
+    _SESSION_EXISTS[(user_id, key)] = (ok, time.time() + _SESSION_EXISTS_TTL)
+    return ok
+
+
+def touch_user_session(user_id, key):
     now = datetime.utcnow()
-    last = _SESSION_TOUCH.get(row.key)
+    last = _SESSION_TOUCH.get(key)
     if last and (now - last).total_seconds() < 45:
         return
-    _SESSION_TOUCH[row.key] = now
-    row.last_active_at = now
+    _SESSION_TOUCH[key] = now
+    db.session.execute(
+        db.update(UserSession)
+        .where(UserSession.user_id == user_id, UserSession.key == key)
+        .values(last_active_at=now)
+    )
     try:
         db.session.commit()
     except Exception:
@@ -311,6 +329,7 @@ def close_user_session(user_id, key):
     db.session.delete(row)
     db.session.commit()
     _SESSION_TOUCH.pop(key, None)
+    _SESSION_EXISTS.pop((user_id, key), None)
     return True
 
 
@@ -321,6 +340,7 @@ def close_other_user_sessions(user_id, keep_key):
     rows = q.all()
     for r in rows:
         _SESSION_TOUCH.pop(r.key, None)
+        _SESSION_EXISTS.pop((user_id, r.key), None)
         db.session.delete(r)
     db.session.commit()
     return len(rows)
@@ -754,23 +774,24 @@ def unread_counts(user):
     hidden_ids = {row[0] for row in db.session.execute(
         db.select(HiddenMessage.message_id).filter_by(user_id=uid)
     ).all()}
+    unread_stmt = db.select(Message.chat_id, db.func.count(Message.id)).select_from(Message)
+    unread_stmt = unread_stmt.filter(
+        Message.chat_id.in_(chat_ids),
+        Message.deleted.is_(False),
+        Message.sender_id != uid,
+        Message.msg_type != 'system',
+        db.or_(
+            Message.read_by.is_(None),
+            Message.read_by == '',
+            Message.read_by == '[]',
+            ~db.func.json_contains(Message.read_by, uid),
+        ),
+    )
+    if hidden_ids:
+        unread_stmt = unread_stmt.filter(~Message.id.in_(sorted(hidden_ids)))
     unread_by_chat = {}
-    for row in db.session.execute(
-        db.select(Message.id, Message.chat_id, Message.read_by).filter(
-            Message.chat_id.in_(chat_ids),
-            Message.deleted.is_(False),
-            Message.sender_id != uid,
-            Message.msg_type != 'system',
-        )
-    ).all():
-        if row.id in hidden_ids:
-            continue
-        try:
-            read_ids = json.loads(row.read_by or '[]')
-        except Exception:
-            read_ids = []
-        if uid not in read_ids:
-            unread_by_chat[row.chat_id] = unread_by_chat.get(row.chat_id, 0) + 1
+    for cid, cnt in db.session.execute(unread_stmt.group_by(Message.chat_id)).all():
+        unread_by_chat[cid] = cnt
     members_by_chat = {}
     my_member = {}
     mem_rows = db.session.execute(

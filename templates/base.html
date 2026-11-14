@@ -98,6 +98,16 @@ window.fmtDay = function(iso) {
   if (d.toDateString() === yest.toDateString()) return 'دیروز';
   return d.toLocaleDateString('fa-IR');
 };
+window.fmtConvTime = function(iso) {
+  if (!iso) return '';
+  const d = new Date(iso.endsWith('Z') || iso.includes('+') ? iso : iso + 'Z');
+  const now = new Date();
+  const yest = new Date(now); yest.setDate(now.getDate() - 1);
+  if (d.toDateString() === now.toDateString()) return d.toLocaleTimeString('fa-IR', {hour: '2-digit', minute: '2-digit'});
+  if (d.toDateString() === yest.toDateString()) return 'دیروز';
+  if (d.getFullYear() === now.getFullYear()) return d.toLocaleDateString('fa-IR', {month: 'long'});
+  return String(d.getFullYear());
+};
 window.esc = function(s) {
   const div = document.createElement('div');
   div.textContent = s == null ? '' : String(s);

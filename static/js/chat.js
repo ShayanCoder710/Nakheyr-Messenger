@@ -60,8 +60,6 @@ function openModal(target) {
   if (!el) return;
   el._closeToken = (el._closeToken || 0) + 1;
   el.classList.remove('closing');
-  const box = el.querySelector('.box');
-  if (box) box.style.animation = '';
   el.classList.add('show');
 }
 window.openModal = openModal;
@@ -71,13 +69,10 @@ function closeModal(target) {
   if (!el || !el.classList.contains('show')) return;
   const token = el._closeToken = (el._closeToken || 0) + 1;
   el.classList.add('closing');
-  const box = el.querySelector('.box');
-  if (box) box.style.animation = 'modalOut .18s cubic-bezier(.4, 0, 1, 1) forwards';
   setTimeout(() => {
     if (el._closeToken !== token) return;
     el.classList.remove('closing', 'show');
-    if (box) box.style.animation = '';
-  }, 180);
+  }, 200);
 }
 window.closeModal = closeModal;
 
@@ -106,9 +101,15 @@ function queueDraftSave() {
   }, 600);
 }
 
+let _memberMap = null;
+let _memberMapSrc = null;
 function getMember(id) {
   if (CD.members && id !== undefined) {
-    const m = CD.members.find(x => x.id === id);
+    if (_memberMapSrc !== CD.members) {
+      _memberMap = new Map(CD.members.map(m => [m.id, m]));
+      _memberMapSrc = CD.members;
+    }
+    const m = _memberMap.get(id);
     if (m) return m;
   }
   return { display_name: 'کاربر', username: '', avatar: '', status: 'offline' };
@@ -157,9 +158,15 @@ function lastSenderOf(mid) {
 }
 
 function nextSenderOf(mid) {
-  const msgs = (CD.initialMessages || []).filter(x => !x.deleted && x.msg_type !== 'system');
+  const msgs = CD.initialMessages || [];
   for (let i = 0; i < msgs.length; i++) {
-    if (msgs[i].id === mid) return i < msgs.length - 1 ? msgs[i + 1].sender_id : null;
+    const m = msgs[i];
+    if (m.id !== mid || m.deleted || m.msg_type === 'system') continue;
+    for (let j = i + 1; j < msgs.length; j++) {
+      const n = msgs[j];
+      if (!n.deleted && n.msg_type !== 'system') return n.sender_id;
+    }
+    return null;
   }
   return null;
 }
@@ -407,25 +414,27 @@ function ensureDaySep(iso) {
 
 function renderAllMessages() {
   const body = document.getElementById('msgsBody');
-  body.innerHTML = '';
   const msgs = (CD.initialMessages || []).filter(m => !m.deleted);
   if (msgs.length) {
+    let html = '';
     let lastRaw = null;
     msgs.forEach(m => {
       try {
         const raw = dayKey(m.created_at);
         if (raw !== lastRaw) {
-          body.insertAdjacentHTML('beforeend',
-            `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(m.created_at)}</span></div>`);
+          html += `<div class="day-sep" data-day="${esc(raw)}"><span>${fmtDay(m.created_at)}</span></div>`;
           lastRaw = raw;
         }
-        body.insertAdjacentHTML('beforeend', renderMsg(m));
+        html += renderMsg(m);
       } catch (err) {
         console.warn('renderMsg failed for message', m.id, err);
       }
     });
+    body.innerHTML = html;
   } else if (currentChat) {
     body.innerHTML = '<div class="empty-msgs">اینجا جای پیام‌هاست. اولین پیام رو تو بفرست</div>';
+  } else {
+    body.innerHTML = '';
   }
   renderSchedBubbles();
   scrollToBottom(true);
@@ -975,7 +984,6 @@ document.addEventListener('click', e => {
 function openPollVotersModal(pid) {
   api('/api/poll/' + pid + '/voters').then(j => {
     if (!j.ok) { toast(j.error || 'امکان نمایش رأی‌دهندگان نیست', 'error'); return; }
-    const modal = document.getElementById('pollVotersModal');
     const list = document.getElementById('pollVotersList');
     const voters = j.voters || [];
     if (!voters.length) {
@@ -990,7 +998,7 @@ function openPollVotersModal(pid) {
         </div>`;
       }).join('');
     }
-    modal.classList.add('show');
+    openModal('pollVotersModal');
   });
 }
 document.getElementById('pollVotersModal').addEventListener('click', e => {
@@ -1043,10 +1051,6 @@ let schedFree = false;
 let schedEditItem = null;
 let schedTouched = false;
 let schedItems = [];
-
-function faNum(n) {
-  return String(n).replace(/\d/g, d => '۰۱۲۳۴۵۶۷۸۹'[+d]);
-}
 
 function parseSchedIso(iso) {
   const s = String(iso);
@@ -1524,8 +1528,8 @@ function renderConvItem(it) {
     <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-peer-id="${it.peer_id || ''}" data-blocked="${it.blocked ? 1 : 0}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}" data-unread="${it.unread || 0}">
       ${av}
       <div class="body">
-        <div class="row1"><b>${esc(it.name)}${lock}</b><span class="conv-meta">${muteIco}<time>${fmtTime(it.last_at)}</time></span></div>
-        <div class="row2"><span>${preview}</span>${it.unread ? `<span class="unread-pill">${it.unread}</span>` : ''}</div>
+        <div class="row1"><b>${esc(it.name)}${lock}</b><span class="conv-meta">${muteIco}<time>${fmtConvTime(it.last_at)}</time></span></div>
+        <div class="row2"><span>${preview}</span>${it.unread ? `<span class="unread-pill">${faNum(it.unread)}</span>` : ''}</div>
       </div>
     </div>`;
 }
@@ -1536,12 +1540,20 @@ function refreshConvList() {
   clearTimeout(convTimer);
   convTimer = setTimeout(loadConvList, 120);
 }
+let _lastConvJson = null;
 function loadConvList() {
   const seq = ++convSeq;
   fetch('/api/conversations').then(r => r.json()).then(j => {
     if (seq !== convSeq) return;
+    const convs = j.conversations || [];
+    const payload = JSON.stringify(convs);
+    if (payload === _lastConvJson) {
+      setActiveConv(currentChat);
+      return;
+    }
+    _lastConvJson = payload;
     const byCat = { dm: [], group: [], channel: [], notes: [], archive: [] };
-    (j.conversations || []).forEach(it => {
+    convs.forEach(it => {
       if (it.archived && !it.is_notes) { byCat.archive.push(it); return; }
       const cat = it.is_notes ? 'notes' : it.chat_type;
       byCat[cat] = byCat[cat] || [];
@@ -1571,7 +1583,7 @@ function loadConvList() {
       if (head && cat !== 'notes') {
         if (!head.dataset.base) head.dataset.base = head.textContent;
         const icon = head.querySelector('svg');
-        head.textContent = head.dataset.base.replace(/\s*\(\d+\)$/, '') + ' (' + byCat[cat].length + ')';
+        head.textContent = head.dataset.base.replace(/\s*\(\d+\)$/, '') + ' (' + faNum(byCat[cat].length) + ')';
         if (icon) head.insertBefore(icon, head.firstChild);
       }
     }
@@ -2167,10 +2179,9 @@ document.addEventListener('click', e => {
 let _fwdMid = null;
 async function openForward(mid) {
   _fwdMid = mid;
-  const modal = document.getElementById('fwdModal');
   const list = document.getElementById('fwdList');
   list.innerHTML = '<small style="color:var(--dim)">در حال بارگذاری…</small>';
-  modal.classList.add('show');
+  openModal('fwdModal');
   const j = await fetch('/api/conversations').then(r => r.json()).catch(() => null);
   if (!j) { list.innerHTML = '<small style="color:var(--dim)">بارگذاری نشد</small>'; return; }
   const convs = j.conversations || [];
@@ -2225,6 +2236,7 @@ function wipeChatDom() {
   oldestId = null;
   document.getElementById('msgsBody').innerHTML = '';
   renderPinnedBar();
+  renderSchedBubbles();
 }
 
 function clearHistory(chatId) {
@@ -3723,8 +3735,7 @@ function uploadChatAvatar(chatId, file) {
 }
 
 async function openNewGroup() {
-  const modal = document.getElementById('newGroupModal');
-  modal.classList.add('show');
+  openModal('newGroupModal');
   segSelect(document.getElementById('groupVis'), 'public');
   document.getElementById('groupName').value = '';
   document.getElementById('groupDesc').value = '';
@@ -4712,6 +4723,10 @@ function openReaders(mid) {
   openModal('readersModal');
 }
 document.getElementById('readersClose').onclick = () => closeModal('readersModal');
+S.on('article_update', d => {
+  const am = document.getElementById('articlesModal');
+  if (am && am.classList.contains('show') && CD.chat && +d.chat_id === +CD.chat.id) loadArticles();
+});
 
 let _articlesCache = [];
 function artCanEdit() {
