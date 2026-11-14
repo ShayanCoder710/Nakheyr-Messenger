@@ -232,15 +232,20 @@ b, strong { font-weight: 800; }
 @keyframes selPulse { 0% { transform: scale(1); } 45% { transform: scale(1.015); } 100% { transform: scale(1); } }
 .conv.pulsing { animation: convPulse .26s cubic-bezier(.4,0,.2,1); }
 .mrow.pulsing { animation: selPulse .26s cubic-bezier(.4,0,.2,1); }
-@keyframes msgPopOut {
-  0% { opacity: 1; transform: scale(1) translateY(0); }
-  45% { opacity: .85; transform: scale(.94) translateY(2px); }
-  100% { opacity: 0; transform: scale(.8) translateY(10px); }
+.mrow.removing { pointer-events: none; }
+.mrow.removing .bubble {
+  animation: msgBubbleOut .26s cubic-bezier(.4, 0, .2, 1) both;
+  transform-origin: 50% 85%;
 }
-.mrow.removing {
-  animation: msgPopOut .28s cubic-bezier(.4, 0, .2, 1) both;
-  pointer-events: none;
+.mrow.mine-row.removing .bubble { --out-x: -6px; }
+.mrow:not(.mine-row).removing .bubble { --out-x: 6px; }
+.mrow.removing :is(.avatar, .sel-check, .reactions) { animation: msgSideOut .18s ease both; }
+@keyframes msgBubbleOut {
+  0% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
+  55% { opacity: .85; transform: translateX(var(--out-x, 0)) scale(.94); }
+  100% { opacity: 0; transform: translateX(var(--out-x, 0)) scale(.86); filter: blur(3px); }
 }
+@keyframes msgSideOut { 0% { opacity: 1; } 100% { opacity: 0; } }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; }

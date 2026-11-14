@@ -2216,11 +2216,12 @@ function deleteRow(mid) {
   const h = outer.offsetHeight;
   if (h > 0) {
     outer.style.height = h + 'px';
-    requestAnimationFrame(() => requestAnimationFrame(() => {
-      outer.style.transition = 'height .34s cubic-bezier(.4, 0, .2, 1)';
+    void outer.offsetHeight;
+    setTimeout(() => {
+      outer.style.transition = 'height .3s cubic-bezier(.25, .8, .3, 1)';
       outer.style.height = '0px';
-      setTimeout(() => outer.remove(), 350);
-    }));
+      setTimeout(() => outer.remove(), 340);
+    }, 160);
   } else {
     setTimeout(() => outer.remove(), 280);
   }
