@@ -1695,6 +1695,14 @@ function emojiCpOk(cp) {
 function isKeycapBase(cp) {
   return cp === 0x23 || cp === 0x2a || (cp >= 0x30 && cp <= 0x39);
 }
+function emjResolveId(parts) {
+  if (!EMOJI_FILES) return parts.join('-');
+  const full = parts.join('-');
+  if (EMOJI_FILES.has(full)) return full;
+  const alt = parts.filter(p => p !== '200d' && p !== 'fe0f').map(p => p.padStart(4, '0')).join('-');
+  if (EMOJI_FILES.has(alt)) return alt;
+  return null;
+}
 function emojiSeqAt(s, i) {
   const cp0 = s.codePointAt(i);
   if (isKeycapBase(cp0)) {
@@ -1702,10 +1710,8 @@ function emojiSeqAt(s, i) {
     const fe0f = s.codePointAt(j) === 0xfe0f;
     if (fe0f) j += 1;
     if (s.codePointAt(j) === 0x20e3) {
-      const idA = cp0.toString(16) + (fe0f ? '-fe0f' : '') + '-20e3';
-      const idB = cp0.toString(16) + '-20e3';
-      const id = !EMOJI_FILES || EMOJI_FILES.has(idA) ? idA : idB;
-      if (!EMOJI_FILES || EMOJI_FILES.has(id)) return { id, len: j - i + 1 };
+      const id = emjResolveId([cp0.toString(16).toLowerCase(), '20e3']);
+      if (id) return { id, len: j - i + 1 };
     }
   }
   if (!emojiCpOk(cp0)) return null;
@@ -1743,16 +1749,12 @@ function emojiSeqAt(s, i) {
     }
     break;
   }
-  let id = parts.join('-');
-  if (EMOJI_FILES && !EMOJI_FILES.has(id)) {
-    const no = id.split('-').filter(p => p !== 'fe0f').join('-');
-    if (EMOJI_FILES.has(no)) id = no;
-    else return null;
-  }
+  const id = emjResolveId(parts);
+  if (!id) return null;
   return { id, len: j - i };
 }
 function emjTag(seq, raw) {
-  return '<img class="emj" src="/static/emojis/72/' + seq.id + '.png" alt="' + raw + '" draggable="false">';
+  return '<img class="emj" src="/static/emojis/joy/' + seq.id + '.png" alt="' + raw + '" draggable="false">';
 }
 function emojifyString(html) {
   if (!EMOJI_FILES || !html) return html;
