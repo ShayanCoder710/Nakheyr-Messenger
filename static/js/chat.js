@@ -2363,12 +2363,12 @@ function deleteRow(mid) {
     outer.style.height = h + 'px';
     void outer.offsetHeight;
     setTimeout(() => {
-      outer.style.transition = 'height .3s cubic-bezier(.25, .8, .3, 1)';
+      outer.style.transition = 'height .28s cubic-bezier(.3, .7, .3, 1)';
       outer.style.height = '0px';
-      setTimeout(() => outer.remove(), 340);
-    }, 230);
+      setTimeout(() => outer.remove(), 320);
+    }, 240);
   } else {
-    setTimeout(() => outer.remove(), 300);
+    setTimeout(() => outer.remove(), 320);
   }
 }
 

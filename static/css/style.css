@@ -232,20 +232,11 @@ b, strong { font-weight: 800; }
 @keyframes selPulse { 0% { transform: scale(1); } 45% { transform: scale(1.015); } 100% { transform: scale(1); } }
 .conv.pulsing { animation: convPulse .26s cubic-bezier(.4,0,.2,1); }
 .mrow.pulsing { animation: selPulse .26s cubic-bezier(.4,0,.2,1); }
-.mrow.removing { pointer-events: none; }
-.mrow.removing .bubble {
-  animation: msgBubbleOut .26s cubic-bezier(.4, 0, .2, 1) both;
-  transform-origin: 50% 85%;
+.mrow.removing { pointer-events: none; animation: msgRowOut .24s cubic-bezier(.4, 0, .2, 1) both; }
+@keyframes msgRowOut {
+  0% { opacity: 1; transform: translateY(0) scale(1); }
+  100% { opacity: 0; transform: translateY(6px) scale(.94); }
 }
-.mrow.mine-row.removing .bubble { --out-x: 6px; }
-.mrow:not(.mine-row).removing .bubble { --out-x: -6px; }
-.mrow.removing :is(.avatar, .sel-check, .reactions) { animation: msgSideOut .18s ease both; }
-@keyframes msgBubbleOut {
-  0% { opacity: 1; transform: translateX(0) scale(1); filter: blur(0); }
-  55% { opacity: .85; transform: translateX(var(--out-x, 0)) scale(.94); }
-  100% { opacity: 0; transform: translateX(var(--out-x, 0)) scale(.86); filter: blur(3px); }
-}
-@keyframes msgSideOut { 0% { opacity: 1; } 100% { opacity: 0; } }
 ::-webkit-scrollbar { width: 6px; height: 6px; }
 ::-webkit-scrollbar-track { background: transparent; }
 ::-webkit-scrollbar-thumb { background: var(--scroll-thumb); border-radius: 999px; }
