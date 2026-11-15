@@ -1816,7 +1816,7 @@ button.set-row {
 .modal.closing { animation: fadeOut .18s cubic-bezier(.4, 0, 1, 1) forwards; }
 .modal.closing .box { animation: modalOut .18s cubic-bezier(.4, 0, 1, 1) forwards; }
 @keyframes fadeIn { from { opacity: 0; } }
-@keyframes paneIn { from { opacity: 0; transform: translateX(-22px); } }
+@keyframes paneIn { from { opacity: 0; } }
 @keyframes msgIn { 0% { opacity: 0; transform: translateY(10px) scale(.985); } 55% { opacity: 1; } 100% { opacity: 1; transform: translateY(0) scale(1); } }
 @keyframes fadeOut { to { opacity: 0; } }
 @keyframes modalIn {
