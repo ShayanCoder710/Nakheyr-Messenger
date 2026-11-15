@@ -601,7 +601,18 @@ class Bot(db.Model):
     token = db.Column(db.String(120), unique=True, nullable=False)
     webhook_url = db.Column(db.String(300), default='')
     is_active = db.Column(db.Boolean, default=True, nullable=False)
+    commands = db.Column(db.Text, default='[]')
     created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    def commands_list(self):
+        try:
+            v = json.loads(self.commands or '[]')
+            return v if isinstance(v, list) else []
+        except Exception:
+            return []
+
+    def set_commands(self, cmds):
+        self.commands = json.dumps(cmds or [], ensure_ascii=False)
 
     def to_dict(self, with_token=False):
         d = {
@@ -609,6 +620,7 @@ class Bot(db.Model):
             'user_id': self.user_id,
             'is_active': bool(self.is_active),
             'webhook_url': self.webhook_url or '',
+            'commands': self.commands_list(),
             'created_at': self.created_at.isoformat() if self.created_at else '',
         }
         if with_token:

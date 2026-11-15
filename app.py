@@ -3,6 +3,7 @@ import re
 import json
 import time
 import hmac
+import shutil
 import secrets
 import threading
 import urllib.request
@@ -32,6 +33,7 @@ from func import (
     add_owner_avatar, set_owner_avatar_primary, delete_owner_avatar, owner_avatar_gallery,
     AVATAR_EXT, open_user_session, close_user_session, close_other_user_sessions,
     rotate_user_session, device_label,
+    IMAGE_EXT, VIDEO_EXT, AUDIO_EXT, DOC_EXT, ARCHIVE_EXT, CODE_EXT,
 )
 
 BASE = os.path.dirname(os.path.abspath(__file__))
@@ -548,6 +550,10 @@ def api_members(chat_id):
                           room=f'user:{target}')
             for mid in chat_member_ids(chat.id):
                 socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+            _enqueue_chat_event(chat, 'member_left',
+                                {'chat': chat.to_public(user),
+                                 'user': tuser.to_public() if tuser else None,
+                                 'by': user.public_name})
             return jsonify(ok=True)
         if action == 'leave':
             if chat.owner_id == user.id:
@@ -560,6 +566,8 @@ def api_members(chat_id):
             post_system_message(chat, user, f'«{user.public_name}» از {noun} خارج شد')
             for mid in chat_member_ids(chat.id):
                 socketio.emit('chat_meta', chat.to_public(user), room=f'user:{mid}')
+            _enqueue_chat_event(chat, 'member_left',
+                                {'chat': chat.to_public(user), 'user': user.to_public()})
             return jsonify(ok=True)
         if action == 'promote':
             if role != 'owner':
@@ -637,6 +645,9 @@ def api_members(chat_id):
                 db.session.commit()
                 noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
                 post_system_message(chat, user, f'«{tname}» توسط «{user.public_name}» به {noun} اضافه شد')
+                if tuser:
+                    _enqueue_chat_event(chat, 'member_joined',
+                                        {'chat': chat.to_public(user), 'user': tuser.to_public()})
             return jsonify(ok=True)
         if action == 'transfer':
             if role != 'owner':
@@ -768,6 +779,8 @@ def api_send_message():
             if chat.is_public:
                 db.session.add(ChatMember(chat_id=chat.id, user_id=user.id, role='member'))
                 db.session.flush()
+                _enqueue_chat_event(chat, 'member_joined',
+                                    {'chat': chat.to_public(user), 'user': user.to_public()})
             else:
                 return jsonify(ok=False, error='دسترسی نداری')
     member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
@@ -859,6 +872,8 @@ def api_message_schedule():
             if chat.is_public:
                 db.session.add(ChatMember(chat_id=chat.id, user_id=user.id, role='member'))
                 db.session.flush()
+                _enqueue_chat_event(chat, 'member_joined',
+                                    {'chat': chat.to_public(user), 'user': user.to_public()})
             else:
                 return jsonify(ok=False, error='دسترسی نداری')
     member = ChatMember.query.filter_by(chat_id=chat.id, user_id=user.id).first()
@@ -1022,6 +1037,10 @@ def api_react():
             'reactions': m.react_dict(),
             'my_reaction': m.react_dict().get(str(mid)),
         }, room=f'user:{mid}')
+    _enqueue_chat_event(chat, 'message_reaction',
+                        {'chat_id': m.chat_id, 'message_id': m.id,
+                         'reaction': m.react_dict().get(key, ''),
+                         'user': user.to_public()})
     return jsonify(ok=True, reactions=m.react_dict())
 
 
@@ -1039,6 +1058,9 @@ def api_edit_message():
     for mid in chat_member_ids(m.chat_id):
         socketio.emit('message_edited', {'message_id': m.id, 'content': m.content},
                       room=f'user:{mid}')
+    chat = Chat.query.get(m.chat_id)
+    if chat:
+        _enqueue_chat_event(chat, 'edited_message', m.to_dict(None), m.sender_id)
     return jsonify(ok=True, content=m.content)
 
 
@@ -2013,6 +2035,7 @@ def api_poll_vote(poll_id):
     payload['voter'] = user.to_public()
     for mid in chat_member_ids(poll.chat_id):
         socketio.emit('poll_vote', payload, room=f'user:{mid}')
+    _enqueue_chat_event(chat, 'poll_vote', {**poll.to_dict(None), 'user': user.to_public()})
     return jsonify(ok=True, **payload)
 
 
@@ -2056,6 +2079,7 @@ def api_poll_close(poll_id):
     payload = _poll_vote_payload(poll, user.id)
     for mid in chat_member_ids(poll.chat_id):
         socketio.emit('poll_state', payload, room=f'user:{mid}')
+    _enqueue_chat_event(chat, 'poll', poll.to_dict(None))
     return jsonify(ok=True, **payload)
 
 
@@ -2091,6 +2115,8 @@ def api_join_chat(chat_id):
         db.session.commit()
         noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
         post_system_message(chat, user, f'«{user.public_name}» به {noun} پیوست')
+        _enqueue_chat_event(chat, 'member_joined',
+                            {'chat': chat.to_public(user), 'user': user.to_public()})
         return jsonify(ok=True, joined=True)
     return jsonify(ok=True, joined=False)
 
@@ -2194,27 +2220,31 @@ def _deliver_bot_webhook(bot, upayload):
         pass
 
 
-def _enqueue_bot_updates(chat, sender_id, payload):
+def _enqueue_chat_event(chat, key, value, sender_id=None):
     bots = Bot.query.filter(Bot.is_active.is_(True)).all()
     added = []
     for b in bots:
-        if b.user_id == sender_id:
+        if sender_id is not None and b.user_id == sender_id:
             continue
         if not ChatMember.query.filter_by(chat_id=chat.id, user_id=b.user_id).first():
             continue
         db.session.add(BotUpdate(bot_id=b.id,
-                                 payload=json.dumps({'message': payload}, ensure_ascii=False)))
-        added.append(b)
+                                 payload=json.dumps({key: value}, ensure_ascii=False)))
+        added.append((b, {key: value}))
     if not added:
         return
     db.session.flush()
-    for b in added:
+    for b, payload in added:
         row = BotUpdate.query.filter_by(bot_id=b.id, consumed=False).order_by(BotUpdate.id.desc()).first()
         if row:
             data = json.loads(row.payload or '{}')
             data['update_id'] = row.id
             _deliver_bot_webhook(b, data)
     db.session.commit()
+
+
+def _enqueue_bot_updates(chat, sender_id, payload):
+    _enqueue_chat_event(chat, 'message', payload, sender_id)
 
 
 _SCHEDULER_STARTED = False
@@ -2456,6 +2486,9 @@ def bot_api_get_me(token):
         'id': bot_user.id,
         'username': bot_user.username,
         'name': bot_user.display_name,
+        'bio': bot_user.bio or '',
+        'is_bot': True,
+        'commands': bot.commands_list(),
     })
 
 
@@ -2504,32 +2537,11 @@ def bot_api_send_message(token):
     text = (data.get('text') or '').strip()[:4096]
     if not text:
         return jsonify(ok=False, error='text_required')
-    chat = None
-    chat_id = data.get('chat_id')
-    user_id = data.get('user_id')
-    if chat_id:
-        try:
-            chat = Chat.query.get(int(chat_id))
-        except (TypeError, ValueError):
-            chat = None
-        if not chat:
-            return jsonify(ok=False, error='chat_not_found')
-        if chat.chat_type == 'channel':
-            return jsonify(ok=False, error='bots_cannot_post_channels')
-        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
-            return jsonify(ok=False, error='bot_not_member')
-    elif user_id:
-        try:
-            target = User.query.get(int(user_id))
-        except (TypeError, ValueError):
-            target = None
-        if not target or target.is_banned:
-            return jsonify(ok=False, error='user_not_found')
-        if is_blocked(target.id, bot_user.id):
-            return jsonify(ok=False, error='blocked')
-        chat, _created = get_or_create_dm(bot_user, target)
-    else:
-        return jsonify(ok=False, error='chat_id_or_user_id_required')
+    chat, err = _bot_resolve_chat(bot_user, data)
+    if err:
+        return err
+    if chat.chat_type == 'channel':
+        return jsonify(ok=False, error='bots_cannot_post_channels')
     reply_to = data.get('reply_to') or None
     buttons = _norm_bot_buttons(data)
     m = Message(chat_id=chat.id, sender_id=bot_user.id, msg_type='text',
@@ -2610,6 +2622,679 @@ def bot_api_answer_callback(token):
     data = request.get_json(silent=True) or {}
     text = (data.get('text') or '').strip()[:200]
     return jsonify(ok=True, answered=True, text=text)
+
+
+def _bot_resolve_chat(bot_user, data):
+    chat = None
+    chat_id = data.get('chat_id')
+    user_id = data.get('user_id')
+    if chat_id:
+        try:
+            chat = Chat.query.get(int(chat_id))
+        except (TypeError, ValueError):
+            chat = None
+        if not chat:
+            return None, (jsonify(ok=False, error='chat_not_found'), 404)
+        if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+            return None, (jsonify(ok=False, error='bot_not_member'), 403)
+    elif user_id:
+        try:
+            target = User.query.get(int(user_id))
+        except (TypeError, ValueError):
+            target = None
+        if not target or target.is_banned or target.is_bot:
+            return None, (jsonify(ok=False, error='user_not_found'), 404)
+        if is_blocked(target.id, bot_user.id):
+            return None, (jsonify(ok=False, error='blocked'), 403)
+        chat, _created = get_or_create_dm(bot_user, target)
+    else:
+        return None, (jsonify(ok=False, error='chat_id_or_user_id_required'), 400)
+    return chat, None
+
+
+def _bot_admin_err(chat):
+    return (jsonify(ok=False, error='requires_admin'), 403)
+
+
+def _bot_is_admin(bot_user, chat):
+    if chat.chat_type == 'dm':
+        return False
+    role = my_role_in(bot_user, chat)
+    return role in ('owner', 'admin') or chat.owner_id == bot_user.id
+
+
+BOT_MEDIA_DL_BYTES = 50 * 1024 * 1024
+
+
+def _bot_download_url(bot_user, url, allowed_exts):
+    try:
+        req = urllib.request.Request(url, headers={'User-Agent': 'NakheyrBot/1.0'})
+        with urllib.request.urlopen(req, timeout=20) as resp:
+            blob = resp.read(BOT_MEDIA_DL_BYTES + 1)
+            cdisp = resp.headers.get('Content-Disposition') or ''
+    except Exception:
+        return None, None, 'media_download_failed'
+    if len(blob) > BOT_MEDIA_DL_BYTES:
+        return None, None, 'file_too_large'
+    name = ''
+    if 'filename=' in cdisp:
+        name = cdisp.split('filename=', 1)[-1].strip().strip('"')
+    if not name:
+        name = url.split('?')[0].rstrip('/').rsplit('/', 1)[-1] or 'media'
+    safe = re.sub(r'[^\w.\-]', '_', name)[:80] or 'media'
+    ext = safe.rsplit('.', 1)[-1].lower() if '.' in safe else ''
+    if ext not in allowed_exts:
+        return None, None, 'file_type_not_allowed'
+    fname = f'{secrets.token_hex(4)}_{safe}'
+    target_dir = os.path.join(app.config['UPLOAD_DIR'], str(bot_user.id))
+    os.makedirs(target_dir, exist_ok=True)
+    with open(os.path.join(target_dir, fname), 'wb') as fh:
+        fh.write(blob)
+    return f'{bot_user.id}/{fname}', safe, None
+
+
+def _bot_acquire_media(bot_user, data, allowed_exts):
+    url = (data.get('url') or '').strip()
+    fid = (data.get('file_id') or data.get('file_path') or '').strip()
+    if url:
+        if not (url.startswith('http://') or url.startswith('https://')):
+            return None, None, (jsonify(ok=False, error='invalid_url'), 400)
+        path, name, err = _bot_download_url(bot_user, url, allowed_exts)
+        if err:
+            status = {'media_download_failed': 502, 'file_too_large': 413}.get(err, 400)
+            return None, None, (jsonify(ok=False, error=err), status)
+        return path, name[:160], None
+    if fid:
+        if not re.match(r'^\d+/[A-Za-z0-9._\-]+$', fid):
+            return None, None, (jsonify(ok=False, error='invalid_file_id'), 400)
+        src = os.path.join(app.config['UPLOAD_DIR'], fid)
+        if not os.path.isfile(src):
+            return None, None, (jsonify(ok=False, error='file_not_found'), 404)
+        ext = fid.rsplit('.', 1)[-1].lower() if '.' in fid else ''
+        if ext not in allowed_exts:
+            return None, None, (jsonify(ok=False, error='file_type_not_allowed'), 400)
+        base = fid.rsplit('/', 1)[-1]
+        if fid.split('/')[0] == str(bot_user.id):
+            return fid, base[:160], None
+        target_dir = os.path.join(app.config['UPLOAD_DIR'], str(bot_user.id))
+        os.makedirs(target_dir, exist_ok=True)
+        new_name = f'{secrets.token_hex(4)}_{base}'
+        shutil.copyfile(src, os.path.join(target_dir, new_name))
+        return f'{bot_user.id}/{new_name}', base[:160], None
+    return None, None, (jsonify(ok=False, error='url_or_file_id_required'), 400)
+
+
+def _bot_send_media(bot, bot_user, data, msg_type, allowed_exts):
+    chat, err = _bot_resolve_chat(bot_user, data)
+    if err:
+        return err
+    if chat.chat_type == 'channel':
+        return jsonify(ok=False, error='bots_cannot_post_channels'), 403
+    file_path, file_name, merr = _bot_acquire_media(bot_user, data, allowed_exts)
+    if merr:
+        return merr
+    if msg_type == 'gif' and file_path.lower().endswith('.mp4'):
+        if mp4_has_audio(os.path.join(app.config['UPLOAD_DIR'], file_path)):
+            return jsonify(ok=False, error='gif_with_audio'), 400
+    caption = (data.get('caption') or data.get('text') or '').strip()[:4096]
+    buttons = _norm_bot_buttons(data)
+    m = Message(chat_id=chat.id, sender_id=bot_user.id, msg_type=msg_type,
+                content=caption, file_name=file_name, file_path=file_path,
+                reply_to=data.get('reply_to') or None,
+                buttons=json.dumps(buttons, ensure_ascii=False) if buttons else '')
+    db.session.add(m)
+    db.session.commit()
+    payload = m.to_dict(None)
+    _attach_polls_to_messages([payload], None)
+    _enqueue_bot_updates(chat, bot_user.id, payload)
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('new_message', payload, room=f'user:{mid}')
+    return jsonify(ok=True, message=payload)
+
+
+def _bot_group_post_guard(bot_user, chat):
+    if chat.chat_type == 'dm':
+        return None
+    if chat.chat_type == 'channel':
+        return (jsonify(ok=False, error='bots_cannot_post_channels'), 403)
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return (jsonify(ok=False, error='bot_not_member'), 403)
+    return None
+
+
+@app.route('/bot/api/<token>/sendPhoto', methods=['POST'])
+def bot_api_send_photo(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return _bot_send_media(bot, bot_user, request.get_json(silent=True) or {}, 'image', IMAGE_EXT)
+
+
+@app.route('/bot/api/<token>/sendVideo', methods=['POST'])
+def bot_api_send_video(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return _bot_send_media(bot, bot_user, request.get_json(silent=True) or {}, 'video', VIDEO_EXT)
+
+
+@app.route('/bot/api/<token>/sendAudio', methods=['POST'])
+def bot_api_send_audio(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return _bot_send_media(bot, bot_user, request.get_json(silent=True) or {}, 'audio', AUDIO_EXT)
+
+
+@app.route('/bot/api/<token>/sendVoice', methods=['POST'])
+def bot_api_send_voice(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return _bot_send_media(bot, bot_user, request.get_json(silent=True) or {}, 'audio', AUDIO_EXT)
+
+
+@app.route('/bot/api/<token>/sendDocument', methods=['POST'])
+def bot_api_send_document(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return _bot_send_media(bot, bot_user, request.get_json(silent=True) or {}, 'file',
+                           DOC_EXT | ARCHIVE_EXT | CODE_EXT)
+
+
+@app.route('/bot/api/<token>/sendAnimation', methods=['POST'])
+def bot_api_send_animation(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return _bot_send_media(bot, bot_user, request.get_json(silent=True) or {}, 'gif',
+                           IMAGE_EXT | VIDEO_EXT)
+
+
+@app.route('/bot/api/<token>/sendPoll', methods=['POST'])
+def bot_api_send_poll(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat, err2 = _bot_resolve_chat(bot_user, data)
+    if err2:
+        return err2
+    if chat.chat_type == 'dm':
+        return jsonify(ok=False, error='polls_not_allowed_in_dms'), 400
+    if chat.chat_type == 'channel' and not _bot_is_admin(bot_user, chat):
+        return jsonify(ok=False, error='requires_admin'), 403
+    question = (data.get('question') or '').strip()
+    if len(question) < 2:
+        return jsonify(ok=False, error='question_too_short'), 400
+    raw_opts = data.get('options') or []
+    opts = []
+    for o in raw_opts:
+        o = str(o or '').strip()
+        if o and o not in opts:
+            opts.append(o[:80])
+    if len(opts) < 2 or len(opts) > 6:
+        return jsonify(ok=False, error='needs_2_to_6_options'), 400
+    multi = bool(data.get('multi'))
+    m = Message(chat_id=chat.id, sender_id=bot_user.id, msg_type='text', content=question[:300])
+    db.session.add(m)
+    db.session.commit()
+    poll = Poll(chat_id=chat.id, message_id=m.id, question=question[:300],
+                options=opts, multi=multi, created_by=bot_user.id)
+    poll.set_options(opts)
+    db.session.add(poll)
+    db.session.commit()
+    payload = m.to_dict(bot_user.id)
+    payload['poll'] = poll.to_dict(bot_user.id)
+    _enqueue_bot_updates(chat, bot_user.id, payload)
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('new_message', payload, room=f'user:{mid}')
+    return jsonify(ok=True, message=payload, poll=poll.to_dict(bot_user.id))
+
+
+@app.route('/bot/api/<token>/editMessageText', methods=['POST'])
+def bot_api_edit_message_text(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    m = Message.query.get(int(data.get('message_id') or 0))
+    if not m or m.deleted:
+        return jsonify(ok=False, error='message_not_found'), 404
+    chat = Chat.query.get(m.chat_id)
+    guard = _bot_group_post_guard(bot_user, chat)
+    if guard:
+        return guard
+    if m.sender_id != bot_user.id:
+        return jsonify(ok=False, error='can_edit_own_messages'), 403
+    text = (data.get('text') or '').strip()[:4096]
+    if not text:
+        return jsonify(ok=False, error='text_required'), 400
+    m.content = text
+    m.is_edited = True
+    buttons = _norm_bot_buttons(data)
+    m.buttons = json.dumps(buttons, ensure_ascii=False) if buttons else ''
+    db.session.commit()
+    payload = m.to_dict(None)
+    for mid in chat_member_ids(m.chat_id):
+        socketio.emit('message_edited', {'message_id': m.id, 'content': m.content},
+                      room=f'user:{mid}')
+    _enqueue_chat_event(chat, 'edited_message', payload, m.sender_id)
+    return jsonify(ok=True, message=payload)
+
+
+@app.route('/bot/api/<token>/deleteMessage', methods=['POST'])
+def bot_api_delete_message(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    m = Message.query.get(int(data.get('message_id') or 0))
+    if not m or m.deleted:
+        return jsonify(ok=False, error='message_not_found'), 404
+    chat = Chat.query.get(m.chat_id)
+    if chat.chat_type != 'dm' and not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    allowed = m.sender_id == bot_user.id or (chat.chat_type != 'dm' and _bot_is_admin(bot_user, chat))
+    if not allowed:
+        return jsonify(ok=False, error='can_delete_own_messages'), 403
+    m.deleted = True
+    m.content = ''
+    m.pinned = False
+    db.session.commit()
+    for mid in chat_member_ids(m.chat_id):
+        socketio.emit('message_deleted', {'message_id': m.id}, room=f'user:{mid}')
+    return jsonify(ok=True)
+
+
+@app.route('/bot/api/<token>/getChat', methods=['POST'])
+def bot_api_get_chat(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat_id = data.get('chat_id')
+    if not chat_id:
+        return jsonify(ok=False, error='chat_id_required'), 400
+    chat = Chat.query.get(int(chat_id or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    if chat.chat_type != 'dm' and not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    info = chat.to_public(bot_user)
+    info['member_count'] = len(chat_member_ids(chat.id))
+    return jsonify(ok=True, chat=info)
+
+
+@app.route('/bot/api/<token>/getChatMembers', methods=['POST'])
+def bot_api_get_chat_members(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    members = []
+    for m in chat.members:
+        if not m.user:
+            continue
+        u = m.user.to_public()
+        u['role'] = m.role
+        u['title'] = m.title or ''
+        members.append(u)
+    return jsonify(ok=True, members=members, count=len(members))
+
+
+@app.route('/bot/api/<token>/getChatMember', methods=['POST'])
+def bot_api_get_chat_member(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    target = User.query.get(int(data.get('user_id') or 0))
+    if not target:
+        return jsonify(ok=False, error='user_not_found'), 404
+    m = ChatMember.query.filter_by(chat_id=chat.id, user_id=target.id).first()
+    if not m:
+        return jsonify(ok=True, status='left', user=target.to_public())
+    return jsonify(ok=True, status='member', user={**target.to_public(), 'role': m.role, 'title': m.title or ''})
+
+
+@app.route('/bot/api/<token>/leaveChat', methods=['POST'])
+def bot_api_leave_chat(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat or chat.chat_type == 'dm':
+        return jsonify(ok=False, error='chat_not_found'), 404
+    if chat.owner_id == bot_user.id:
+        return jsonify(ok=False, error='owner_cannot_leave'), 403
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).delete()
+    db.session.commit()
+    noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+    post_system_message(chat, bot_user, f'«{bot_user.public_name}» از {noun} خارج شد')
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('chat_meta', chat.to_public(bot_user), room=f'user:{mid}')
+    _enqueue_chat_event(chat, 'member_left',
+                        {'chat': chat.to_public(bot_user), 'user': bot_user.to_public()})
+    return jsonify(ok=True)
+
+
+def _bot_member_op(bot_user, chat, data, op):
+    if chat.chat_type == 'dm':
+        return (jsonify(ok=False, error='not_a_group'), 400)
+    if not _bot_is_admin(bot_user, chat):
+        return _bot_admin_err(chat)
+    target = int(data.get('user_id') or 0)
+    tuser = User.query.get(target) if target else None
+    tname = tuser.public_name if tuser else 'کاربر'
+    target_member = ChatMember.query.filter_by(chat_id=chat.id, user_id=target).first()
+    noun = 'کانال' if chat.chat_type == 'channel' else 'گروه'
+    if op == 'kick':
+        if not target_member:
+            return jsonify(ok=False, error='user_not_member'), 404
+        if chat.owner_id == target:
+            return jsonify(ok=False, error='owner_cannot_be_kicked'), 403
+        ChatMember.query.filter_by(chat_id=chat.id, user_id=target).delete()
+        db.session.commit()
+        post_system_message(chat, bot_user, f'«{tname}» توسط «{bot_user.public_name}» از {noun} حذف شد')
+        socketio.emit('you_were_removed',
+                      {'chat_id': chat.id, 'name': chat.name, 'by': bot_user.public_name},
+                      room=f'user:{target}')
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(bot_user), room=f'user:{mid}')
+        _enqueue_chat_event(chat, 'member_left',
+                            {'chat': chat.to_public(bot_user),
+                             'user': tuser.to_public() if tuser else None,
+                             'by': bot_user.public_name})
+        return jsonify(ok=True)
+    if op == 'unban':
+        if not tuser or tuser.is_banned:
+            return jsonify(ok=False, error='user_not_found'), 404
+        if target_member:
+            return jsonify(ok=True)
+        db.session.add(ChatMember(chat_id=chat.id, user_id=target, role='member'))
+        db.session.commit()
+        post_system_message(chat, bot_user, f'«{tname}» به {noun} اضافه شد')
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(bot_user), room=f'user:{mid}')
+        _enqueue_chat_event(chat, 'member_joined',
+                             {'chat': chat.to_public(bot_user), 'user': tuser.to_public()})
+        return jsonify(ok=True)
+    if op == 'promote':
+        if my_role_in(bot_user, chat) != 'owner' and chat.owner_id != bot_user.id:
+            return jsonify(ok=False, error='requires_owner'), 403
+        if not target_member:
+            return jsonify(ok=False, error='user_not_member'), 404
+        if chat.owner_id == target:
+            return jsonify(ok=False, error='owner_cannot_change_role'), 403
+        make_admin = bool(data.get('is_admin'))
+        target_member.role = 'admin' if make_admin else 'member'
+        target_member.set_permissions({})
+        db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('chat_meta', chat.to_public(bot_user), room=f'user:{mid}')
+        return jsonify(ok=True, role=target_member.role)
+    return jsonify(ok=False, error='unknown_op'), 400
+
+
+@app.route('/bot/api/<token>/kickChatMember', methods=['POST'])
+def bot_api_kick_chat_member(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    out = _bot_member_op(bot_user, chat, data, 'kick')
+    return out
+
+
+@app.route('/bot/api/<token>/banChatMember', methods=['POST'])
+def bot_api_ban_chat_member(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    out = _bot_member_op(bot_user, chat, data, 'kick')
+    return out
+
+
+@app.route('/bot/api/<token>/unbanChatMember', methods=['POST'])
+def bot_api_unban_chat_member(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    out = _bot_member_op(bot_user, chat, data, 'unban')
+    return out
+
+
+@app.route('/bot/api/<token>/promoteChatMember', methods=['POST'])
+def bot_api_promote_chat_member(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    out = _bot_member_op(bot_user, chat, data, 'promote')
+    return out
+
+
+def _bot_chat_edit_op(bot_user, chat, data, key, field, min_len, max_len):
+    if chat.chat_type == 'dm':
+        return jsonify(ok=False, error='not_a_group'), 400
+    if not _bot_is_admin(bot_user, chat):
+        return _bot_admin_err(chat)
+    value = (data.get(key) or '').strip()
+    if len(value) < min_len:
+        return jsonify(ok=False, error=f'{field}_too_short'), 400
+    setattr(chat, field, value[:max_len])
+    db.session.commit()
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('chat_meta', chat.to_public(bot_user), room=f'user:{mid}')
+    return jsonify(ok=True, chat=chat.to_public(bot_user))
+
+
+@app.route('/bot/api/<token>/setChatTitle', methods=['POST'])
+def bot_api_set_chat_title(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    return _bot_chat_edit_op(bot_user, chat, data, 'title', 'name', 2, 60)
+
+
+@app.route('/bot/api/<token>/setChatDescription', methods=['POST'])
+def bot_api_set_chat_description(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    return _bot_chat_edit_op(bot_user, chat, data, 'description', 'description', 0, 200)
+
+
+def _bot_pin_op(bot_user, chat, data, pin_all):
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    if pin_all:
+        if not _bot_is_admin(bot_user, chat):
+            return _bot_admin_err(chat)
+        Message.query.filter_by(chat_id=chat.id, pinned=True).update({'pinned': False},
+                                                                     synchronize_session=False)
+        db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('message_pinned', {'cleared': True, 'chat_id': chat.id}, room=f'user:{mid}')
+        return jsonify(ok=True)
+    m = Message.query.get(int(data.get('message_id') or 0))
+    if not m or m.chat_id != chat.id or m.deleted:
+        return jsonify(ok=False, error='message_not_found'), 404
+    own = m.sender_id == bot_user.id
+    allowed = _bot_is_admin(bot_user, chat) or (chat.chat_type == 'dm' or own)
+    if not allowed:
+        return _bot_admin_err(chat)
+    m.pinned = True
+    db.session.commit()
+    for mid in chat_member_ids(chat.id):
+        socketio.emit('message_pinned', {'message_id': m.id, 'pinned': True, 'chat_id': chat.id},
+                      room=f'user:{mid}')
+    return jsonify(ok=True, pinned=True)
+
+
+@app.route('/bot/api/<token>/pinChatMessage', methods=['POST'])
+def bot_api_pin_chat_message(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    return _bot_pin_op(bot_user, chat, data, False)
+
+
+@app.route('/bot/api/<token>/unpinChatMessage', methods=['POST'])
+def bot_api_unpin_chat_message(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    if data.get('message_id'):
+        m = Message.query.get(int(data.get('message_id')))
+        if not m or m.chat_id != chat.id:
+            return jsonify(ok=False, error='message_not_found'), 404
+        allowed = _bot_is_admin(bot_user, chat) or m.sender_id == bot_user.id or chat.chat_type == 'dm'
+        if not allowed:
+            return _bot_admin_err(chat)
+        m.pinned = False
+        db.session.commit()
+        for mid in chat_member_ids(chat.id):
+            socketio.emit('message_pinned', {'message_id': m.id, 'pinned': False, 'chat_id': chat.id},
+                          room=f'user:{mid}')
+        return jsonify(ok=True, pinned=False)
+    return _bot_pin_op(bot_user, chat, data, True)
+
+
+@app.route('/bot/api/<token>/sendChatAction', methods=['POST'])
+def bot_api_send_chat_action(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    action = data.get('action') or 'typing'
+    if action not in ('typing', 'record_audio', 'upload_photo', 'upload_video',
+                      'upload_document', 'upload_audio'):
+        action = 'typing'
+    for mid in chat_member_ids(chat.id):
+        if mid != bot_user.id:
+            socketio.emit('typing', {'chat_id': chat.id, 'user_id': bot_user.id,
+                                     'name': bot_user.public_name}, room=f'user:{mid}')
+    return jsonify(ok=True)
+
+
+@app.route('/bot/api/<token>/exportChatInviteLink', methods=['POST'])
+def bot_api_export_chat_invite_link(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    chat = Chat.query.get(int(data.get('chat_id') or 0))
+    if not chat:
+        return jsonify(ok=False, error='chat_not_found'), 404
+    if not ChatMember.query.filter_by(chat_id=chat.id, user_id=bot_user.id).first():
+        return jsonify(ok=False, error='bot_not_member'), 403
+    link = f'/chat/{chat.username or chat.id}'
+    return jsonify(ok=True, invite_link=request.host_url.rstrip('/') + link)
+
+
+@app.route('/bot/api/<token>/setMyName', methods=['POST'])
+def bot_api_set_my_name(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    name = (data.get('name') or data.get('title') or '').strip()[:60]
+    if not name:
+        return jsonify(ok=False, error='name_required'), 400
+    bot_user.display_name = name
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+@app.route('/bot/api/<token>/setMyDescription', methods=['POST'])
+def bot_api_set_my_description(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    bot_user.bio = (data.get('description') or data.get('bio') or '').strip()[:200]
+    db.session.commit()
+    return jsonify(ok=True)
+
+
+BOT_COMMAND_RE = re.compile(r'^[a-z0-9_]{1,32}$')
+
+
+@app.route('/bot/api/<token>/getMyCommands', methods=['GET'])
+def bot_api_get_my_commands(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    return jsonify(ok=True, commands=bot.commands_list())
+
+
+@app.route('/bot/api/<token>/setMyCommands', methods=['POST'])
+def bot_api_set_my_commands(token):
+    bot, bot_user, err, status = bot_auth(token)
+    if err:
+        return err, status
+    data = request.get_json(silent=True) or {}
+    cmds = []
+    for c in (data.get('commands') or [])[:25]:
+        if not isinstance(c, dict):
+            continue
+        cmd = str(c.get('command') or '').strip().lower().lstrip('/')
+        desc = str(c.get('description') or '').strip()[:64]
+        if not BOT_COMMAND_RE.fullmatch(cmd):
+            continue
+        cmds.append({'command': cmd, 'description': desc})
+    bot.set_commands(cmds)
+    db.session.commit()
+    return jsonify(ok=True, commands=cmds)
 
 
 @app.route('/api/bot-callback', methods=['POST'])

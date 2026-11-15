@@ -107,23 +107,66 @@
 
     <section class="bf-section" id="docs">
       <h2>API ربات‌ها</h2>
-      <p class="bf-hint">همهٔ مسیرها زیر <code class="bf-mono">/bot/api/&lt;token&gt;/</code> هستند؛ احرازهویت با خودِ توکن است. محدودیت: ۳۰ درخواست در ثانیه برای هر ربات.</p>
+      <p class="bf-hint">همهٔ مسیرها زیر <code class="bf-mono">/bot/api/&lt;token&gt;/</code> هستند؛ احرازهویت با خودِ توکن است. محدودیت: ۳۰ درخواست در ثانیه برای هر ربات. ربات‌ها در کانال پیام نمی‌فرستند؛ در گروه باید عضو باشند و برای عملیات مدیریتی نقش مدیر/مالک داشته باشند.</p>
       <div class="bf-docs">
+        <h3>پیام و رسانه</h3>
         <div class="bf-doc">
           <span class="bf-mono">GET /bot/api/‹token›/getMe</span>
-          <p>مشخصات ربات (id، username).</p>
+          <p>مشخصات ربات (id، username، name، bio، دستورات).</p>
         </div>
         <div class="bf-doc">
           <span class="bf-mono">POST /bot/api/‹token›/sendMessage</span>
-          <p>مقدار <code class="bf-mono">chat_id</code> یا <code class="bf-mono">user_id</code> + <code class="bf-mono">text</code>. دایرکت با <code class="bf-mono">user_id</code> به‌صورت خودکار ساخته می‌شود؛ در گروه، ربات باید عضو آن گروه باشد.</p>
+          <p>مقدار <code class="bf-mono">chat_id</code> یا <code class="bf-mono">user_id</code> + <code class="bf-mono">text</code>. دایرکت با <code class="bf-mono">user_id</code> به‌صورت خودکار ساخته می‌شود؛ در گروه، ربات باید عضو آن گروه باشد. گزینه‌های <code class="bf-mono">reply_to</code> و <code class="bf-mono">buttons</code> را هم قبول می‌کند.</p>
         </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/sendPhoto | sendVideo | sendAudio | sendVoice | sendDocument | sendAnimation</span>
+          <p>میدیا با <code class="bf-mono">url</code> (سروور دانلودش می‌کند، تا ۵۰ مگ) یا <code class="bf-mono">file_id</code> (مسیر <code class="bf-mono">uploads/…</code> یک پیام قبلی، مثلاً از یک آپدیت دریافتی). عنوان تصویر/میدیا با <code class="bf-mono">caption</code>. گیف: <code class="bf-mono">sendAnimation</code> فقط gif یا mp4 بدون صدا.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/sendPoll</span>
+          <p><code class="bf-mono">question</code> + <code class="bf-mono">options</code> (۲ تا ۶) + <code class="bf-mono">multi</code>. فقط در گروه/کانال (در کانال فقط با نقش مدیر).</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/editMessageText | deleteMessage</span>
+          <p>ویرایش/حذف پیام؛ با <code class="bf-mono">chat_id</code> + <code class="bf-mono">message_id</code>. ویرایش فقط پیامِ خودِ ربات؛ حذف برای رباتِ مدیر، پیام دیگران را هم می‌پذیرد. در ویرایش می‌توانی <code class="bf-mono">buttons</code> جدید بگذاری.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/sendChatAction</span>
+          <p><code class="bf-mono">action</code>: typing / upload_photo / record_audio / … — نشانگر «دارد تایپ می‌کند» برای اعضای گپ.</p>
+        </div>
+
+        <h3>مدیریت گپ (نیازمند نقش مدیر/مالک ربات در آن گپ)</h3>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/getChat | getChatMembers | getChatMember</span>
+          <p>اطلاعات گپ، لیست اعضا با نقش‌ها، و وضعیت/نقش یک کاربر در گپ. ربات باید عضو گپ باشد.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/kickChatMember | banChatMember | unbanChatMember | promoteChatMember</span>
+          <p>اخراج/بلاک/لغو-بلاک/تغییر نقش عضو با <code class="bf-mono">user_id</code>. تغییر نقش فقط برای مالک؛ <code class="bf-mono">is_admin</code> در promote. بلاک موقت (until_date) پشتیبانی نمی‌شود.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/leaveChat | setChatTitle | setChatDescription | pinChatMessage | unpinChatMessage</span>
+          <p>ترک گپ، تغییر نام/توضیح، پین/لغو پین پیام (بدون <code class="bf-mono">message_id</code> = پاک کردن همهٔ پین‌ها). مالک نمی‌تواند گپ را ترک کند.</p>
+        </div>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/exportChatInviteLink</span>
+          <p>لینک گپ (با username عمومی) که کاربر با آن وارد می‌شود.</p>
+        </div>
+
+        <h3>هویت و دستورات</h3>
+        <div class="bf-doc">
+          <span class="bf-mono">POST /bot/api/‹token›/setMyName | setMyDescription | setMyCommands</span>
+          <p>نام/توضیح و فهرست دستورات ربات (<code class="bf-mono">commands</code>: آرایه از <code class="bf-mono">{command, description}</code>). خواندن با <code class="bf-mono">GET getMyCommands</code>.</p>
+        </div>
+
+        <h3>آپدیت‌ها و وب‌هوک</h3>
         <div class="bf-doc">
           <span class="bf-mono">GET /bot/api/‹token›/getUpdates?offset=0</span>
-          <p>پیام‌ها و کلیک‌های دکمه‌ها؛ با <code class="bf-mono">offset</code> از آخرین <code class="bf-mono">update_id</code> ادامه بده.</p>
+          <p>هر رویداد با یک کلید: <code class="bf-mono">message</code>، <code class="bf-mono">edited_message</code>، <code class="bf-mono">callback_query</code> (کلیک دکمه)، <code class="bf-mono">member_joined</code> / <code class="bf-mono">member_left</code>، <code class="bf-mono">poll_vote</code> / <code class="bf-mono">poll</code>، <code class="bf-mono">message_reaction</code>. با <code class="bf-mono">offset</code> از آخرین <code class="bf-mono">update_id</code> ادامه بده؛ مصرف‌شده‌ها ۷ روز نگهداری می‌شوند.</p>
         </div>
         <div class="bf-doc">
-          <span class="bf-mono">POST /bot/api/‹token›/setWebhook</span>
-          <p>مقدار <code class="bf-mono">url</code>؛ به‌جای پُلب، هر آپدیت به‌صورت POST JSON به آن آدرس فرستاده می‌شود. برای برچیدن، <code class="bf-mono">deleteWebhook</code>.</p>
+          <span class="bf-mono">POST /bot/api/‹token›/setWebhook | deleteWebhook</span>
+          <p>مقدار <code class="bf-mono">url</code>؛ به‌جای پُل، هر آپدیت به‌صورت POST JSON به آن آدرس فرستاده می‌شود.</p>
         </div>
         <div class="bf-doc">
           <span class="bf-mono">POST /bot/api/‹token›/answerCallbackQuery</span>
@@ -132,7 +175,7 @@
       </div>
 
       <h3>دکمه‌های شیشه‌ای (Inline Buttons)</h3>
-      <p class="bf-hint">به <code class="bf-mono">sendMessage</code> یک <code class="bf-mono">buttons</code> اضافه کن: آرایه‌ای از ردیف‌ها، هر دکمه با <code class="bf-mono">text</code> و <code class="bf-mono">data</code> (برای کال‌بک) یا <code class="bf-mono">url</code> (برای باز کردن لینک). حداکثر ۸ ردیف و ۴ دکمه در هر ردیف.</p>
+      <p class="bf-hint">به <code class="bf-mono">sendMessage</code> یا <code class="bf-mono">editMessageText</code> یک <code class="bf-mono">buttons</code> اضافه کن: آرایه‌ای از ردیف‌ها، هر دکمه با <code class="bf-mono">text</code> و <code class="bf-mono">data</code> (برای کال‌بک) یا <code class="bf-mono">url</code> (برای باز کردن لینک). حداکثر ۸ ردیف و ۴ دکمه در هر ردیف.</p>
       <pre class="bf-code">
 {
   "user_id": 42,
@@ -164,7 +207,9 @@ def start(message):
 
 @bot.message_handler(func=lambda m: True)
 def echo(message):
-    bot.send_message(message.chat.id, "گفتی: " + (message.text or ""))
+    bot.send_chat_action(message.chat.id, "typing")
+    bot.send_message(message.chat.id, "گفتی: " + (message.text or ""),
+                     reply_markup=[["باشه", "نه"]])
 
 bot.infinity_polling(timeout=10, long_polling_timeout=5)
 </pre>
@@ -182,17 +227,35 @@ while True:
         offset = up["update_id"]
         msg = up.get("message")
         if msg:
-            requests.post(f"{API}/sendMessage", json={
-                "user_id": msg["sender_id"],
-                "text": "دریافت شد: " + (msg.get("content") or ""),
-                "buttons": [[{"text": "باشه", "data": "ok"}]],
-            })
+            if msg.get("content") == "/start":
+                requests.post(f"{API}/sendChatAction", json={"user_id": msg["sender_id"], "action": "typing"})
+                requests.post(f"{API}/sendMessage", json={
+                    "user_id": msg["sender_id"],
+                    "text": "سلام! چطور می‌تونم کمکت کنم؟",
+                    "buttons": [[{"text": "راهنما", "data": "help"}]],
+                })
+            else:
+                requests.post(f"{API}/sendMessage", json={
+                    "user_id": msg["sender_id"],
+                    "text": "دریافت شد: " + (msg.get("content") or ""),
+                })
         cb = up.get("callback_query")
         if cb:
             requests.post(f"{API}/answerCallbackQuery", json={"text": "کلیک شد: " + cb["data"]})
+            requests.post(f"{API}/editMessageText", json={
+                "chat_id": cb["message"]["chat_id"],
+                "message_id": cb["message"]["id"],
+                "text": "انتخاب شد: " + cb["data"],
+            })
+        mj = up.get("member_joined")
+        if mj:
+            requests.post(f"{API}/sendMessage", json={
+                "chat_id": mj["chat"]["id"],
+                "text": f"خوش اومدی {mj['user']['display_name']} 🎉",
+            })
     time.sleep(2)
 </pre>
-      <p class="bf-hint">نکته: در <code class="bf-mono">getUpdates</code> هر پیام کلیدهای <code class="bf-mono">sender_id</code>، <code class="bf-mono">content</code>، <code class="bf-mono">chat_id</code> و <code class="bf-mono">buttons</code> را دارد. برای وب‌هوک، همان JSON را روی آدرس خودت دریافت می‌کنی.</p>
+      <p class="bf-hint">نکته: در <code class="bf-mono">getUpdates</code> هر پیام کلیدهای <code class="bf-mono">sender_id</code>، <code class="bf-mono">content</code>، <code class="bf-mono">chat_id</code>، <code class="bf-mono">msg_type</code> و <code class="bf-mono">buttons</code> را دارد. برای وب‌هوک، همان JSON را روی آدرس خودت دریافت می‌کنی.</p>
     </section>
   </main>
 </div>

@@ -132,6 +132,7 @@ def _ensure_columns():
         ('users', 'session_ver', "INTEGER NOT NULL DEFAULT 0"),
         ('users', 'is_bot', "BOOLEAN NOT NULL DEFAULT 0"),
         ('messages', 'buttons', "TEXT NULL"),
+        ('bots', 'commands', "TEXT NULL"),
     ]
     with db.engine.connect() as conn:
         for table, col, coldef in spec:
