@@ -2258,9 +2258,9 @@ function deleteRow(mid) {
       outer.style.transition = 'height .3s cubic-bezier(.25, .8, .3, 1)';
       outer.style.height = '0px';
       setTimeout(() => outer.remove(), 340);
-    }, 160);
+    }, 230);
   } else {
-    setTimeout(() => outer.remove(), 280);
+    setTimeout(() => outer.remove(), 300);
   }
 }
 
