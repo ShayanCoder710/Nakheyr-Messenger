@@ -1752,7 +1752,7 @@ function emojiSeqAt(s, i) {
   return { id, len: j - i };
 }
 function emjTag(seq, raw) {
-  return '<img class="emj" src="/static/emojis/72/' + seq.id + '.png" alt="' + raw + '" draggable="false" loading="lazy">';
+  return '<img class="emj" src="/static/emojis/72/' + seq.id + '.png" alt="' + raw + '" draggable="false">';
 }
 function emojifyString(html) {
   if (!EMOJI_FILES || !html) return html;
