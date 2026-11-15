@@ -806,6 +806,11 @@ b, strong { font-weight: 800; }
 .emoji-pick .rx-more { color: var(--accent); }
 .emoji-pick .rx-more:hover { background: var(--accent-soft); }
 .emoji-pick .rx-more .bi-ic { width: 16px; height: 16px; }
+.emj { display: inline-block; width: 1.3em; height: 1.3em; vertical-align: -0.32em; }
+.ep-body .emj { width: 24px; height: 24px; vertical-align: middle; }
+.emoji-pick .emj { width: 20px; height: 20px; vertical-align: middle; }
+.conv .emj { width: 1.2em; height: 1.2em; vertical-align: -0.28em; }
+.reply-preview .emj, .pin-bar-text .emj, .pin-item-body .emj { width: 1.3em; height: 1.3em; vertical-align: -0.32em; }
 @keyframes rxIn { 0% { opacity: 0; transform: translateY(4px) scale(.9); } }
 
 .emoji-panel {

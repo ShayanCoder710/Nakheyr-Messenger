@@ -299,16 +299,16 @@ function renderMsg(m) {
   if (m.deleted) return '';
   if (m.msg_type === 'system') {
     if (m.sender_id) {
-      return `<div class="sys-msg" data-mid="${m.id}"><span>${esc(m.content)}</span></div>`;
+      return `<div class="sys-msg" data-mid="${m.id}"><span>${emojifyString(esc(m.content))}</span></div>`;
     }
-    return `<div class="sys-msg sys-app" data-mid="${m.id}"><span><i class="sys-app-av">${bi('rocket')}</i>نخیر · ${esc(m.content)}</span></div>`;
+    return `<div class="sys-msg sys-app" data-mid="${m.id}"><span><i class="sys-app-av">${bi('rocket')}</i>نخیر · ${emojifyString(esc(m.content))}</span></div>`;
   }
   const url = esc(m.file_url || '');
   const fname = esc(m.file_name || '');
   let body = '';
   if (m.msg_type === 'image') {
     body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
-    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
+    if (m.content) body += `<div class="txt">${emojifyString(mentionify(esc(m.content)))}</div>`;
   } else if (m.msg_type === 'gif') {
     if (/\.mp4$/i.test(m.file_name || '')) {
       body = `<div class="vid-wrap"><video class="vid" src="${url}" muted loop autoplay playsinline preload="metadata"></video>`
@@ -316,11 +316,11 @@ function renderMsg(m) {
     } else {
       body = `<img class="img" src="${url}" alt="${fname}" loading="lazy" data-media="image" data-src="${m.file_url || ''}" data-name="${fname}">`;
     }
-    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
+    if (m.content) body += `<div class="txt">${emojifyString(mentionify(esc(m.content)))}</div>`;
   } else if (m.msg_type === 'video') {
     body = `<div class="vid-wrap"><video class="vid" src="${url}" controls preload="metadata" playsinline></video>`
       + `<button class="vid-expand" title="نمایش بزرگ" data-media="video" data-src="${m.file_url || ''}" data-name="${fname}">${bi('arrows-angle-expand')}</button></div>`;
-    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
+    if (m.content) body += `<div class="txt">${emojifyString(mentionify(esc(m.content)))}</div>`;
   } else if (m.msg_type === 'audio') {
     const vcMine = m.sender_id === window.ME.id;
     const vcTitle = vcMine ? 'پیام صوتی من' : ((m.sender_id ? getMember(m.sender_id) : null) ? (getMember(m.sender_id).display_name || 'پیام صوتی') : 'پیام صوتی');
@@ -331,7 +331,7 @@ function renderMsg(m) {
       <span class="vc-times"><span class="vc-cur">0:00</span><span class="vc-dur">…</span></span>
     </div>`;
     ensureVoiceMeta(m, vcTitle);
-    if (m.content) body += `<div class="txt">${mentionify(esc(m.content))}</div>`;
+    if (m.content) body += `<div class="txt">${emojifyString(mentionify(esc(m.content)))}</div>`;
   } else if (m.msg_type === 'file') {
     body = `<div class="file-card"><div class="fi">${bi(fileIcon(m.file_name))}</div><div class="fc-meta"><b>${fname}</b><small>فایل</small></div></div>`;
     if (m.file_url) {
@@ -342,7 +342,7 @@ function renderMsg(m) {
     if (m.poll) {
       body = `${pollHtml(m.poll)}`;
     } else {
-      body = `<div class="txt md">${mentionify(md(m.content))}</div>`;
+      body = `<div class="txt md">${emojifyString(mentionify(md(m.content)))}</div>`;
     }
   }
 
@@ -355,7 +355,7 @@ function renderMsg(m) {
   const newGroup = String(m.sender_id) !== String(lastSenderOf(m.id));
   const groupTail = String(nextSenderOf(m.id)) !== String(m.sender_id);
   const reply = m.reply && !m.reply.deleted
-    ? `<div class="reply-ref" data-goto="${m.reply.id}"><b>${esc((getMember(m.reply.sender_id) || {}).display_name || 'کاربر')}</b> ${esc(m.reply.content || '(تصویر/فایل)')}</div>`
+    ? `<div class="reply-ref" data-goto="${m.reply.id}"><b>${esc((getMember(m.reply.sender_id) || {}).display_name || 'کاربر')}</b> ${emojifyString(esc(m.reply.content || '(تصویر/فایل)'))}</div>`
     : '';
   const fwd = m.fwd_from_name ? `<div class="fwd-tag">${bi('share')} فوروارد شده از <b>${esc(m.fwd_from_name)}</b></div>` : '';
   const btns = (Array.isArray(m.buttons) && m.buttons.length)
@@ -605,7 +605,7 @@ function updateConvPreview(m) {
     }
   }
   const row2 = el.querySelector('.row2 span');
-  if (row2) row2.textContent = prefix + shortSnippet(m);
+  if (row2) row2.innerHTML = emojifyString(esc(prefix) + esc(shortSnippet(m)));
   const time = el.querySelector('time');
   if (time) time.textContent = fmtTime(m.created_at);
   const list = el.parentElement;
@@ -1337,10 +1337,10 @@ function schedCardHtml(it) {
   const whenFa = when.toLocaleDateString('fa-IR', { weekday: 'long', day: 'numeric', month: 'long' }) + '، ' + when.toLocaleTimeString('fa-IR', { hour: '2-digit', minute: '2-digit' });
   let body;
   if (it.msg_type === 'text') {
-    body = `<div class="sc-text">${mentionify(md(it.content || ''))}</div>`;
+    body = `<div class="sc-text">${emojifyString(mentionify(md(it.content || '')))}</div>`;
   } else {
     const ico = it.msg_type === 'image' ? bi('image') : (it.msg_type === 'video' || it.msg_type === 'gif') ? bi('camera-reels') : bi('file-earmark');
-    body = `<div class="sched-media"><span class="sm-ico">${ico}</span><span class="sm-meta"><b>${esc(it.file_name || it.msg_type)}</b>${it.content ? `<small class="sm-cap">${esc(it.content)}</small>` : ''}</span></div>`;
+    body = `<div class="sched-media"><span class="sm-ico">${ico}</span><span class="sm-meta"><b>${esc(it.file_name || it.msg_type)}</b>${it.content ? `<small class="sm-cap">${emojifyString(esc(it.content))}</small>` : ''}</span></div>`;
   }
   return `<div class="sched-card sched-row" data-sid="${it.id}">
     <div class="sc-head">
@@ -1525,7 +1525,7 @@ function renderConvItem(it) {
     av = `<div class="avatar conv-av" style="border-radius:14px">${esc((it.name || '؟').charAt(0))}${dot}</div>`;
   }
   const muteIco = it.muted ? `<span class="conv-mute" title="بی‌صدا">${bi('bell-slash')}</span>` : '';
-  const preview = it.last ? esc(it.last) : '<span class="conv-none">—</span>';
+  const preview = it.last ? emojifyString(esc(it.last)) : '<span class="conv-none">—</span>';
   return `
     <div class="conv ${it.chat_id === currentChat ? 'active' : ''}${it.muted ? ' muted' : ''}" data-chat-id="${it.chat_id}" data-type="${it.chat_type}" data-name="${esc(it.name || '')}" data-peer="${esc(it.peer_username || '')}" data-peer-id="${it.peer_id || ''}" data-blocked="${it.blocked ? 1 : 0}" data-owner="${it.owner_id || ''}" data-muted="${it.muted ? 1 : 0}" data-archived="${it.archived ? 1 : 0}" data-unread="${it.unread || 0}">
       ${av}
@@ -1680,6 +1680,114 @@ function editMessage(mid, rowEl) {
   input.onblur = finish;
 }
 
+const EMOJI_FILES = window.EMOJI_FILES || null;
+const EMOJI_RE = /[\u20e3\ufe0f\u2190-\u21ff\u2300-\u23ff\u25aa-\u25fe\u2600-\u27bf\u2934\u2935\u2b00-\u2bff\u3030\u3037\u3297\u3299\ufdf0-\ufdff]|[\u{1f000}-\u{1faff}]/u;
+function emojiCpOk(cp) {
+  if (!cp || cp === 0x200d) return false;
+  if (cp === 0x20e3 || cp === 0xfe0f) return true;
+  if ((cp >= 0x2190 && cp <= 0x21ff) || (cp >= 0x2300 && cp <= 0x23ff) ||
+      (cp >= 0x25aa && cp <= 0x25fe) || (cp >= 0x2600 && cp <= 0x27bf) ||
+      cp === 0x2934 || cp === 0x2935 || (cp >= 0x2b00 && cp <= 0x2bff) ||
+      cp === 0x3030 || cp === 0x3037 || cp === 0x3297 || cp === 0x3299 ||
+      (cp >= 0xfdf0 && cp <= 0xfdff) || (cp >= 0x1f000 && cp <= 0x1faff)) return true;
+  return false;
+}
+function isKeycapBase(cp) {
+  return cp === 0x23 || cp === 0x2a || (cp >= 0x30 && cp <= 0x39);
+}
+function emojiSeqAt(s, i) {
+  const cp0 = s.codePointAt(i);
+  if (isKeycapBase(cp0)) {
+    let j = i + 1;
+    const fe0f = s.codePointAt(j) === 0xfe0f;
+    if (fe0f) j += 1;
+    if (s.codePointAt(j) === 0x20e3) {
+      const idA = cp0.toString(16) + (fe0f ? '-fe0f' : '') + '-20e3';
+      const idB = cp0.toString(16) + '-20e3';
+      const id = !EMOJI_FILES || EMOJI_FILES.has(idA) ? idA : idB;
+      if (!EMOJI_FILES || EMOJI_FILES.has(id)) return { id, len: j - i + 1 };
+    }
+  }
+  if (!emojiCpOk(cp0)) return null;
+  const parts = [cp0.toString(16).toLowerCase()];
+  const isFlag = cp0 >= 0x1f1e6 && cp0 <= 0x1f1ff;
+  let j = i + (cp0 > 0xffff ? 2 : 1);
+  for (;;) {
+    const n = j < s.length ? s.codePointAt(j) : 0;
+    if (!n) break;
+    if (n === 0x200d) {
+      const k = j + 1;
+      const c2 = s.codePointAt(k);
+      if (!c2 || !emojiCpOk(c2)) break;
+      if (c2 >= 0x1f1e6 && c2 <= 0x1f1ff && parts.length > 1) break;
+      parts.push('200d', c2.toString(16).toLowerCase());
+      j = k + (c2 > 0xffff ? 2 : 1);
+      const m = j < s.length ? s.codePointAt(j) : 0;
+      if (m >= 0x1f3fb && m <= 0x1f3ff) {
+        parts.push(m.toString(16).toLowerCase());
+        j += 2;
+        const m2 = j < s.length ? s.codePointAt(j) : 0;
+        if (m2 === 0xfe0f) { parts.push('fe0f'); j += 1; }
+      } else if (m === 0xfe0f) {
+        parts.push('fe0f');
+        j += 1;
+      }
+      continue;
+    }
+    if (n >= 0x1f3fb && n <= 0x1f3ff) { parts.push(n.toString(16).toLowerCase()); j += 2; continue; }
+    if (n === 0xfe0f) { parts.push('fe0f'); j += 1; continue; }
+    if (isFlag && n >= 0x1f1e6 && n <= 0x1f1ff && parts.length === 1) {
+      parts.push(n.toString(16).toLowerCase());
+      j += 2;
+      break;
+    }
+    break;
+  }
+  let id = parts.join('-');
+  if (EMOJI_FILES && !EMOJI_FILES.has(id)) {
+    const no = id.split('-').filter(p => p !== 'fe0f').join('-');
+    if (EMOJI_FILES.has(no)) id = no;
+    else return null;
+  }
+  return { id, len: j - i };
+}
+function emjTag(seq, raw) {
+  return '<img class="emj" src="/static/emojis/72/' + seq.id + '.png" alt="' + raw + '" draggable="false" loading="lazy">';
+}
+function emojifyString(html) {
+  if (!EMOJI_FILES || !html) return html;
+  const s = String(html);
+  if (!EMOJI_RE.test(s)) return s;
+  let out = '';
+  let i = 0;
+  let inTag = false;
+  while (i < s.length) {
+    const ch = s[i];
+    if (ch === '<') { inTag = true; out += ch; i++; continue; }
+    if (ch === '>') { inTag = false; out += ch; i++; continue; }
+    if (inTag) { out += ch; i++; continue; }
+    const cp = s.codePointAt(i);
+    if (emojiCpOk(cp) || isKeycapBase(cp)) {
+      const seq = emojiSeqAt(s, i);
+      if (seq) {
+        out += emjTag(seq, s.substr(i, seq.len));
+        i += seq.len;
+        continue;
+      }
+    }
+    out += s.substr(i, cp > 0xffff ? 2 : 1);
+    i += cp > 0xffff ? 2 : 1;
+  }
+  return out;
+}
+function emImg(e) {
+  if (!EMOJI_FILES || !e) return e;
+  const t = String(e);
+  const seq = emojiSeqAt(t, 0);
+  if (!seq || seq.len !== t.length) return t;
+  return emjTag(seq, t);
+}
+
 const RX_QUICK = ['👍', '❤️', '😂', '🥰', '😮', '😢', '🙏', '🔥'];
 let pickerMsg = null;
 function hidePicker() {
@@ -1691,7 +1799,7 @@ function hidePicker() {
 function openEmojiPicker(mid, x, y) {
   pickerMsg = mid;
   const p = document.getElementById('emojiPicker');
-  p.innerHTML = RX_QUICK.map(e => `<button data-emoji="${e}">${e}</button>`).join('')
+  p.innerHTML = RX_QUICK.map(e => `<button data-emoji="${e}">${emImg(e)}</button>`).join('')
     + `<button class="rx-more" data-rxmore title="بیشتر">${bi('emoji-smile')}</button>`;
   p.classList.add('on');
   const bw = p.offsetWidth, bh = p.offsetHeight;
@@ -1756,7 +1864,7 @@ function buildEmojiPanel() {
     tabs.style.display = 'none';
     const found = searchEmojis(q);
     body.innerHTML = found.length
-      ? found.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('')
+      ? found.map(e => `<button type="button" data-em="${e}">${emImg(e)}</button>`).join('')
       : '<div class="ep-empty">چیزی پیدا نشد</div>';
     body.scrollTop = 0;
   };
@@ -1811,7 +1919,7 @@ function renderEpCurrentSet() {
   const set = EMOJI_SETS[epCurrentSet] || EMOJI_SETS[0];
   const body = document.getElementById('epBody');
   const tabs = document.getElementById('epTabs');
-  body.innerHTML = set.emojis.map(e => `<button type="button" data-em="${e}">${e}</button>`).join('');
+  body.innerHTML = set.emojis.map(e => `<button type="button" data-em="${e}">${emImg(e)}</button>`).join('');
   body.scrollTop = 0;
   tabs.style.display = 'flex';
   tabs.querySelectorAll('button').forEach(b => b.classList.toggle('on', +b.dataset.tab === epCurrentSet));
@@ -2203,7 +2311,7 @@ function openReply(mid) {
   const label = String(raw).replace(/\n/g, ' ').slice(0, 60);
   pendingReply = { id: mid, name: sender.display_name || 'کاربر', preview: label || 'پیام' };
   const pv = document.getElementById('replyPreview');
-  pv.innerHTML = `<span>${bi('reply')} پاسخ به <b>${esc(pendingReply.name)}</b>: ${esc(pendingReply.preview)}</span><button data-cancels>${bi('x-lg')}</button>`;
+  pv.innerHTML = `<span>${bi('reply')} پاسخ به <b>${esc(pendingReply.name)}</b>: ${emojifyString(esc(pendingReply.preview))}</span><button data-cancels>${bi('x-lg')}</button>`;
   pv.style.display = 'flex';
   document.getElementById('msgInput').focus();
 }
@@ -2497,7 +2605,7 @@ function renderPinnedBar() {
   const p = CD.pins[0];
   const moreChip = CD.pins.length > 1
     ? `<span class="pin-count" title="${CD.pins.length} پیام پین شده">${CD.pins.length}</span>` : '';
-  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${pinThumb(p.m)}<span class="pin-bar-text"><b>${esc(p.sender ? (p.sender.display_name || 'کاربر') : 'نخیر')}</b><span>${esc(pinSnippet(p.m))}</span></span>${moreChip}<button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
+  bar.innerHTML = `<span class="pin-bar-icon">${bi('pin-angle-fill')}</span>${pinThumb(p.m)}<span class="pin-bar-text"><b>${esc(p.sender ? (p.sender.display_name || 'کاربر') : 'نخیر')}</b><span>${emojifyString(esc(pinSnippet(p.m)))}</span></span>${moreChip}<button class="pin-unpin" data-unpin="${p.id}" title="لغو پین">${bi('x-lg')}</button>`;
   bar.style.display = 'flex';
   bar.querySelector('.pin-bar-text').onclick = () => {
     if (CD.pins.length > 1) openPinsModal();
@@ -2527,7 +2635,7 @@ function openPinsModal() {
     const t = p.m.created_at ? fmtTime(p.m.created_at) : '';
     return `<div class="pin-item" data-pid="${p.id}">
       <span class="pin-item-ic">${bi(ic)}</span>
-      <span class="pin-item-body"><b>${esc(p.sender ? (p.sender.display_name || 'کاربر') : 'نخیر')}</b><span>${esc(pinSnippet(p.m))}</span><em>${esc(t)}</em></span>
+      <span class="pin-item-body"><b>${esc(p.sender ? (p.sender.display_name || 'کاربر') : 'نخیر')}</b><span>${emojifyString(esc(pinSnippet(p.m)))}</span><em>${esc(t)}</em></span>
       <button class="pin-item-btn" data-jump="${p.id}" title="رفتن به پیام">${bi('chevron-down')}</button>
       <button class="pin-item-btn danger" data-unpin="${p.id}" title="لغو پین">${bi('pin-angle')}</button>
     </div>`;
