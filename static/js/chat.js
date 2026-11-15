@@ -1429,7 +1429,6 @@ document.getElementById('btnBackChat').onclick = () => closeChatPane();
 
 async function openChat(id, opts) {
   closeMentionMenu();
-  hideRxQuick();
   if (recState) finishRec(false);
   const inputEl = document.getElementById('msgInput');
   if (composerChatId) {
@@ -1691,7 +1690,6 @@ function hidePicker() {
 }
 function openEmojiPicker(mid, x, y) {
   pickerMsg = mid;
-  hideRxQuick();
   const p = document.getElementById('emojiPicker');
   p.innerHTML = RX_QUICK.map(e => `<button data-emoji="${e}">${e}</button>`).join('')
     + `<button class="rx-more" data-rxmore title="بیشتر">${bi('emoji-smile')}</button>`;
@@ -1733,61 +1731,6 @@ function openEpReact(mid) {
     panel.style.top = top + 'px';
   }
 }
-
-const rxQuick = document.getElementById('rxQuick');
-rxQuick.innerHTML = RX_QUICK.map(e => `<button data-emoji="${e}">${e}</button>`).join('');
-let rxQuickMid = null, rxQuickTimer = null;
-function positionRxQuick() {
-  const row = document.querySelector(`.mrow[data-mid="${rxQuickMid}"]`);
-  if (!row) return;
-  const r = (row.querySelector('.bubble') || row).getBoundingClientRect();
-  const first = !rxQuick.classList.contains('on');
-  if (first) rxQuick.classList.add('on');
-  const bw = rxQuick.offsetWidth, bh = rxQuick.offsetHeight;
-  let x = row.classList.contains('mine-row') ? r.right - bw : r.left;
-  x = Math.min(Math.max(8, x), window.innerWidth - bw - 8);
-  let y = r.top - bh - 8;
-  if (y < 8) y = Math.min(r.bottom + 8, window.innerHeight - bh - 8);
-  rxQuick.style.left = x + 'px';
-  rxQuick.style.top = y + 'px';
-  if (first) {
-    rxQuick.classList.remove('on');
-    void rxQuick.offsetWidth;
-    rxQuick.classList.add('on');
-  }
-}
-function showRxQuick(mid) {
-  rxQuickMid = mid;
-  positionRxQuick();
-}
-function hideRxQuick() {
-  clearTimeout(rxQuickTimer);
-  rxQuickMid = null;
-  rxQuick.classList.remove('on');
-}
-document.getElementById('msgsBody').addEventListener('mouseover', e => {
-  const row = e.target.closest('.mrow');
-  if (!row || !row.dataset.mid || row.classList.contains('removing')) return;
-  const mid = row.dataset.mid;
-  clearTimeout(rxQuickTimer);
-  if (rxQuickMid === mid && rxQuick.classList.contains('on')) return;
-  rxQuickTimer = setTimeout(() => {
-    const cm = document.getElementById('ctxMenu');
-    if (cm && cm.classList.contains('show')) return;
-    showRxQuick(mid);
-  }, 420);
-});
-document.getElementById('msgsBody').addEventListener('mouseout', e => {
-  if (e.target.closest('.mrow')) { clearTimeout(rxQuickTimer); hideRxQuick(); }
-});
-document.getElementById('msgs').addEventListener('scroll', hideRxQuick, { passive: true });
-rxQuick.addEventListener('mousedown', e => e.preventDefault());
-rxQuick.addEventListener('click', e => {
-  const b = e.target.closest('button[data-emoji]');
-  if (!b || rxQuickMid == null) return;
-  doReact(rxQuickMid, b.dataset.emoji);
-  hideRxQuick();
-});
 
 const ALL_EMOJIS = [...new Set(EMOJI_SETS.flatMap(s => s.emojis))];
 function searchEmojis(q) {
@@ -4787,7 +4730,6 @@ let ctxItems = [];
 
 function showCtxMenu(x, y, items) {
   const menu = document.getElementById('ctxMenu');
-  hideRxQuick();
   ctxItems = [];
   menu.innerHTML = items.filter(i => i).map(i => {
     if (i === 'sep') return '<div class="ctx-sep"></div>';

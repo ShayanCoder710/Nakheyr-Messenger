@@ -806,20 +806,6 @@ b, strong { font-weight: 800; }
 .emoji-pick .rx-more { color: var(--accent); }
 .emoji-pick .rx-more:hover { background: var(--accent-soft); }
 .emoji-pick .rx-more .bi-ic { width: 16px; height: 16px; }
-.rx-quick {
-  position: fixed; z-index: 230; display: none; gap: 2px;
-  background: var(--panel); border: 1px solid var(--line-2); border-radius: 999px;
-  padding: 5px 6px; box-shadow: var(--card-shadow);
-  backdrop-filter: blur(14px); -webkit-backdrop-filter: blur(14px);
-  transition: left .12s ease, top .12s ease;
-}
-.rx-quick.on { display: flex; animation: rxIn .18s cubic-bezier(.2, .9, .3, 1.15); }
-.rx-quick button {
-  width: 32px; height: 32px; border: none; background: none; font-size: 18px; line-height: 1;
-  display: grid; place-items: center; border-radius: 50%; cursor: pointer;
-  transition: transform .12s ease;
-}
-.rx-quick button:hover { transform: scale(1.3) translateY(-1px); }
 @keyframes rxIn { 0% { opacity: 0; transform: translateY(4px) scale(.9); } }
 
 .emoji-panel {
@@ -2373,6 +2359,8 @@ body.dragging::after {
 .bf-doc span { display: block; color: var(--accent-2); font-weight: 600; margin-bottom: 4px; }
 .bf-doc p { font-size: 12.5px; color: var(--dim); line-height: 1.8; }
 .bf-code { direction: ltr; text-align: left; font-family: 'JetBrains Mono', monospace; font-size: 12.5px; line-height: 1.8; background: var(--panel-2); border: 1px solid var(--line); border-radius: 12px; padding: 14px 16px; overflow-x: auto; white-space: pre; }
+.bf-docs h3 { font-size: 13px; font-weight: 700; color: var(--accent-2); text-transform: uppercase; letter-spacing: .06em; margin: 14px 0 2px; }
+.bf-docs h3:first-child { margin-top: 0; }
 .bf-docs .bf-mono, .bf-hint .bf-mono, .bf-doc p code { color: var(--accent-2); }
 @media (max-width: 860px) {
   .bf-form, .bf-token-row, .bf-webhook-in { flex-wrap: wrap; }
