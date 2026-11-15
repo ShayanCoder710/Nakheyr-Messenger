@@ -138,8 +138,40 @@ function reactionChips(m) {
   Object.values(m.reactions || {}).forEach(e => { agg[e] = (agg[e] || 0) + 1; });
   return Object.entries(agg).map(([e, n]) => {
     const safe = esc(e);
-    return `<span class="${e === mine ? 'mine' : ''}" data-emoji="${safe}" data-mid="${m.id}"><span class="rx-e">${safe}</span>${n}</span>`;
+    return `<span class="${e === mine ? 'mine' : ''}" data-emoji="${safe}" data-mid="${m.id}"><span class="rx-e">${emImg(safe)}</span><span class="rx-n">${n}</span></span>`;
   }).join('');
+}
+
+function syncReactionChips(box, m) {
+  const tmp = document.createElement('div');
+  tmp.innerHTML = reactionChips(m);
+  const next = {};
+  Array.from(tmp.children).forEach(el => { next[el.dataset.emoji] = el; });
+  const cur = {};
+  Array.from(box.children).forEach(el => { if (el.dataset.emoji) cur[el.dataset.emoji] = el; });
+  Object.keys(cur).forEach(e => {
+    const cEl = cur[e], nEl = next[e];
+    if (!nEl) {
+      cEl.classList.add('rx-gone');
+      setTimeout(() => cEl.remove(), 260);
+      return;
+    }
+    if (nEl.outerHTML !== cEl.outerHTML) {
+      const cN = (cEl.querySelector('.rx-n') || {}).textContent;
+      const nN = (nEl.querySelector('.rx-n') || {}).textContent;
+      cEl.replaceWith(nEl);
+      if (cN !== nN) {
+        const nn = nEl.querySelector('.rx-n');
+        if (nn) setTimeout(() => nn.classList.add('rx-pulse'), 20);
+      }
+    }
+  });
+  Object.keys(next).forEach(e => {
+    if (!cur[e]) {
+      next[e].classList.add('rx-new');
+      box.appendChild(next[e]);
+    }
+  });
 }
 
 function canPinMsg(m) {
@@ -2544,14 +2576,7 @@ function localReact(mid, emoji) {
   else m.reactions[key] = emoji;
   m.my_reaction = m.reactions[key];
   const chip = document.querySelector(`.mrow[data-mid="${mid}"] .reactions`);
-  if (chip) { chip.innerHTML = reactionChips(m); rxPop(chip); }
-}
-
-function rxPop(chip) {
-  chip.classList.remove('rx-pop');
-  void chip.offsetWidth;
-  chip.classList.add('rx-pop');
-  setTimeout(() => chip.classList.remove('rx-pop'), 380);
+  if (chip) syncReactionChips(chip, m);
 }
 
 async function bulkDelete() {
@@ -5282,8 +5307,7 @@ S.on('reaction', d => {
     const msgs = document.getElementById('msgs').querySelector(`[data-mid="${d.message_id}"] .reactions`);
     if (msgs) {
       const fake = { id: d.message_id, my_reaction: d.my_reaction, reactions: d.reactions };
-      msgs.innerHTML = reactionChips(fake);
-      rxPop(msgs);
+      syncReactionChips(msgs, fake);
     }
   }
 });
