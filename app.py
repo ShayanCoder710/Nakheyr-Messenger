@@ -5,8 +5,12 @@ import time
 import hmac
 import shutil
 import secrets
+import socket
 import threading
+import ipaddress
+import urllib.parse
 import urllib.request
+from html.parser import HTMLParser
 from datetime import datetime, timedelta, timezone
 
 from werkzeug.exceptions import HTTPException
@@ -2176,6 +2180,94 @@ def api_messages(chat_id):
         joined=joined,
         draft=(membership.draft if membership else '') or '',
     )
+
+
+_LINK_PREVIEWS = {}
+_LINK_PREVIEW_TTL = 600
+
+
+class _OgParser(HTMLParser):
+    def __init__(self):
+        super().__init__(convert_charrefs=True)
+        self.title = ''
+        self.og = {}
+        self._in_title = False
+
+    def handle_starttag(self, tag, attrs):
+        a = dict(attrs)
+        if tag == 'title':
+            self._in_title = True
+        if tag == 'meta':
+            name = (a.get('property') or a.get('name') or '').lower()
+            if name in ('og:title', 'og:description', 'og:image', 'og:site_name',
+                       'twitter:title', 'twitter:description', 'twitter:image'):
+                v = (a.get('content') or '').strip()
+                if v:
+                    self.og[name] = v
+
+    def handle_endtag(self, tag):
+        if tag == 'title':
+            self._in_title = False
+
+    def handle_data(self, data):
+        if self._in_title and not self.title:
+            self.title = data.strip()
+
+
+def _link_preview_meta(raw, base_url):
+    p = _OgParser()
+    try:
+        p.feed(raw.decode('utf-8', 'ignore')[:200000])
+    except Exception:
+        pass
+    out = {'title': (p.og.get('og:title') or p.title or '').strip()[:140]}
+    out['desc'] = (p.og.get('og:description') or p.og.get('twitter:description') or '').strip()[:220]
+    img = p.og.get('og:image') or p.og.get('twitter:image') or ''
+    if img:
+        img = urllib.parse.urljoin(base_url, img)
+        if not img.startswith(('http://', 'https://')):
+            img = ''
+    out['image'] = img[:500]
+    return out
+
+
+@app.route('/api/link-preview')
+@require_auth
+def api_link_preview():
+    u = request.args.get('url', '')
+    p = urllib.parse.urlparse(u)
+    if p.scheme not in ('http', 'https') or not p.netloc:
+        return jsonify(ok=False)
+    host = (p.hostname or '').lower()
+    if host in ('localhost',) or host.endswith('.local'):
+        return jsonify(ok=False)
+    try:
+        infos = socket.getaddrinfo(host, p.port or (443 if p.scheme == 'https' else 80), type=socket.IPPROTO_TCP)
+    except Exception:
+        return jsonify(ok=False)
+    for info in infos:
+        try:
+            ip = ipaddress.ip_address(info[4][0])
+            if (ip.is_private or ip.is_loopback or ip.is_link_local
+                    or ip.is_reserved or ip.is_unspecified or ip.is_multicast):
+                return jsonify(ok=False)
+        except ValueError:
+            continue
+    now = time.time()
+    hit = _LINK_PREVIEWS.get(u)
+    if hit and now - hit[0] < _LINK_PREVIEW_TTL:
+        return jsonify(ok=True, **hit[1])
+    try:
+        req = urllib.request.Request(u, headers={'User-Agent': 'Mozilla/5.0 (compatible; Nakheyr/1.0)'})
+        with urllib.request.urlopen(req, timeout=6) as r:
+            raw = r.read(400000)
+        meta = _link_preview_meta(raw, u)
+        _LINK_PREVIEWS[u] = (now, meta)
+        if len(_LINK_PREVIEWS) > 300:
+            _LINK_PREVIEWS.pop(next(iter(_LINK_PREVIEWS)))
+        return jsonify(ok=True, **meta)
+    except Exception:
+        return jsonify(ok=False)
 
 
 BOT_API_RATE = 30
